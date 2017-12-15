@@ -6,7 +6,7 @@ class TestCasesController < ApplicationController
   # GET /test_cases
   # GET /test_cases.json
   def index
-    @mesa_versions = TestCase.versions
+    @mesa_versions = Version.order(number: :desc).pluck(:number)
     @selected = params[:version] || 'latest'
     # big daddy query, hopefully optimized
     @version_number = case @selected
@@ -15,14 +15,18 @@ class TestCasesController < ApplicationController
                       else
                         @selected.to_i
                       end
-    @test_cases = TestCase.find_by_version(@version_number)
+    @version = Version.includes(:test_instances, :test_cases)
+                      .find_by(number: @version_number)
+                      
+    @test_cases = @version.test_cases.order(:name).uniq
+    # @test_cases = TestCase.find_by_version(@version_number)
     @header_text = case @selected
                    when 'all' then 'Last Results for All Tests'
                    else
                      "Test Cases Tested on Version #{@version_number}"
                    end
-    @specs = TestCase.version_computer_specs(@test_cases, @version_number)
-    @statistics = TestCase.version_statistics(@test_cases, @version_number)
+    @specs = @version.computer_specs
+    @statistics = @version.statistics
     @version_status =
       if @statistics[:mixed] > 0
         :mixed
@@ -68,11 +72,11 @@ class TestCasesController < ApplicationController
       if @selected == 'all'
         @last_versions[t] = t.last_version
       else
-        @computer_counts[t] = t.version_computers_count(@version_number)
+        @computer_counts[t] = @version.computers_count(t)
       end
       @last_tested[t] = t.last_tested
       @row_classes[t] =
-        case t.version_status(@version_number)
+        case @version.status(t)
         when 0 then 'table-success'
         when 1 then 'table-danger'
         else
@@ -165,41 +169,52 @@ class TestCasesController < ApplicationController
   def destroy
     @test_case.destroy
     respond_to do |format|
-      format.html { redirect_to test_cases_url, notice: 'Test case was successfully destroyed.' }
+      format.html do
+        redirect_to test_cases_url,
+        notice: 'Test case was successfully destroyed.'
+      end
       format.json { head :no_content }
     end
   end
 
   private
-    # Use callbacks to share common setup or constraints between actions.
-    def set_test_case
-      @test_case = TestCase.find(params[:id])
-    end
+  # Use callbacks to share common setup or constraints between actions.
+  def set_test_case
+    @test_case = TestCase.find(params[:id])
+  end
 
-    # Never trust parameters from the scary internet, only allow the white list through.
-    def test_case_params
-      params.require(:test_case).permit(:name, :module, :version_added, :description, :last_version, :last_version_status, :last_test_status, :last_tested, :datum_1_name, :datum_1_type, :datum_2_name, :datum_2_type, :datum_3_name, :datum_3_type, :datum_4_name, :datum_4_type, :datum_5_name, :datum_5_type, :datum_6_name, :datum_6_type, :datum_7_name, :datum_7_type, :datum_8_name, :datum_8_type, :datum_9_name, :datum_9_type, :datum_10_name, :datum_10_type)
-    end
+  # Never trust parameters from the scary internet, only allow the white list
+  # through.
+  def test_case_params
+    params.require(:test_case).permit(:name, :module, :version_added,
+      :description, :last_version, :last_version_status, :last_test_status,
+      :last_tested, :datum_1_name, :datum_1_type, :datum_2_name,
+      :datum_2_type, :datum_3_name, :datum_3_type, :datum_4_name,
+      :datum_4_type, :datum_5_name, :datum_5_type, :datum_6_name,
+      :datum_6_type, :datum_7_name, :datum_7_type, :datum_8_name,
+      :datum_8_type, :datum_9_name, :datum_9_type, :datum_10_name,
+      :datum_10_type)
+  end
 
-    # get a bootstrap text class and an appropriate string to convert integer 
-    # passing status to useful web output
+  # get a bootstrap text class and an appropriate string to convert integer 
+  # passing status to useful web output
 
-    def passing_status_and_class(status)
-      sts = 'ERROR'
-      cls = 'text-info'
-      if status == 0
-        sts = 'Passing'
-        cls = 'text-success'
-      elsif status == 1
-        sts = 'Failing'
-        cls = 'text-danger'
-      elsif status == 2
-        sts = 'Mixed'
-        cls = 'text-warning'
-      elsif status == 3
-        sts = 'Not yet run'
-        cls = 'text-warning'
-      end
-      return sts, cls
+  def passing_status_and_class(status)
+    sts = 'ERROR'
+    cls = 'text-info'
+    if status == 0
+      sts = 'Passing'
+      cls = 'text-success'
+    elsif status == 1
+      sts = 'Failing'
+      cls = 'text-danger'
+    elsif status == 2
+      sts = 'Mixed'
+      cls = 'text-warning'
+    elsif status == 3
+      sts = 'Not yet run'
+      cls = 'text-warning'
     end
+    return sts, cls
+  end
 end

@@ -1,13 +1,13 @@
 class Version < ApplicationRecord
-  validates_presence_and_uniqueness_of :number
+  validates_presence_of :number
+  validates_uniqueness_of :number
 
   has_many :test_instances, dependent: :destroy
-  has_and_belongs_to_many :test_cases, through: :test_instance
-  has_and_belongs_to_many :computers, through: :test_instance
-  has_and_belongs_to_many :users, through: :computers
+  has_many :test_cases, through: :test_instances
+  has_many :computers, through: :test_instances
+  has_many :users, through: :computers
 
   # NOT DONE
-
   def status
     pass_count = test_instances.where(passed: true).count
     fail_count = test_instances.where(passed: false).count
@@ -35,7 +35,7 @@ class Version < ApplicationRecord
 
   # test cases with at least one passing instance
   def some_passing_test_cases
-    TestCase.find(passing_instances.pluck(:test_case_id).uniz)
+    TestCase.find(passing_instances.pluck(:test_case_id).uniq)
   end
 
   # array of arrays. First element is array of test cases that pass all
@@ -70,5 +70,47 @@ class Version < ApplicationRecord
 
   def failing_test_cases
     passing_mixed_failing_test_cases[2]
+  end
+
+  def computer_specs
+    specs = {}
+    test_instances.each do |instance|
+      spec = instance.computer_specification
+      specs[spec] = [] unless specs.include?(spec)
+      specs[spec] << instance.computer.name
+    end
+    specs.each_value(&:uniq!)
+    specs
+  end
+
+  def statistics
+    stats = { passing: 0, mixed: 0, failing: 0 }
+    passing, mixed, failing = passing_mixed_failing_test_cases
+    stats[:passing] = passing.length
+    stats[:mixed] = mixed.length
+    stats[:failing] = failing.length
+    stats
+  end
+
+  def computers_count(test_case)
+    unless test_instances.loaded?
+      return test_instances.where(test_case: test_case)
+                           .pluck(:computer_id).uniq.length
+    end
+    test_instances.select { |ti| ti.test_case == test_case }
+                  .map(&:computer_id).uniq.length
+  end
+
+  def status(test_case)
+    instances = test_instances.where(test_case: test_case)
+    return 3 if instances.empty?
+    pass_count = instances.where(passed: true).count
+    fail_count = instances.where(passed: false).count
+    # all tests pass?
+    return 0 if fail_count.zero?
+    # all tests fail?
+    return 1 if pass_count.zero?
+    # mix?
+    2
   end
 end

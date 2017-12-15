@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20171213234301) do
+ActiveRecord::Schema.define(version: 20171215223320) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -54,7 +54,9 @@ ActiveRecord::Schema.define(version: 20171213234301) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "module"
+    t.bigint "version_id"
     t.index ["name"], name: "index_test_cases_on_name", unique: true
+    t.index ["version_id"], name: "index_test_cases_on_version_id"
   end
 
   create_table "test_data", force: :cascade do |t|
@@ -109,6 +111,7 @@ ActiveRecord::Schema.define(version: 20171213234301) do
     t.index ["number"], name: "index_versions_on_number", unique: true
   end
 
+  add_foreign_key "test_cases", "versions"
   add_foreign_key "test_data", "test_instances"
   add_foreign_key "test_instances", "computers"
   add_foreign_key "test_instances", "test_cases"

@@ -19,8 +19,9 @@ class TestInstance < ApplicationRecord
 
   belongs_to :computer
   belongs_to :test_case
+  belongs_to :version
   has_many :test_data, dependent: :destroy
-  validates_presence_of :runtime_seconds, :mesa_version, :computer_id,
+  validates_presence_of :runtime_seconds, :version_id, :computer_id,
                         :test_case_id, :compiler
   # validates_inclusion_of :passed, in: [true, false]
   validates_inclusion_of :success_type, in: @@success_types.keys,
@@ -41,23 +42,19 @@ class TestInstance < ApplicationRecord
     @@compilers
   end
 
-  # descending list of all mesa versions
-  def self.versions
-    distinct.pluck(:mesa_version).sort.reverse
-  end
-
   # list of version numbers with test instances that have failed since a
   # particular date
   def self.failing_versions_since(date)
-    where(passed: false, created_at: date...Time.now)
-      .pluck(:mesa_version).uniq.sort.reverse
+    Version.find(where(passed: false, created_at: date...Time.now)
+      .pluck(:version_id).uniq)
   end
 
   # list of version numbers with ONLY passing test cases
   def self.passing_versions_since(date)
     # all versions that have at least one passing test instance
-    passing_something = where(passed: true, created_at: date...Time.now)
-                        .pluck(:mesa_version).uniq.sort.reverse
+    passing_something = Version.find(
+      where(passed: true, created_at: date...Time.now).pluck(:version_id).uniq
+    )
     # remove versions that have even one failing test
     passing_something - failing_versions_since(date)
   end
@@ -67,7 +64,7 @@ class TestInstance < ApplicationRecord
   def self.failing_cases_since(date, version)
     TestCase.find(where(passed: false)
                     .where(created_at: date...Time.now)
-                    .where(mesa_version: version)
+                    .where(version: version)
                     .pluck(:test_case_id)).sort_by(&:name)
   end
 
@@ -99,6 +96,17 @@ class TestInstance < ApplicationRecord
     end
   end
 
+  # meant to ease transition from mesa_version to Version model.
+  def update_version
+    # don't do anything if version is already set
+    return if version_id
+    # can't figure things out if no mesa version given
+    return unless mesa_version
+    new_version = Version.find_or_create_by(number: mesa_version)
+    update_attributes(version: new_version)
+    version.number
+  end
+
   def set_test_case_name(new_test_case_name, mod)
     new_test_case = TestCase.where(name: new_test_case_name).first
     if new_test_case.nil?
@@ -106,9 +114,7 @@ class TestInstance < ApplicationRecord
       # this test case will have NO EXTRA DATA ASSOCIATED WITH IT
       # at time of this edit (November 22, 2017), the data features is not in
       # use, but this may need to be revisited
-      new_test_case = TestCase.create(
-        name: new_test_case_name, version_added: mesa_version, module: mod
-      )
+      new_test_case = version.create(name: new_test_case_name, module: mod)
       # old behavior: scuttle the saving process
       # errors.add :test_case_id,
       #            'Could not find test case with name "' + new_test_case_name +
