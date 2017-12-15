@@ -1,0 +1,43 @@
+.row
+  .col
+    %h1 
+      = @owner_prefix
+      Computers
+
+.row
+  .col
+    %table.table.table-responsive
+      %thead.thead-default
+        %tr
+          %th Name
+          - if @show_users
+            %th User
+          %th Platform
+          %th Processor
+          %th Ram [GB]
+          %th
+          -if self_or_admin?
+            %th
+            %th
+
+      %tbody
+        - @computers.each do |computer|
+          %tr
+            %td.align-middle= computer.name
+            - if @show_users
+              %td= link_to computer.user.name, user_computer_path(computer.user, computer)
+            %td.align-middle.align-middle= computer.platform
+            %td.align-middle= computer.processor
+            %td.align-middle= computer.ram_gb
+            %td.align-middle= link_to 'Show', user_computer_path(computer.user, computer), class: 'btn btn-sm btn-secondary text-light'
+            - if self_or_admin?
+              %td.align-middle= link_to 'Edit', edit_user_computer_path(computer.user, computer), class: 'btn btn-sm btn-primary text-light'
+              %td.align-middle= link_to 'Delete', user_computer_path(computer.user, computer), method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-sm btn-danger text-light'
+
+- if @user
+  .row
+    .col.text-center
+      .btn-group
+        - if self_or_admin?
+          = link_to 'New Computer', new_user_computer_path(@user), class: 'btn btn-primary btn-lg text-light'
+        = link_to 'View User', user_path(@user), class: 'btn btn-secondary btn-lg text-light'

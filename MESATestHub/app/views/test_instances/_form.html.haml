@@ -1,0 +1,73 @@
+= bootstrap_form_for [@test_case, @test_instance] do |f|
+  - if @test_instance.errors.any?  
+    .form-row
+      .col.alert.alert-danger
+        %h4.alert-heading= "#{pluralize(@test_instance.errors.count, "error")} prohibited this test instance from being saved:"
+        %p
+          %ul
+            - @test_case.errors.full_messages.each do |message|
+              %li= message      
+  .form-row
+    .col
+      .card-deck
+        .card.text-white.bg-primary.mb-3
+          .card-header
+            %h4 Did the test pass?
+          .card-body.field
+            %p.card-text
+              = f.form_group :passed do
+                =f.radio_button :passed, true, value: true, label: "Passed"
+                =f.radio_button :passed, false, value: false, label: "Failed"
+        .card.text-white.bg-primary.mb-3
+          .card-header
+            %h4 How Did it Pass?
+          .card-body.field
+            %p.card-text
+              = f.select :success_type, TestInstance.success_types.each_pair.map { |key, val| [val, key]}, label: "Success Type (if successful)", include_blank: true
+        .card.text-white.bg-primary.mb-3
+          .card-header
+            %h4 How Did it Fail?
+          .card-body.field
+            %p.card-text
+              = f.select :failure_type, TestInstance.failure_types.each_pair.map { |key, val| [val, key]}, label: "Failure Type (if unsuccessful)", include_blank: true
+
+
+  .form-row
+    .col
+      .card-deck
+        .card.text-white.bg-dark.mb-3
+          .card-header
+            %h4 Other required data
+          .card-body
+            .field
+              = f.number_field :runtime_seconds
+            .field
+              = f.number_field :mesa_version
+            .field
+              = f.select :computer_id, current_user.computers.collect { |c| [c.name, c.id] }
+        .card.text-white.bg-dark.mb-3
+          .card-header
+            %h4 Other useful data
+          .card-body
+            .field
+              = f.number_field :omp_num_threads, label: "Number of threads"
+            .field  
+              = f.select(:compiler, TestInstance.compilers, include_blank: true)
+  
+  .form-row
+    .col
+      .card.text-white.bg-secondary.mb-3
+        .card-header
+          %h4 Optional Details
+        .card-body
+          .field
+            = f.text_field :platform_version, label: "Platform version (e.g.  10.13 (for macOS) or Ubuntu 16.04 (for linux)"
+          .field
+            = f.text_field :compiler_version, label: "Compiler version (e.g. 7.0.2 or 20170921)"
+  .form-row
+    .col.text-center
+      .btn-group.actions
+        = link_to "View All Instances", test_case_test_instances_path(@test_case), class: 'btn btn-lg btn-secondary text-light'
+        - if @show_path
+          = link_to "Show", test_case_test_instance_path(@test_case, @test_instance), class: 'btn btn-lg btn-secondary text-light'
+        = f.submit 'Save', {class: 'btn btn-lg btn-primary'}

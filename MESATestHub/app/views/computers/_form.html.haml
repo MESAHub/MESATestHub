@@ -1,0 +1,29 @@
+= bootstrap_form_for [@user, @computer] do |f|
+  - if @computer.errors.any?  
+    .form-row
+      .col.alert.alert-danger
+        %h4.alert-heading= "#{pluralize(@computer.errors.count, "error")} prohibited this test instance from being saved:"
+        %p
+          %ul
+            - @computer.errors.full_messages.each do |message|
+              %li= message
+  .form-row
+    .col.field
+      = f.text_field :name, placeholder: "Compy 5000"
+    .col.field
+      = f.select :user_id, User.all.order(:name).collect { |user| [user.name, user.id] }, selected: @user.id
+      -# = f.text_field :user, placeholder: "Bill Paxton"
+  .form-row
+    .col.field
+      = f.select :platform, options_for_select(Computer.platforms, Computer.platforms)
+    .col.field
+      = f.text_field :processor, placeholder: "2.7 GHz 12-Core Intel Xeon E5"
+    .col.field
+      = f.number_field :ram_gb, placeholder: 16
+  .form-row.text-center
+    .col.actions
+      .btn-group
+        = link_to 'View My Computers', user_computers_path(@user), class: 'btn btn-secondary btn-lg text-light'
+        - if @show_path
+          = link_to 'Show', @show_path, class: 'btn btn-secondary btn-lg text-light'
+        = f.submit 'Save', class: 'btn btn-primary btn-lg'

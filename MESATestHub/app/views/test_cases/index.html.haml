@@ -1,0 +1,69 @@
+.row.text-center
+  .col
+    %h1= @header_text
+    %h3{class: @status_class}= @status_text
+.row
+  .col-lg-4.col-md-5.col-xs-12
+    %h4 Computers Tested:
+    %ul
+      - @specs.each do |spec, comps|
+        %li= "#{spec}: #{comps.join(', ')}"
+  .col-lg-8.col-md-7.col-xs-12
+    %form{action: test_cases_path, method: 'get', class: 'form-inline'}
+      .col-auto.col-form-label.align-middle
+        =label_tag "version", 'MESA version: ', class: 'control-label form-control-lg'
+      .col-auto.align-middle
+        =select_tag "version", options_for_select(@mesa_versions, @selected), class: 'custom-select form-control form-control-lg'
+      .col-auto.align-middle
+        =submit_tag 'Go', class: 'btn btn-primary text-light form-control', name: nil
+
+
+
+.row#index-desc
+  .col
+    .card-deck
+      .card.border-success
+        .card-body.text-success
+          %h4.card-title Passing
+          %p.card-text
+            %b=@statistics[:passing]
+            tests where all computers report passing.
+      .card.border-warning
+        .card-body.text-warning
+          %h3.card-title Mixed
+          %p.card-text
+            %b=@statistics[:mixed]
+            tests where some computers report passing and others report failing.
+      .card.border-danger
+        .card-body.text-danger
+          %h3.card-title Failing
+          %p.card-text
+            %b=@statistics[:failing]
+            tests where all computers report failing.
+
+.row
+  .col
+    %table.table.table-hover.table-responsive#test_summary
+      %thead.thead-default
+        %tr
+          %th Name
+          - if @selected == 'all'
+            %th Last Version Tested
+          - else
+            %th Computers Tested
+          %th Last Tested Date
+
+      %tbody
+        - @test_cases.each do |test_case|
+          %tr{class: @row_classes[test_case] + ' clickable-row', "data-href":test_case_path(test_case, version: @selected), id: test_case.name + '-row'}
+            %td
+              %samp= test_case.name
+            - if @selected == 'all'
+              %td= @last_versions[test_case]
+            - else
+              %td= @computer_counts[test_case]
+            %td= @last_tested[test_case]
+.row
+  .col.text-center
+    - if admin?
+      =link_to "Create Test Case", new_test_case_path, class: 'btn btn-lg btn-primary text-light'
