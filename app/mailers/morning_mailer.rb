@@ -40,8 +40,7 @@ class MorningMailer < ApplicationMailer
     end
 
     # gather sender, recipient(s), subject, and body before composing email
-    from = Email.new(email: 'noreply@testhub.mesastar.org',
-                     name: 'MESA Test Hub')
+    from = Email.new(email: 'mesa-developers@lists.mesastar.org')
     to = Email.new(email: 'mesa-developers@lists.mesastar.org')
     # to = Email.new(email: 'wmwolf@asu.edu', name: 'Bill Wolf')
     subject = ''
