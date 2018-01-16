@@ -3,7 +3,7 @@ git_source(:github) do |repo_name|
   repo_name = "#{repo_name}/#{repo_name}" unless repo_name.include?("/")
   "https://github.com/#{repo_name}.git"
 end
-ruby '2.4.2'
+ruby '2.4.3'
 gem 'rails', '~> 5.1.4'
 gem 'puma', '~> 3.7'
 gem 'sass-rails', '~> 5.0'
@@ -15,6 +15,7 @@ gem 'pg'
 gem 'bcrypt', '~> 3.1.7'
 gem 'sendgrid-ruby'
 gem 'rails_12factor', group: :production
+gem 'scout_apm', group: :production
 group :development, :test do
   gem 'byebug', platforms: [:mri, :mingw, :x64_mingw]
   gem 'guard-bundler'

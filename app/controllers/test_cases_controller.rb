@@ -10,7 +10,6 @@ class TestCasesController < ApplicationController
     @selected = params[:version] || 'latest'
     # big daddy query, hopefully optimized
     @version_number = case @selected
-                      when 'all' then :all
                       when 'latest' then @mesa_versions.max
                       else
                         @selected.to_i
@@ -20,11 +19,7 @@ class TestCasesController < ApplicationController
                       
     @test_cases = @version.test_cases.order(:name).uniq
     # @test_cases = TestCase.find_by_version(@version_number)
-    @header_text = case @selected
-                   when 'all' then 'Last Results for All Tests'
-                   else
-                     "Test Cases Tested on Version #{@version_number}"
-                   end
+    @header_text = "Test Cases Tested on Version #{@version_number}"
     @specs = @version.computer_specs
     @statistics = @version.statistics
     @version_status =
