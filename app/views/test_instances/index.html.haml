@@ -25,7 +25,7 @@
       %tbody
         - @test_instances.each do |test_instance|
           %tr
-            %td.align-middle= test_instance.mesa_version
+            %td.align-middle= link_to test_instance.mesa_version, version_path(test_instance.mesa_version)
             %td.align-middle= test_instance.created_at.utc.strftime "%Y-%m-%d"
             %td.align-middle
               = test_instance.runtime_seconds

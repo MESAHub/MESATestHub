@@ -1,5 +1,4 @@
 Rails.application.routes.draw do
-  resources :versions
   get 'sessions/new'
 
   resources :users do
@@ -11,7 +10,12 @@ Rails.application.routes.draw do
     resources :test_instances
   end
 
-  root to: 'test_cases#index' # , params: { version: 'latest' }
+  root to: 'versions#show' #, params: { number: 'latest' }
+
+  get 'versions', to: 'versions#index', as: 'versions'
+  get 'versions/:number', to: 'versions#show', as: 'version'
+  # this one just takes number from params nad redirects to version_path
+  get 'show_version', to: 'versions#show_version'
 
   # meant for remote HTTP requests
   post '/test_instances/submit', to: 'test_instances#submit'

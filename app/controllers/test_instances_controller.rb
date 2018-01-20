@@ -128,6 +128,8 @@ class TestInstancesController < ApplicationController
     # test cases
     instance.set_test_case_name(params[:test_case], params[:mod])
     instance.set_computer_name(@user, params[:computer])
+    # this allows for backwards compatibility before the version model existed
+    instance.update_version
     instance
   end
 

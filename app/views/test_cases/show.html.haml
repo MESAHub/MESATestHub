@@ -26,18 +26,18 @@
         %th{scope: 'row'}
           %samp MESA
           Version
-        %td=@version_number
+        %td=link_to(@version_number, version_path(@version_number))
       %tr
         %th{scope: 'row'} Values Tracked
         %td= @test_case.data_names.join(", ")
       %tr
         %th{scope: 'row'} Version Added
-        %td= @test_case.version_added
+        %td= link_to(@test_case.version_created.number, version_path(@test_case.version_created.number))
     .text-center
       .btn-group{style: 'margin-bottom: 20px'}
         - if admin?
           = link_to 'Edit', edit_test_case_path(@test_case), class: 'btn btn-primary btn-md text-light'
-        = link_to 'View All Cases', test_cases_path(version: @selected), class: 'btn btn-secondary btn-md text-light'
+        = link_to 'View All Cases', version_path(@version_number), class: 'btn btn-secondary btn-md text-light'
         - if admin?
           = link_to 'Delete', @test_case, method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-danger btn-md text-light'
   .col-lg-6.col-xs-12

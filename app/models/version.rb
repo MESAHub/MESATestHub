@@ -7,37 +7,6 @@ class Version < ApplicationRecord
   has_many :computers, through: :test_instances
   has_many :users, through: :computers
 
-  # NOT DONE
-  def status
-    pass_count = test_instances.where(passed: true).count
-    fail_count = test_instances.where(passed: false).count
-    if pass_count > 0 && fail_count > 0
-      2
-    elsif pass_count > 0
-      0
-    elsif fail_count > 0
-      1
-    end
-  end
-
-  def failing_instances
-    test_instances.where(passed: false)
-  end
-
-  # test cases with at least one failing instance
-  def some_failing_test_cases
-    TestCase.find(failing_instances.pluck(:test_case_id).uniq)
-  end
-
-  def passing_instances
-    test_instances.where(passed: true)
-  end
-
-  # test cases with at least one passing instance
-  def some_passing_test_cases
-    TestCase.find(passing_instances.pluck(:test_case_id).uniq)
-  end
-
   # array of arrays. First element is array of test cases that pass all
   # instances. Second element is array of test cases that pass and fail at
   # at least once each. Third element is array of test cases that fail all
@@ -46,16 +15,21 @@ class Version < ApplicationRecord
     passing = []
     mixed = []
     failing = []
-    pass_some = some_passing_test_cases
-    fail_some = some_failing_test_cases
-    TestCase.order(:name).each do |test_case|
-      if pass_some.include?(test_case) && fail_some.include?(test_case)
-        mixed << test_case
-      elsif pass_some.include?(test_case)
-        passing << test_case
-      elsif fail_some.include?(test_case)
-        failing << test_case
+    # pass_some = some_passing_test_cases
+    # fail_some = some_failing_test_cases
+    test_cases.uniq.sort { |t1, t2| t1.name <=> t2.name }.each do |test_case|
+      case status(test_case)
+      when 0 then passing << test_case
+      when 1 then failing << test_case
+      when 2 then mixed << test_case
       end
+      # if pass_some.include?(test_case) && fail_some.include?(test_case)
+      #   mixed << test_case
+      # elsif pass_some.include?(test_case)
+      #   passing << test_case
+      # elsif fail_some.include?(test_case)
+      #   failing << test_case
+      # end
     end
     [passing, mixed, failing]
   end
@@ -97,15 +71,23 @@ class Version < ApplicationRecord
       return test_instances.where(test_case: test_case)
                            .pluck(:computer_id).uniq.length
     end
-    test_instances.select { |ti| ti.test_case == test_case }
+    test_instances.select { |ti| ti.test_case_id == test_case.id }
                   .map(&:computer_id).uniq.length
   end
 
   def status(test_case)
-    instances = test_instances.where(test_case: test_case)
+    if test_instances.loaded?
+      # don't do database calls here!
+      instances = test_instances.select { |ti| ti.test_case_id == test_case.id }
+      pass_count = instances.count { |ti| ti.passed }
+      fail_count = instances.count - pass_count
+    else
+      # test instances not loaded, so just use the database
+      instances = test_instances.where(test_case: test_case)
+      pass_count = instances.where(passed: true).count
+      fail_count = instances.where(passed: false).count
+    end
     return 3 if instances.empty?
-    pass_count = instances.where(passed: true).count
-    fail_count = instances.where(passed: false).count
     # all tests pass?
     return 0 if fail_count.zero?
     # all tests fail?
@@ -113,4 +95,45 @@ class Version < ApplicationRecord
     # mix?
     2
   end
+
+  # gives overall status, # of passing tests, # of failing tests, and 
+  # # of mixed tests
+  def summary_status
+    pass_count = 0
+    fail_count = 0
+    mix_count = 0
+    test_cases.uniq.each do |test_case|
+      case status(test_case)
+      when 0 then pass_count += 1
+      when 1 then fail_count += 1
+      when 2 then mix_count += 1
+      end
+    end
+    status = if pass_count + fail_count + mix_count == 0
+               3
+             elsif fail_count == 0 && mix_count == 0
+               0
+             elsif pass_count == 0 && mix_count == 0
+               1
+             else
+               2
+             end
+    return status, pass_count, fail_count, mix_count
+  end
+
+  def last_tested(test_case=nil)
+    if test_instances.loaded?
+      if test_case.nil?
+        return test_instances.map(&:created_at).max
+      else
+        return test_instances.select do |ti|
+          ti.test_case_id == test_case.id
+        end.map(&:created_at).max
+      end
+    end
+    return test_instances.maximum(:created_at) if test_case.nil?
+    test_instances.where(test_case: test_case).maximum(:created_at)
+  end
+
+
 end

@@ -139,7 +139,7 @@ class TestCase < ApplicationRecord
                            .order(created_at: :desc)
     end
     # instances already loaded? avoid hitting the database
-    test_instances.select { |t| t.version == version }
+    test_instances.select { |t| t.version_id == version.id }
                   .sort do |a, b|
                     -(a.created_at <=> b.created_at)
                   end

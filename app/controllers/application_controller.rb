@@ -1,6 +1,6 @@
 class ApplicationController < ActionController::Base
   protect_from_forgery with: :exception
-  before_action :set_all_test_cases
+  # before_action :set_all_test_cases
 
   private
 
