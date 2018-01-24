@@ -12,7 +12,7 @@ namespace :db do
   end
 
   desc "Convert 'mesa_version' to proper foreign key if not already done."
-  task fix_broken_verions: :environment do
+  task fix_broken_versions: :environment do
     TestInstance.where(version_id: nil).each(&:update_version)
   end
 end
