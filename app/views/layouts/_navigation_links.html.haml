@@ -7,7 +7,7 @@
     .collapse.navbar-collapse#main-navbar
       %ul.navbar-nav.mr-auto
         %li.nav-item.dropdown
-          %a.nav-link{ :href => versions_path } All Versions
+          %a.nav-link.disabled{ :href => root_path } All Versions
           -if current_user
             %li.nav-item
               %a.nav-link{ :href => user_computers_path(current_user) } My Computers
