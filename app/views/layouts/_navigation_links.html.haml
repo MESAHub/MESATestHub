@@ -7,15 +7,6 @@
     .collapse.navbar-collapse#main-navbar
       %ul.navbar-nav.mr-auto
         %li.nav-item.dropdown
-          -# %a.nav-link.dropdown-togle#dropdown01{ :href => test_cases_path, "data-toggle" => "dropdown", "aria-haspopup" => "true", "aria-expanded" => "false"}
-          -#   Tests
-          -#   %i.fa.fa-chevron-down
-          -# %div.dropdown-menu{ "aria-labelledby" => "dropdown01"}
-          -#   %a.dropdown-item{ href: test_cases_path(version: 'all') }
-          -#     %strong All
-          -#   -@all_test_cases.each do |test_case|
-          -#     %a.dropdown-item{ :href => test_case_path(test_case) }
-          -#       =test_case.name
           %a.nav-link{ :href => versions_path } All Versions
           -if current_user
             %li.nav-item

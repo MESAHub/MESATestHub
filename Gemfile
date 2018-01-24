@@ -36,6 +36,7 @@ end
 gem 'tzinfo-data', platforms: [:mingw, :mswin, :x64_mingw, :jruby]
 gem 'bootstrap', '~> 4.0.0.beta'
 gem 'bootstrap_form'
+gem 'haml', '~> 5.0.4'
 gem 'haml-rails'
 gem 'high_voltage'
 gem 'jquery-rails'

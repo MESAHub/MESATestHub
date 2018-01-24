@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20171215223320) do
+ActiveRecord::Schema.define(version: 20180124191134) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -73,7 +73,7 @@ ActiveRecord::Schema.define(version: 20171215223320) do
 
   create_table "test_instances", force: :cascade do |t|
     t.integer "runtime_seconds", null: false
-    t.integer "mesa_version", null: false
+    t.integer "mesa_version"
     t.integer "omp_num_threads"
     t.string "compiler"
     t.string "compiler_version"
@@ -86,6 +86,10 @@ ActiveRecord::Schema.define(version: 20171215223320) do
     t.string "success_type"
     t.string "failure_type"
     t.bigint "version_id"
+    t.integer "steps"
+    t.integer "retries"
+    t.integer "backups"
+    t.text "summary_text"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
     t.index ["mesa_version"], name: "index_test_instances_on_mesa_version"
     t.index ["test_case_id"], name: "index_test_instances_on_test_case_id"

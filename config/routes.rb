@@ -19,6 +19,7 @@ Rails.application.routes.draw do
 
   # meant for remote HTTP requests
   post '/test_instances/submit', to: 'test_instances#submit'
+  post '/versions/submit_revision', to: 'versions#submit_revision'
 
   get 'admin', to: 'users#admin', as: 'admin'
   get 'admin_edit_user', to: 'users#admin_edit_user', as: 'admin_edit_user'

@@ -52,7 +52,12 @@ class TestInstancesController < ApplicationController
   # POST /test_instances.json
   def create
     @test_instance = @test_case.test_instances.build(test_instance_params)
-    # TestInstance.new(test_instance_params)
+    
+    # jankety solution to set version properly, similar to 
+    # Version#update_version
+    version = Version.find_or_create_by(
+      number: test_instance_params[:mesa_version])
+    @test_instance.version = version    
 
     respond_to do |format|
       if @test_instance.save
@@ -75,6 +80,9 @@ class TestInstancesController < ApplicationController
   def update
     respond_to do |format|
       if @test_instance.update(test_instance_params)
+        # jankety solution to set version properly
+        @test_instance.update_version
+
         format.html do
           redirect_to test_case_test_instances_url(@test_case),
                       notice: 'Test instance was successfully updated.'
@@ -220,7 +228,8 @@ class TestInstancesController < ApplicationController
 
   def instance_keys
     %i[runtime_seconds mesa_version omp_num_threads compiler compiler_version
-       platform_version passed failure_type success_type]
+       platform_version passed failure_type success_type steps retries backups
+       summary_text]
   end
 
   # allowed params for using the submit controller action
@@ -248,7 +257,8 @@ class TestInstancesController < ApplicationController
     params.require(:test_instance).permit(
       :runtime_seconds, :mesa_version, :omp_num_threads, :compiler,
       :compiler_version, :platform_version, :passed, :computer_id,
-      :test_case_id, :success_type, :failure_type
+      :test_case_id, :success_type, :failure_type, :steps, :retries, :backups,
+      :summary_text
     )
   end
 end

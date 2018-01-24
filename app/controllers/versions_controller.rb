@@ -1,5 +1,7 @@
 class VersionsController < ApplicationController
 
+  skip_before_action :verify_authenticity_token, only: [:submit_revision]
+
   def index
     @versions = Version.all.includes(:test_instances, :test_cases).order(number: :desc)
     @row_classes = {}
@@ -100,23 +102,23 @@ class VersionsController < ApplicationController
   end
 
   # FOR SUBMITTING WHOLE REVISIONS
-  # 
-  # TODO: NEED TO FIGURE OUT PARAM SCHEMES (SECURITY PROBLEMS?)
 
-
+  # POST /versions/submit_revision.json
   def submit_revision
-    authenticate_user
+    submission_fail_authenticate unless submission_authenticated?
     submit_version
     # iterate through each test case and submit each as an instance
-    # collect failed save attempts along the way
-    failures = test_instance_params.map do |ti_params, extra_params|
-      submit_instance(ti_params, extra_params)
+    # collect failed save attempts along the way (successful submissions return
+    # nil, so only hold onto non-nil results)
+    failures = test_instance_pairs.map do |instance_pair|
+      submit_instance(instance_params(instance_pair),
+                      extra_params(instance_pair))
     end.reject { |elt| elt.nil? }
     # if some failed, send back a failure message at the end
     unless failures.empty?
       errors = failures.map { |ti| ti.errors }
       respond_to do |format|
-        format.json { render json: errors, status: :unprocessable_entity }
+        format.json { render json: errors.to_json, status: :unprocessable_entity }
       end
     end
 
@@ -129,7 +131,7 @@ class VersionsController < ApplicationController
 
   def submit_version
     # first find/create version
-    @version = Version.find_or_create_by_number(version_params[:number])
+    @version = Version.find_or_create_by(number: version_params[:number])
     # check/update svn data
     @version.author = version_params[:author] if version_params[:author]
     @version.log = version_params[:log] if version_params[:log]
@@ -151,7 +153,7 @@ class VersionsController < ApplicationController
     # set up associations
     test_instance.set_test_case_name(extra_params[:test_case],
                                      extra_params[:mod])
-    test_instance.set_computer_name(@user, extra_params[:computer])
+    test_instance.set_computer_name(@user, user_params[:computer])
 
     # return nil if we successfully save, otherwise the failed test_instance
     if test_instance.save
@@ -160,5 +162,72 @@ class VersionsController < ApplicationController
       test_instance
     end
   end
+
+  private
+
+  def submission_authenticated?
+    # If logged on to website, we're good
+    @user = current_user
+    authenticated = !@user.nil?
+
+    # If not logged on, or submitting via JSON post (likely), check params
+    unless authenticated
+      @user = User.find_by(email: user_params[:email])
+      authenticated = @user && @user.authenticate(user_params[:password])
+    end
+    authenticated
+  end
+
+  def submission_fail_authenticate
+    # what to do when authentication during a submit fails
+    respond_to do |format|
+      format.html do
+        redirect_to login_url,
+                    alert: 'Must be signed in to submit a test instance.'
+      end
+      format.json do
+        render json: { error: 'Invalid e-mail or password.' },
+               status: :unprocessable_entity
+      end
+    end
+  end  
+
+  def submission_fail_authenticate
+    # what to do when authentication during a submit fails
+    respond_to do |format|
+      format.html do
+        redirect_to login_url,
+                    alert: 'Must be signed in to submit a revision.'
+      end
+      format.json do
+        render json: { error: 'Invalid e-mail or password.' },
+               status: :unprocessable_entity
+      end
+    end
+  end
+
+  def version_params
+    params.require(:version).permit(:number, :log, :author)
+  end
+
+  def test_instance_pairs
+    params.require(:instances)
+  end
+
+  def user_params
+    params.require(:user).permit(:email, :password, :computer)
+  end
+
+  def instance_params(instance_pair)
+    instance_pair.require(:test_instance).permit(
+      :runtime_seconds, :omp_num_threads, :compiler, :compiler_version,
+      :platform_version, :passed, :failure_type, :success_type, :steps,
+      :retries, :backups, :summary_text)
+  end
+
+  def extra_params(instance_pair)
+    instance_pair.require(:extra).permit(:test_case, :mod)
+  end
+
 
 end

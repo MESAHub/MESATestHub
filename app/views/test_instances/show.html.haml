@@ -12,7 +12,7 @@
       %samp= link_to @test_case.name, @test_case
     %p
       %b MESA Version:
-      = @test_instance.mesa_version
+      = link_to @test_instance.version.number, version_path(@test_instance.version.number)
     %p
       %b Date Submitted:
       = @test_instance.created_at
@@ -53,6 +53,11 @@
       Result:
       %b{ class: @passage_class }=@passage_status
 
+-unless @test_instance.summary_text.nil?
+  .row
+    .col
+      %h4 Summary Text
+      %p= simple_format(@test_instance.summary_text)
 .row
   .col.text-center
     .btn-group

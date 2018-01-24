@@ -5,7 +5,7 @@ class FixVersions < ActiveRecord::Migration[5.1]
   end
 
   def down
-    add_column :versions, :status
+    add_column :versions, :status, :integer
     remove_reference :test_instances, :version
   end
 end

@@ -42,7 +42,7 @@
             .field
               = f.number_field :runtime_seconds
             .field
-              = f.number_field :mesa_version
+              = f.number_field :mesa_version, value: @test_instance.version.number
             .field
               = f.select :computer_id, current_user.computers.collect { |c| [c.name, c.id] }
         .card.text-white.bg-dark.mb-3
@@ -64,6 +64,8 @@
             = f.text_field :platform_version, label: "Platform version (e.g.  10.13 (for macOS) or Ubuntu 16.04 (for linux)"
           .field
             = f.text_field :compiler_version, label: "Compiler version (e.g. 7.0.2 or 20170921)"
+          .field
+            = f.text_area :summary_text, label: "Summary Text (runtime, steps, retries, backups from test output)"
   .form-row
     .col.text-center
       .btn-group.actions
