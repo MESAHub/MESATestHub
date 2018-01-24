@@ -103,7 +103,7 @@ class TestInstance < ApplicationRecord
     # can't figure things out if no mesa version given
     return unless mesa_version
     new_version = Version.find_or_create_by(number: mesa_version)
-    update_attributes(version: new_version)
+    update_attributes!(version: new_version)
     version.number
   end
 

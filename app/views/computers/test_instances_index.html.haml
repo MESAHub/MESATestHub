@@ -24,7 +24,7 @@
       %tbody
         - @computer_instances.each do |test_instance|
           %tr
-            %td.align-middle= test_instance.mesa_version
+            %td.align-middle= link_to test_instance.version.number, version_path(test_instance.version.number)
             %td.align-middle
               %samp= link_to test_instance.test_case.name, test_instance.test_case            
             %td.align-middle= test_instance.created_at.utc.strftime "%Y-%m-%d"
