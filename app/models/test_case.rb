@@ -35,19 +35,19 @@ class TestCase < ApplicationRecord
 
   validates_inclusion_of :module, in: TestCase.modules, allow_blank: true
 
-  def self.find_by_version(version = :all)
-    return TestCase.all.order(:name) if version.to_s.to_sym == :all
-    search_version = version == :latest ? versions.max : version
-    # TestInstance is indexed on mesa version, so we get those in constant
-    # time, then back out unique Test Cases. This is usually used to get
-    # data for index, so eagerly load instances to get at status without
-    # hitting database for a ton more queries
-    TestCase.includes(:test_instances).find(
-      TestInstance.where(
-        mesa_version: search_version
-      ).pluck(:test_case_id).uniq
-    ).sort { |a, b| (a.name <=> b.name) }
-  end
+  # def self.find_by_version(version = :all)
+  #   return TestCase.all.order(:name) if version.to_s.to_sym == :all
+  #   search_version = version == :latest ? versions.max : version
+  #   # TestInstance is indexed on mesa version, so we get those in constant
+  #   # time, then back out unique Test Cases. This is usually used to get
+  #   # data for index, so eagerly load instances to get at status without
+  #   # hitting database for a ton more queries
+  #   TestCase.includes(:test_instances).find(
+  #     TestInstance.where(
+  #       mesa_version: search_version
+  #     ).pluck(:test_case_id).uniq
+  #   ).sort { |a, b| (a.name <=> b.name) }
+  # end
 
   # def self.version_statistics(test_cases, version)
   #   stats = { passing: 0, mixed: 0, failing: 0 }

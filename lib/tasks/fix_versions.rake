@@ -10,4 +10,9 @@ namespace :db do
     puts "Updating all #{TestCase.count} test cases."
     TestCase.all.each(&:update_version_created)
   end
+
+  desc "Convert 'mesa_version' to proper foreign key if not already done."
+  task fix_broken_verions: :environment do
+    TestInstance.where(version_id: nil).each(&:update_version)
+  end
 end
