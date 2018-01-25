@@ -30,11 +30,11 @@ class MorningMailer < ApplicationMailer
       @version_links = {}
       @case_links = {}
       @cases.each do |version, cases|
-        @version_links[version] = test_cases_url(version: version)
+        @version_links[version] = version_url(version.number)
         @case_links[version] = {}
         cases.each do |test_case|
           @case_links[version][test_case] =
-            test_case_url(test_case, version: version)
+            test_case_url(test_case, version: version.number)
         end
       end
     end

@@ -15,4 +15,11 @@ namespace :db do
   task fix_broken_versions: :environment do
     TestInstance.where(version_id: nil).each(&:update_version)
   end
+
+  desc "Change null compilers to 'SDK'"
+  task fix_sdks: :environment do
+    TestInstance.where(compiler: nil).each do |ti|
+      ti.update_attributes!(compiler: 'SDK')
+    end
+  end
 end

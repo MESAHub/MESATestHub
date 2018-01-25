@@ -31,10 +31,12 @@
   <% @failing_versions.each do |version| %>
     <h3>
       <a clicktracking=off href=<%= @version_links[version] %>>
-        <%= version %>
+        <%= version.number %>
       </a>
     </h3>
     <ul>
+      <li> <b> Author: </b> <%= version.author %> </li>
+      <li> <b> Commit Message: </b> <%= version.log %> </li>
       <% @cases[version].each do |test_case| %>
         <li>
           <samp> 
