@@ -14,6 +14,7 @@ gem 'jbuilder', '~> 2.5'
 gem 'pg'
 gem 'bcrypt', '~> 3.1.7'
 gem 'sendgrid-ruby'
+gem 'kaminari'
 gem 'rails_12factor', group: :production
 gem 'scout_apm', group: :production
 group :development, :test do
