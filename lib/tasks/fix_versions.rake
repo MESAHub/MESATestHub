@@ -16,10 +16,12 @@ namespace :db do
     TestInstance.where(version_id: nil).each(&:update_version)
   end
 
-  desc "Change null compilers to 'SDK'"
-  task fix_sdks: :environment do
-    TestInstance.where(compiler: nil).each do |ti|
-      ti.update_attributes!(compiler: 'SDK')
+  desc "Change null compilers to 'SDK' and update versions."
+  task fix_compilers_and_versions: :environment do
+    TestInstance.where(compiler: nil, version_id: nil).each do |ti|
+      ti.compiler = 'SDK'
+      ti.version ||= Version.find_or_create_by(number: ti.mesa_version)
+      ti.save!
     end
   end
 end
