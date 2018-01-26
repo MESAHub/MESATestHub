@@ -7,6 +7,8 @@ class Version < ApplicationRecord
   has_many :computers, through: :test_instances
   has_many :users, through: :computers
 
+  paginates_per 10
+
   # array of arrays. First element is array of test cases that pass all
   # instances. Second element is array of test cases that pass and fail at
   # at least once each. Third element is array of test cases that fail all
