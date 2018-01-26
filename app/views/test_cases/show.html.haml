@@ -42,8 +42,10 @@
           = link_to 'Delete', @test_case, method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-danger btn-md text-light'
   .col-lg-6.col-xs-12
     %h3
-      All test instances for version
-      =@version_number
+      -if @test_instances.length < @instance_limit
+        = "All instances for version #{@version_number}"
+      - else
+        ="Last #{@instance_limit} instances for version #{@version_number}"
     - if not @test_instances.empty?
       %table.table.table-hover.table-sm.table-responsive#test-detail
         %thead.thead-default

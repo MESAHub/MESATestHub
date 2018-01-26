@@ -13,13 +13,13 @@ class ComputersController < ApplicationController
   # GET /computers.json
   def index
     @owner_prefix = "#{@user.name}'s"
-    @computers = @user.computers
+    @computers = @user.computers.order(:created_at).page(params[:page])
   end
 
   def index_all
     @owner_prefix = 'All'
     @show_users = true
-    @computers = Computer.all.includes(:user)
+    @computers = Computer.includes(:user).order(:user_id).page(params[:page])
     # @computers.sort_by { |c| c.user.name }
     render 'index'
   end

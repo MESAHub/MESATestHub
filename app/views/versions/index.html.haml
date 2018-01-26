@@ -1,11 +1,15 @@
 .row
   .col
     %h1.text-center MESA Version Summary
+    %p
+      %i= page_entries_info @versions
+
+.row
+  .col
     %table.table.table-hover.table-responsive#test_summary
       %thead.thead-default
         %tr
           %th Version
-          %th Computers Tested
           %th Pass/Fail/Mix/Total Cases
           %th Last Tested Date
 
@@ -13,6 +17,9 @@
         - @versions.each do |version|
           %tr{class: @row_classes[version] + ' clickable-row', "data-href":version_path(version.number), id: version.number.to_s + '-row'}
             %td= version.number
-            %td= @computer_counts[version]
             %td= "#{@pass_counts[version]}/#{@fail_counts[version]}/#{@mix_counts[version]}/#{@case_counts[version]}"
             %td= version.last_tested
+
+.row
+  .col
+    = paginate @versions

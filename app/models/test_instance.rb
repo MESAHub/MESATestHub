@@ -107,6 +107,13 @@ class TestInstance < ApplicationRecord
     version.number
   end
 
+  # still useful to have direct access to mesa_version for sorting purposes
+  def mesa_version
+    return super if super
+    self.update_attributes(mesa_version: version.number)
+    super
+  end  
+
   def set_test_case_name(new_test_case_name, mod)
     new_test_case = TestCase.where(name: new_test_case_name).first
     if new_test_case.nil?

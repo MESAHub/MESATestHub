@@ -93,7 +93,8 @@ class TestCasesController < ApplicationController
                       end
     @version = Version.find_by_number(@version_number)
     # all test instances, sorted by upload date
-    @test_instances = @test_case.version_instances(@version)
+    @instance_limit = 15
+    @test_instances = @test_case.version_instances(@version, @instance_limit)
     @test_instance_classes = {}
     @test_instances.each do |instance|
       @test_instance_classes[instance] =

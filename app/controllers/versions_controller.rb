@@ -3,9 +3,10 @@ class VersionsController < ApplicationController
   skip_before_action :verify_authenticity_token, only: [:submit_revision]
 
   def index
-    @versions = Version.all.includes(:test_instances, :test_cases).order(number: :desc)
+    @versions = Version.order(number: :desc)
+                       .includes(:test_instances, :test_cases)
+                       .page(params[:page])
     @row_classes = {}
-    @computer_counts = {}
     @pass_counts = {}
     @fail_counts = {}
     @mix_counts = {}
@@ -23,9 +24,6 @@ class VersionsController < ApplicationController
       @pass_counts[version] = pass_count
       @fail_counts[version] = fail_count
       @mix_counts[version] = mix_count
-      @computer_counts[version] = version.test_cases.map do |test_case|
-        version.computers_count(test_case)
-      end.max
       @case_counts[version] = version.test_cases.uniq.length
     end
   end
@@ -149,6 +147,7 @@ class VersionsController < ApplicationController
   def submit_instance(ti_params, extra_params)
     # set up basic test instance
     test_instance = @version.test_instances.build(ti_params)
+    test_instance.mesa_version = @version.number
 
     # set up associations
     test_instance.set_test_case_name(extra_params[:test_case],

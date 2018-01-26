@@ -131,18 +131,29 @@ class TestCase < ApplicationRecord
   #   test_instances.pluck(:mesa_version).uniq.sort.reverse
   # end
 
-  def version_instances(version)
+  def version_instances(version, limit=nil)
     return test_instances if version == :all
     # hit the database directly if needed
     unless test_instances.loaded?
-      return test_instances.where(version: version)
-                           .order(created_at: :desc)
+      if limit
+        return test_instances.includes(:computer)
+                             .where(version: version)
+                             .order(created_at: :desc)
+                             .limit(limit)
+      else                             
+        return test_instances.includes(:computer)
+                             .where(version: version)
+                             .order(created_at: :desc)
+      end
     end
     # instances already loaded? avoid hitting the database
-    test_instances.select { |t| t.version_id == version.id }
-                  .sort do |a, b|
-                    -(a.created_at <=> b.created_at)
-                  end
+    res = test_instances.select { |t| t.version_id == version.id }
+                        .sort { |a, b| -(a.created_at <=> b.created_at) }
+    if limit
+      res.first(limit)
+    else
+      res
+    end
   end
 
   def version_status(version)

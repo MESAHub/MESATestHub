@@ -13,10 +13,10 @@ class TestInstancesController < ApplicationController
   # GET /test_instances
   # GET /test_instances.json
   def index
-    @test_instances = @test_case.test_instances.includes(:computer, :version)
-    @test_instances = @test_instances.to_a.sort_by! do |ti|
-      [ti.version.number, ti.created_at]
-    end.reverse
+    @test_instances = 
+      @test_case.test_instances.includes(:computer, :version)
+                .order(mesa_version: :desc, created_at: :desc)
+                .page(params[:page])
   end
 
   # GET /test_instances/1

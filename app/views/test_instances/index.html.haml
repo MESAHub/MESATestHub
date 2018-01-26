@@ -1,8 +1,10 @@
 .row
   .col
-    %h1 
+    %h2
       Instances of
       %samp=@test_case.name
+    %p
+      %i= page_entries_info @test_instances
 
 .row
   .col
@@ -49,6 +51,9 @@
             -if admin?
               %td.align-middle= link_to 'Edit', edit_test_case_test_instance_path(@test_case, test_instance), class: 'btn btn-sm btn-primary text-light'
               %td.align-middle= link_to 'Destroy', [@test_case, test_instance], method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-sm btn-danger text-light'
+.row
+  .col
+    = paginate @test_instances
 
 .row
   .col.text-center
