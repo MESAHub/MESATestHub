@@ -27,10 +27,10 @@ class ComputersController < ApplicationController
   # GET /computers/1/test_instances
   # GET /computers/1/test_instances.json
   def test_instances_index
-    @computer_instances = @computer.test_instances.includes(:version).sort do |a, b| 
-      a.version.number <=> b.version.number
-    end.reverse
-    @computer_instances
+    @computer_instances = @computer.test_instances
+                                   .includes(:version)
+                                   .order(mesa_version: :desc)
+                                   .page(params[:page])
   end
 
   # GET /computers/1

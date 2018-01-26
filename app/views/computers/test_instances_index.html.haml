@@ -1,8 +1,11 @@
 .row
   .col
-    %h1 
+    %h2 
       Test instances run by
       =@computer.name
+    %p
+      %i= page_entries_info @computer_instances
+
 .row
   .col
     %table.table.table-sm.table-responsive
@@ -43,7 +46,9 @@
             -if admin?
               %td.align-middle= link_to 'Edit', edit_test_case_test_instance_path(test_instance.test_case, test_instance), class: 'btn btn-sm btn-primary text-light'
               %td.align-middle= link_to 'Destroy', [test_instance.test_case, test_instance], method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-sm btn-danger text-light'
-
+.row
+  .col
+    = paginate @computer_instances
 .row
   .col.text-center
     .btn-group
