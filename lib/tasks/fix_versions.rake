@@ -14,6 +14,7 @@ namespace :db do
   desc "Convert 'mesa_version' to proper foreign key if not already done."
   task fix_broken_versions: :environment do
     TestInstance.where(version_id: nil).each(&:update_version)
+    TestInstance.where(mesa_version: nil).each(&:update_version)
   end
 
   desc "Change null compilers to 'SDK' and update versions."

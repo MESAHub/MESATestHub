@@ -98,13 +98,17 @@ class TestInstance < ApplicationRecord
 
   # meant to ease transition from mesa_version to Version model.
   def update_version
-    # don't do anything if version is already set
-    return if version_id
-    # can't figure things out if no mesa version given
-    return unless mesa_version
-    new_version = Version.find_or_create_by(number: mesa_version)
-    update_attributes!(version: new_version)
-    version.number
+    # don't do anything if versions are both set (or if we are helpless)
+    return if version_id && mesa_version
+    return unless version_id || mesa_version
+    # conditionally update the integer mesa_version
+    if version_id
+      mesa_version ||= version.number
+    # conditionally update the version
+    else
+      new_version = Version.find_or_create_by(number: mesa_version)
+    end
+    save!
   end
 
   # still useful to have direct access to mesa_version for sorting purposes
