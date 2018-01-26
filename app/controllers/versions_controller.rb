@@ -71,6 +71,29 @@ class VersionsController < ApplicationController
                     else
                       'text-info'
                     end
+    @compilation_text = case @version.compilation_status
+                        when 0 then 'Successfully compiling on ' +
+                                    "#{@version.compile_success_count} " +
+                                    'machines.'
+                        when 1 then 'Failing to compile on ' \
+                                    "#{@version.compile_fail_count} machines."
+                        when 2 then 'Successfully compiling on ' \
+                                    "#{@version.compile_success_count} and " \
+                                    'failing to compile on ' \
+                                    "#{@version.compile_fail_count} machines."
+                        else
+                          ''
+                        end
+
+    @compilation_class = case @version.compilation_status
+                         when 0 then 'text-success'
+                         when 1 then  'text-danger'
+                         when 2 then 'text-warning'
+                         else
+                           0
+                         end
+
+
 
     # for populating version select menu
     @mesa_versions.prepend('latest')
@@ -95,7 +118,7 @@ class VersionsController < ApplicationController
   end
 
   def show_version
-    puts "redirecting to #{version_path(params[:number])}"
+    # puts "redirecting to #{version_path(params[:number])}"
     redirect_to version_path(params[:number])
   end
 
@@ -107,16 +130,19 @@ class VersionsController < ApplicationController
     submit_version
     # iterate through each test case and submit each as an instance
     # collect failed save attempts along the way (successful submissions return
-    # nil, so only hold onto non-nil results)
-    failures = test_instance_pairs.map do |instance_pair|
-      submit_instance(instance_params(instance_pair),
-                      extra_params(instance_pair))
-    end.reject { |elt| elt.nil? }
-    # if some failed, send back a failure message at the end
-    unless failures.empty?
-      errors = failures.map { |ti| ti.errors }
-      respond_to do |format|
-        format.json { render json: errors.to_json, status: :unprocessable_entity }
+    # nil, so only hold onto non-nil results). Skip all this if compilation
+    # failed in the first place
+    unless version_params.include?(:compiled) && !version_params[:compiled]
+      failures = test_instance_pairs.map do |instance_pair|
+        submit_instance(instance_params(instance_pair),
+                        extra_params(instance_pair))
+      end.reject { |elt| elt.nil? }
+      # if some failed, send back a failure message at the end
+      unless failures.empty?
+        errors = failures.map { |ti| ti.errors }
+        respond_to do |format|
+          format.json { render json: errors.to_json, status: :unprocessable_entity }
+        end
       end
     end
 
@@ -133,6 +159,16 @@ class VersionsController < ApplicationController
     # check/update svn data
     @version.author = version_params[:author] if version_params[:author]
     @version.log = version_params[:log] if version_params[:log]
+
+    # this param should (unless things change since January 25, 2018) only
+    # be present if user called `install_and_test_revision` or `submit_revision`
+    # with `mesa_test` where it will know if compilation was successful
+    if version_params.include? :compiled
+      @version.adjust_compilation_status(
+        version_params[:compiled],
+        Computer.find_by(name: user_params[:computer])
+      )
+    end
     
     # bail out and report failure if we can't even get the version right
     unless @version.save
@@ -206,7 +242,7 @@ class VersionsController < ApplicationController
   end
 
   def version_params
-    params.require(:version).permit(:number, :log, :author)
+    params.require(:version).permit(:number, :log, :author, :compiled)
   end
 
   def test_instance_pairs

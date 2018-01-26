@@ -123,6 +123,33 @@ class Version < ApplicationRecord
     return status, pass_count, fail_count, mix_count
   end
 
+  # update compilation success/fail counts and corresponding compilation status
+  def adjust_compilation_status(new_compilation_boolean, computer)
+    # Guide: nil = untested (or unreported)
+    #          0 = compiles on all systems so far
+    #          1 = fails compilation on all systems so far
+    #          2 = mixed results
+    # this method just keeps this scheme logically consistent when a new report
+    # rolls in, but it DOES NOT save the result to the database.
+    return if computers.include? computer
+    if new_compilation_boolean
+      self.compile_success_count += 1
+    else
+      self.compile_fail_count += 1
+    end
+
+    self.compilation_status = if self.compile_fail_count == 0
+                                0
+                              else
+                                if self.compile_success_count == 0
+                                  1
+                                else
+                                  2
+                                end
+                              end
+  end
+
+
   def last_tested(test_case=nil)
     if test_instances.loaded?
       if test_case.nil?

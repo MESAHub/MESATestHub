@@ -125,7 +125,11 @@ class TestInstance < ApplicationRecord
       # this test case will have NO EXTRA DATA ASSOCIATED WITH IT
       # at time of this edit (November 22, 2017), the data features is not in
       # use, but this may need to be revisited
-      new_test_case = version.create(name: new_test_case_name, module: mod)
+      new_test_case = TestCase.create(
+        name: new_test_case_name,
+        module: mod,
+        version_id: version.id
+      )
       # old behavior: scuttle the saving process
       # errors.add :test_case_id,
       #            'Could not find test case with name "' + new_test_case_name +

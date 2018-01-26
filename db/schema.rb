@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20180124191134) do
+ActiveRecord::Schema.define(version: 20180126221744) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -112,6 +112,9 @@ ActiveRecord::Schema.define(version: 20180124191134) do
     t.text "log"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "compilation_status"
+    t.integer "compile_success_count", default: 0
+    t.integer "compile_fail_count", default: 0
     t.index ["number"], name: "index_versions_on_number", unique: true
   end
 
