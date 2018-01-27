@@ -1,14 +1,14 @@
 <% unless @failing_versions.empty? %>
   <p>
     The following <samp>MESA</samp> revision(s) have had failing test cases 
-    in the last 24 hours: <%= @failing_versions.map(&:number).map(&:to_s).join(', ') %>.
+    in the last 24 hours: <%= @failing_versions.map(&:to_s).join(', ') %>.
   </p>
 <% end %>
 <% unless @passing_versions.empty? %>
   <p>
       The following <samp>MESA</samp> revision(s) have passed all test cases
       submitted for them in the last 24 hours: 
-      <%= @passing_versions.map(&:number).map(&:to_s).join(', ') %>.
+      <%= @passing_versions.map(&:to_s).join(', ') %>.
   </p>
 <% end %>
 
@@ -31,7 +31,7 @@
   <% @failing_versions.each do |version| %>
     <h3>
       <a clicktracking=off href=<%= @version_links[version] %>>
-        <%= version.number %>
+        <%= version %>
       </a>
     </h3>
     <ul>
