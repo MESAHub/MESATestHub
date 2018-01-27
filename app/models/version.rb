@@ -165,4 +165,8 @@ class Version < ApplicationRecord
   end
 
 
+  def to_s
+    "#{self.number}"
+  end
+
 end
