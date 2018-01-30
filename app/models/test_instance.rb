@@ -96,6 +96,15 @@ class TestInstance < ApplicationRecord
     end
   end
 
+  def set_computer(user, computer)
+    if computer.user == user
+      self.computer = computer
+    else
+      errors.add :computer_id, "Computer #{computer.name} does not belong to "\
+                               "user #{user.name}."
+    end
+  end
+
   # meant to ease transition from mesa_version to Version model.
   def update_version
     # don't do anything if versions are both set (or if we are helpless)

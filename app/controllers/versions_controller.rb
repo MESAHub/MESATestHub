@@ -126,13 +126,27 @@ class VersionsController < ApplicationController
 
   # POST /versions/submit_revision.json
   def submit_revision
+    # this sets up @user
     submission_fail_authenticate unless submission_authenticated?
+
+    # now set up @computer
+    @computer = @user.computers.find_by(name: user_params[:computer])
+    submission_fail_computer if @computer.nil?
+
+    # save/update version and quit if compilation failed
     submit_version
-    # iterate through each test case and submit each as an instance
-    # collect failed save attempts along the way (successful submissions return
-    # nil, so only hold onto non-nil results). Skip all this if compilation
-    # failed in the first place
     unless version_params.include?(:compiled) && !version_params[:compiled]
+      # do single call to database to get test cases, hash them for easy
+      # retrieval
+      @test_cases = 
+        TestCase.where(name: test_instance_pairs.map do |instance_pair|
+          extra_params(instance_pair)[:test_case]
+        end).to_a
+
+      # iterate through each test case and submit each as an instance
+      # collect failed save attempts along the way (successful submissions return
+      # nil, so only hold onto non-nil results). Skip all this if compilation
+      # failed in the first place
       failures = test_instance_pairs.map do |instance_pair|
         submit_instance(instance_params(instance_pair),
                         extra_params(instance_pair))
@@ -143,6 +157,7 @@ class VersionsController < ApplicationController
         respond_to do |format|
           format.json { render json: errors.to_json, status: :unprocessable_entity }
         end
+        return
       end
     end
 
@@ -164,10 +179,7 @@ class VersionsController < ApplicationController
     # be present if user called `install_and_test_revision` or `submit_revision`
     # with `mesa_test` where it will know if compilation was successful
     if version_params.include? :compiled
-      @version.adjust_compilation_status(
-        version_params[:compiled],
-        Computer.find_by(name: user_params[:computer])
-      )
+      @version.adjust_compilation_status(version_params[:compiled], @computer)
     end
     
     # bail out and report failure if we can't even get the version right
@@ -186,12 +198,19 @@ class VersionsController < ApplicationController
     test_instance.mesa_version = @version.number
 
     # set up associations
-    test_instance.set_test_case_name(extra_params[:test_case],
-                                     extra_params[:mod])
-    test_instance.set_computer_name(@user, user_params[:computer])
+    test_instance.set_computer(@user, @computer)
+
+    test_case = @test_cases.select do |tc|
+      tc.name == extra_params[:test_case]
+    end.first
+    test_instance.test_case = test_case
+
+    # test_instance.set_test_case_name(extra_params[:test_case],
+    #                                  extra_params[:mod])
+    # test_instance.set_computer_name(@user, user_params[:computer])
 
     # return nil if we successfully save, otherwise the failed test_instance
-    if test_instance.save
+    if test_instance.save!
       nil
     else
       test_instance
@@ -218,24 +237,25 @@ class VersionsController < ApplicationController
     respond_to do |format|
       format.html do
         redirect_to login_url,
-                    alert: 'Must be signed in to submit a test instance.'
+                    alert: 'Must be signed in to submit a revision.'
       end
       format.json do
         render json: { error: 'Invalid e-mail or password.' },
                status: :unprocessable_entity
       end
     end
-  end  
+  end
 
-  def submission_fail_authenticate
+  def submission_fail_computer
     # what to do when authentication during a submit fails
     respond_to do |format|
       format.html do
         redirect_to login_url,
-                    alert: 'Must be signed in to submit a revision.'
+                    alert: "Computer #{@computer.name} doesn't belong to " \
+                           "user #{@user.name}."
       end
       format.json do
-        render json: { error: 'Invalid e-mail or password.' },
+        render json: { error: %q{Computer doesn't belong to user.} },
                status: :unprocessable_entity
       end
     end
