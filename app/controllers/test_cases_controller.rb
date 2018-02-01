@@ -85,7 +85,7 @@ class TestCasesController < ApplicationController
   def show
     @selected = params[:version] || 'latest'
     # big daddy query, hopefully optimized
-    @mesa_versions = @test_case.versions.map(&:number).uniq.sort.reverse
+    @mesa_versions = @test_case.versions.order(number: :desc).uniq.pluck(:number)
     @version_number = if @selected == 'latest'
                         @mesa_versions.max
                       else
