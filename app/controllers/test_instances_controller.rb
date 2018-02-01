@@ -83,7 +83,7 @@ class TestInstancesController < ApplicationController
     respond_to do |format|
       if @test_instance.update(test_instance_params)
         # jankety solution to set version properly
-        @test_instance.update_version
+        @test_instance.update_version(true)
 
         format.html do
           redirect_to test_case_test_instances_url(@test_case),

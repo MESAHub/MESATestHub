@@ -106,18 +106,18 @@ class TestInstance < ApplicationRecord
   end
 
   # meant to ease transition from mesa_version to Version model.
-  def update_version
+  def update_version(do_save=false)
     # don't do anything if versions are both set (or if we are helpless)
     return if version_id && mesa_version
     return unless version_id || mesa_version
     # conditionally update the integer mesa_version
     if version_id
-      mesa_version ||= version.number
+      self.mesa_version ||= version.number
     # conditionally update the version
     else
-      new_version = Version.find_or_create_by(number: mesa_version)
+      self.version = Version.find_or_create_by(number: mesa_version)
     end
-    save!
+    save if do_save
   end
 
   # still useful to have direct access to mesa_version for sorting purposes
@@ -128,7 +128,7 @@ class TestInstance < ApplicationRecord
   end  
 
   def set_test_case_name(new_test_case_name, mod)
-    new_test_case = TestCase.where(name: new_test_case_name).first
+    new_test_case = TestCase.find_by(name: new_test_case_name)
     if new_test_case.nil?
       # no test case found, so just make one up
       # this test case will have NO EXTRA DATA ASSOCIATED WITH IT

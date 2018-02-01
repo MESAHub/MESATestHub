@@ -138,10 +138,15 @@ class VersionsController < ApplicationController
     unless version_params.include?(:compiled) && !version_params[:compiled]
       # do single call to database to get test cases, hash them for easy
       # retrieval
-      @test_cases = 
-        TestCase.where(name: test_instance_pairs.map do |instance_pair|
-          extra_params(instance_pair)[:test_case]
-        end).to_a
+      # NOTE: new test cases will not be found by this query. submit_instance
+      # needs to take care of this
+      @test_case_hash = {}
+      TestCase.where(name: test_instance_pairs.map do |instance_pair|
+        extra_params(instance_pair)[:test_case]
+      end).each do |tc|
+        @test_case_hash[tc.name] = tc
+      end
+
 
       # iterate through each test case and submit each as an instance
       # collect failed save attempts along the way (successful submissions return
@@ -200,17 +205,20 @@ class VersionsController < ApplicationController
     # set up associations
     test_instance.set_computer(@user, @computer)
 
-    test_case = @test_cases.select do |tc|
-      tc.name == extra_params[:test_case]
-    end.first
-    test_instance.test_case = test_case
+    # if test case already exists, should have been loaded into @test_case_hash
+    if @test_case_hash.include? extra_params[:test_case]
+      test_instance.test_case = @test_case_hash[extra_params[:test_case]]
+    else
+      # if not, set_test_case_name will create the test case for us
+      test_instance.set_test_case_name(extra_params[:test_case])
+    end
 
     # test_instance.set_test_case_name(extra_params[:test_case],
     #                                  extra_params[:mod])
     # test_instance.set_computer_name(@user, user_params[:computer])
 
     # return nil if we successfully save, otherwise the failed test_instance
-    if test_instance.save!
+    if test_instance.save
       nil
     else
       test_instance
