@@ -63,7 +63,7 @@
                 %td=instance.mesa_version
                 %td=format_time(instance.created_at)
                 %td
-                  %samp=instance.test_case.name
+                  %samp=instance.test_case.short_name
                 %td=instance.computer.name
     -# .text-center
     -#   = link_to "All tests from #{@user.name}", user_test_instances_path(@user), class: 'btn btn-lg btn-secondary text-light'

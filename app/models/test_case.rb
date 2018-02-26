@@ -74,6 +74,13 @@ class TestCase < ApplicationRecord
   #   specs
   # end
 
+  # for tight space when we need the name
+  def short_name
+    return name if name.length <= 20
+    name[0,17] + '...'
+  end
+
+
   # list of version numbers with test instances that have failed since a
   # particular date (handled by TestInstance... unclear where this should live)
   def self.failing_versions_since(date)

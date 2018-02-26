@@ -42,7 +42,7 @@
             - @test_instances.each do |instance|
               %tr{class: @test_instance_classes[instance] + ' clickable-row', 'data-href': test_case_test_instance_path(instance.test_case, instance)}
                 %td=format_time(instance.created_at)
-                %td=instance.test_case.name
+                %td=instance.test_case.short_name
                 %td=instance.runtime_seconds 
       .text-center
         = link_to "All tests from #{@computer.name}", user_computer_test_instances_path(@user, @computer), class: 'btn btn-md btn-secondary text-light'
