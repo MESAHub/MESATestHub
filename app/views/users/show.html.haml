@@ -12,6 +12,9 @@
         %th{scope: 'row'} Email
         %td= @user.email
       %tr
+        %th{scope: 'row'} Time Zone
+        %td= @user.time_zone || "Not Specified"
+      %tr
         %th{scope: 'row'} Admin
         %td= @user.admin ? 'Yes' : 'No'
     .text-center
@@ -58,7 +61,7 @@
             - @test_instances.each do |instance|
               %tr{class: @test_instance_classes[instance] + ' clickable-row', 'data-href': test_case_test_instance_path(instance.test_case, instance)}
                 %td=instance.mesa_version
-                %td=instance.created_at.localtime.strftime "%Y-%m-%d"
+                %td=format_time(instance.created_at)
                 %td
                   %samp=instance.test_case.name
                 %td=instance.computer.name

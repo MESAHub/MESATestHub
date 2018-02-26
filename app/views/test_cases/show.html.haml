@@ -56,7 +56,7 @@
         %tbody
           - @test_instances.each do |instance|
             %tr{class: @test_instance_classes[instance] + " clickable-row", "data-href": test_case_test_instance_path(@test_case, instance)}
-              %td=instance.created_at.localtime.strftime("%F %H:%M %Z")
+              %td=format_time(instance.created_at)
               %td=instance.computer.name
               %td=instance.runtime_seconds
     - else

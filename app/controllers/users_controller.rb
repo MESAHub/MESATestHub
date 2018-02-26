@@ -114,7 +114,7 @@ class UsersController < ApplicationController
 
   def user_params
     params.require(:user).permit(:email, :password, :password_confirmation,
-                                 :name, :admin)
+                                 :name, :admin, :time_zone)
   end
 
   def admin_edit_user_params

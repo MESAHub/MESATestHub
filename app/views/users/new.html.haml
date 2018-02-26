@@ -19,6 +19,8 @@
   .form-row
     .col.field=f.text_field :name
   .form-row
+    .col.field=f.time_zone_select("time_zone", ActiveSupport::TimeZone.us_zones, default: "Pacific Time (US & Canada)")    
+  .form-row
     .col.field
       =f.form_group :admin do
         =f.check_box :admin

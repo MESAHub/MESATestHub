@@ -15,7 +15,7 @@
       = link_to @test_instance.version.number, version_path(@test_instance.version.number)
     %p
       %b Date Submitted:
-      = @test_instance.created_at.localtime.strftime("%F %H:%M %Z")
+      = format_time(@test_instance.created_at)
     %p
       %b Runtime:
       = @test_instance.runtime_seconds

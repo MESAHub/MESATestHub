@@ -20,6 +20,8 @@
     .col.field=f.password_field :password_confirmation, label: "Confirm New Password"
   .form-row
     .col.field=f.text_field :name
+  .form-row
+    .col.field=f.time_zone_select("time_zone", ActiveSupport::TimeZone.us_zones, default: "Pacific Time (US & Canada)")
   - if current_user.admin?
     .form-row
       .col.field

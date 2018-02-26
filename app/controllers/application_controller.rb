@@ -9,6 +9,19 @@ class ApplicationController < ActionController::Base
     @current_user ||= User.find(session[:user_id]) if session[:user_id]
   end
 
+  def time_zone
+    # prefer user's specified time zone if there is one
+    if current_user
+      return current_user.time_zone if current_user.time_zone
+    end
+    # Pick MESA HQ time as a default
+    'Pacific Time (US & Canada)'
+  end
+
+  def format_time(time)
+    I18n.l time.to_time.in_time_zone(time_zone), format: :default
+  end
+
   def admin?
     return false unless current_user
     current_user.admin?
@@ -23,6 +36,8 @@ class ApplicationController < ActionController::Base
   end
 
   helper_method :current_user
+  helper_method :time_zone
+  helper_method :format_time
   helper_method :admin?
   helper_method :self?
   helper_method :self_or_admin?
