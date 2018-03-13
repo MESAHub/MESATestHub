@@ -210,7 +210,8 @@ class VersionsController < ApplicationController
       test_instance.test_case = @test_case_hash[extra_params[:test_case]]
     else
       # if not, set_test_case_name will create the test case for us
-      test_instance.set_test_case_name(extra_params[:test_case])
+      test_instance.set_test_case_name(extra_params[:test_case],
+        extra_params[:mod])
     end
 
     # test_instance.set_test_case_name(extra_params[:test_case],

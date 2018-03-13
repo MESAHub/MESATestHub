@@ -12,7 +12,7 @@ class TestInstance < ApplicationRecord
     'photo_file' => 'Missing Photo',
     'photo_checksum' => 'Photo Checkusm',
     'photo_diff' => 'Photo Diff',
-    'compliation' => 'Compilation'
+    'compilation' => 'Compilation'
   }
 
   @@compilers = %w[gfortran ifort SDK]
@@ -127,7 +127,7 @@ class TestInstance < ApplicationRecord
     super
   end  
 
-  def set_test_case_name(new_test_case_name, mod)
+  def set_test_case_name(new_test_case_name, mod, version_number=10000)
     new_test_case = TestCase.find_by(name: new_test_case_name)
     if new_test_case.nil?
       # no test case found, so just make one up
@@ -137,8 +137,9 @@ class TestInstance < ApplicationRecord
       new_test_case = TestCase.create(
         name: new_test_case_name,
         module: mod,
-        version_id: version.id
+        version_added: version_number
       )
+      new_test_case.update_version_created
       # old behavior: scuttle the saving process
       # errors.add :test_case_id,
       #            'Could not find test case with name "' + new_test_case_name +

@@ -129,7 +129,9 @@ class TestCasesController < ApplicationController
   # POST /test_cases
   # POST /test_cases.json
   def create
+    @modules = TestCase.modules
     @test_case = TestCase.new(test_case_params)
+    @test_case.update_version_created
 
     respond_to do |format|
       if @test_case.save
