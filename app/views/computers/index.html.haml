@@ -27,8 +27,8 @@
           %tr
             %td.align-middle= computer.name
             - if @show_users
-              %td= link_to computer.user.name, user_computer_path(computer.user, computer)
-            %td.align-middle.align-middle= computer.platform
+              %td.align_middle= link_to computer.user.name, user_computer_path(computer.user, computer)
+            %td.align-middle= computer.platform
             %td.align-middle= computer.processor
             %td.align-middle= computer.ram_gb
             %td.align-middle= link_to 'Show', user_computer_path(computer.user, computer), class: 'btn btn-sm btn-secondary text-light'
