@@ -260,7 +260,7 @@ class TestInstancesController < ApplicationController
       :runtime_seconds, :mesa_version, :omp_num_threads, :compiler,
       :compiler_version, :platform_version, :passed, :computer_id,
       :test_case_id, :success_type, :failure_type, :steps, :retries, :backups,
-      :summary_text
+      :summary_text, :diff
     )
   end
 end

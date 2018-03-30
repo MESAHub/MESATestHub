@@ -28,6 +28,16 @@
           Version
         %td=link_to(@version_number, version_path(@version_number))
       %tr
+        %th{scope: 'row'} Diff Status
+        %td
+          - case @version.diff_status(@test_case)
+          - when 0
+            No diffs run
+          - when 1
+            At least one diff run
+          - else
+            No diffs run, some indeterminate
+      %tr
         %th{scope: 'row'} Values Tracked
         %td= @test_case.data_names.join(", ")
       %tr
@@ -52,13 +62,24 @@
           %tr
             %th Date Uploaded
             %th Computer
-            %th Runtime [s]
+            %th Runtime
+            %th Diff?
         %tbody
           - @test_instances.each do |instance|
             %tr{class: @test_instance_classes[instance] + " clickable-row", "data-href": test_case_test_instance_path(@test_case, instance)}
               %td=format_time(instance.created_at)
               %td=instance.computer.name
-              %td=instance.runtime_seconds
+              %td=instance.runtime_seconds.to_s + ' s'
+              %td
+                - case instance.diff
+                - when 0
+                  &#x2717
+                - when 1
+                  &#x2713
+                - else
+                  &#x3f
+
+
     - else
       .alert.alert-warning
         %h4 No tests have been run yet.

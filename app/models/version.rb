@@ -98,6 +98,34 @@ class Version < ApplicationRecord
     2
   end
 
+  def diff_status(test_case)
+    if test_instances.loaded?
+      test_case_instances = test_instances.select do |ti|
+        ti.test_case_id == test_case.id
+      end
+      # don't do the database call
+      diff_count = test_case_instances.select { |ti| ti.diff == 1 }.length
+      # 1 = at least one instance ran a diff
+      return 1 if diff_count > 0
+      no_diff_count = test_case_instances.select { |ti| ti.diff == 0 }.length
+      # 0 = literally zero tests did a diff, and we know it
+      return 0 if no_diff_count == test_case_instances.length
+    else
+      diff_count = test_instances.where(test_case: test_case, diff: 1).count
+      # 1 = at least one instance ran a diff
+      return 1 if diff_count > 0
+      no_diff_count = test_instances.where(test_case: test_case, diff: 0).count
+      total_count = test_instances.where(test_case: test_case).count
+      # 0 = literally zero tests did a diff, and we know it
+      return 0 if no_diff_count == total_count
+    end
+    # still here? Then no tests report having run diff, but at least one
+    # didn't report what it was
+    return 2
+  end
+
+
+
   # gives overall status, # of passing tests, # of failing tests, and 
   # # of mixed tests
   def summary_status

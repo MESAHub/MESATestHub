@@ -53,6 +53,11 @@
               = f.number_field :omp_num_threads, label: "Number of threads"
             .field  
               = f.select(:compiler, TestInstance.compilers, include_blank: true)
+            .field
+              = f.form_group :diff, label: { text: "Were diffs performed?" } do
+                = f.radio_button :diff, 0, label: "No Diff"
+                = f.radio_button :diff, 1, label: "Diff"
+                = f.radio_button :diff, 2, label: "Unknown"
   
   .form-row
     .col

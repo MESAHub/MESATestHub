@@ -20,6 +20,17 @@
       %b Runtime:
       = @test_instance.runtime_seconds
       seconds
+    %p
+      %b Diff:
+      - case @test_instance.diff
+      - when 0
+        No
+      - when 1
+        Yes
+      - when 2
+        Unknown
+      - else
+        Invalid Data (probably uknown)
   .col-sm-6
     %p
       %b Computer:

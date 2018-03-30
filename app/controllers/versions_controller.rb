@@ -103,6 +103,7 @@ class VersionsController < ApplicationController
     @last_versions = {}
     @row_classes = {}
     @last_tested = {}
+    @diffs = {}
     @test_cases.each do |t|
       @computer_counts[t] = @version.computers_count(t)
       @last_tested[t] = @version.last_tested(t)
@@ -113,6 +114,7 @@ class VersionsController < ApplicationController
         else
           'table-warning'
         end
+      @diffs[t] = @version.diff_status(t)
     end
 
   end
@@ -286,7 +288,7 @@ class VersionsController < ApplicationController
     instance_pair.require(:test_instance).permit(
       :runtime_seconds, :omp_num_threads, :compiler, :compiler_version,
       :platform_version, :passed, :failure_type, :success_type, :steps,
-      :retries, :backups, :summary_text)
+      :retries, :backups, :summary_text, :diff)
   end
 
   def extra_params(instance_pair)

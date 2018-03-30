@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20180226183607) do
+ActiveRecord::Schema.define(version: 20180330214511) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -90,6 +90,7 @@ ActiveRecord::Schema.define(version: 20180226183607) do
     t.integer "retries"
     t.integer "backups"
     t.text "summary_text"
+    t.integer "diff", default: 2
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
     t.index ["mesa_version"], name: "index_test_instances_on_mesa_version"
     t.index ["test_case_id"], name: "index_test_instances_on_test_case_id"

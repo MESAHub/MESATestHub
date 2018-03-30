@@ -62,6 +62,7 @@
           %th Name
           %th Computers Tested
           %th Last Tested Date
+          %th Diff?
 
       %tbody
         - @test_cases.each do |test_case|
@@ -73,6 +74,14 @@
             - else
               %td= @computer_counts[test_case]
             %td= format_time(@last_tested[test_case]) #.localtime.strftime("%F %H:%M %Z")
+            %td
+              - case @diffs[test_case]
+              - when 0
+                &#x2717
+              - when 1
+                &#x2713
+              - else
+                &#x3f
 -# .row
 -#   .col.text-center
 -#     - if admin?
