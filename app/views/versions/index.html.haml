@@ -18,7 +18,7 @@
           %tr{class: @row_classes[version] + ' clickable-row', "data-href":version_path(version.number), id: version.number.to_s + '-row'}
             %td= version.number
             %td= "#{@pass_counts[version]}/#{@fail_counts[version]}/#{@mix_counts[version]}/#{@case_counts[version]}"
-            %td= format_time(version.last_tested)
+            %td= version.last_tested ? format_time(version.last_tested) : "Not tested"
 
 .row
   .col
