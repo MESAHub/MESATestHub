@@ -7,6 +7,7 @@ class TestInstance < ApplicationRecord
 
   @@failure_types = {
     'run_test_string' => 'Test String',
+    'final_model' => 'Final Model',
     'run_checksum' => 'Run Checksum',
     'run_diff' => 'Run Diff',
     'photo_file' => 'Missing Photo',
