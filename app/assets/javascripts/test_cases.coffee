@@ -11,4 +11,9 @@ index =
 
 $ -> 
   index.setup()
+  # make version select nicer
+  $('#version_select').parent().parent().removeClass('form-inline')
+  $('#version_select').change(->
+    this.form.submit()
+  )
 
