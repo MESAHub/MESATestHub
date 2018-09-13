@@ -1,15 +1,13 @@
-<% unless @failing_versions.empty? %>
-  <p>
-    The following <samp>MESA</samp> revision(s) have had failing test cases 
-    in the last 24 hours: <%= @failing_versions.map(&:to_s).join(', ') %>.
-  </p>
-<% end %>
 <% unless @passing_versions.empty? %>
-  <p>
-      The following <samp>MESA</samp> revision(s) have passed all test cases
-      submitted for them in the last 24 hours: 
-      <%= @passing_versions.map(&:to_s).join(', ') %>.
-  </p>
+  <h2 style='color: rgb(0,153,51)'>Passing Revisions in Last 24 Hours</h2>
+  <% @passing_versions.each do |version| %>
+    <h3>
+      <a clicktracking=off style='color: rgb(0,153,51)' href=<%= @version_links[version] %>>
+        <%= version %>
+      </a>
+    </h3>
+  <% end %>
+  <hr>
 <% end %>
 
 <% if @failing_versions.empty? && @passing_versions.empty? %>
@@ -20,17 +18,10 @@
     for more details.
   </p>
 <% elsif !@failing_versions.empty? %>
-  <p>
-    Below is a summary of the failing test cases. Click on a version number 
-    to see a test summary for the version. Click on a test case name to see a 
-    summary of results for that test case for that version. Visit 
-    <a clicktracking=off href=<%=@root_url%>> MESA Test Hub </a>
-    for more details.
-  </p>
-  <hr>
+  <h2 style="color:rgb(204, 0, 0)">Failing Revisions in Last 24 Hours</h2>
   <% @failing_versions.each do |version| %>
     <h3>
-      <a clicktracking=off href=<%= @version_links[version] %>>
+      <a style="color:rgb(204, 0, 0)" clicktracking=off href=<%= @version_links[version] %>>
         <%= version %>
       </a>
     </h3>
@@ -40,7 +31,7 @@
       <% @cases[version].each do |test_case| %>
         <li>
           <samp> 
-            <a clicktracking=off href=<%= @case_links[version][test_case] %>>
+            <a style="color:rgb(204, 0, 0)" clicktracking=off href=<%= @case_links[version][test_case] %>>
               <%= test_case.name %>
             </a>
           </samp>
