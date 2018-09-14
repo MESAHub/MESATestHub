@@ -2,7 +2,7 @@
   "name": "MESATestHub",
   "private": true,
   "dependencies": {
-    "coffeescript": "^2.3.1"
+    "coffeescript": "^3.0.0"
   },
   "engines": {
     "yarn": ">=1.9"
