@@ -15,9 +15,3 @@
 //= require rails-ujs
 //= require bootstrap-sprockets
 //= require_tree .
-
-$ ->
-  $('#version_select').parent().parent().removeClass('form-inline')
-  $('#version_select').change(->
-    this.form.submit()
-  )
