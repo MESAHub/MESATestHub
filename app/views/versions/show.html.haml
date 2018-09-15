@@ -16,8 +16,8 @@
       -#   =label_tag "number", 'MESA version: ', class: 'control-label form-control-lg'
       .col-auto.align-middle
         =select_tag "number", options_for_select(@mesa_versions, @selected), class: 'custom-select form-control form-control-lg', id: 'version_select'
-      .col-auto.align-middle
-        %noscript
+      %noscript
+        .col-auto.align-middle
           =submit_tag 'Go', class: 'btn btn-primary text-light form-control', name: nil, id: 'version_select_go'
   -if @version.author
     .col-lg-4.col-xs-12
