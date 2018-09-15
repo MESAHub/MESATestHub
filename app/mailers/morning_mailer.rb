@@ -39,6 +39,14 @@ class MorningMailer < ApplicationMailer
       end
     end
 
+    unless @passing_versions.empty?
+      @passing_versions.each
+      @passing_version_links = {}
+      @passing_versions.each do |version|
+        @version_links[version] = version_url(version.number)
+      end
+    end
+
     # gather sender, recipient(s), subject, and body before composing email
     from = Email.new(email: 'mesa-developers@lists.mesastar.org')
     to = Email.new(email: 'mesa-developers@lists.mesastar.org')

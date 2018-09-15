@@ -2,7 +2,7 @@
   <h2 style='color: rgb(0,153,51)'>Passing Revisions in Last 24 Hours</h2>
   <% @passing_versions.each do |version| %>
     <h3>
-      <a clicktracking=off style='color: rgb(0,153,51)' href=<%= @version_links[version] %>>
+      <a clicktracking=off style="color: rgb(0,153,51)" href=<%= @passing_version_links[version] %>>
         <%= version %>
       </a>
     </h3>
