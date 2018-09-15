@@ -43,7 +43,7 @@ class MorningMailer < ApplicationMailer
       @passing_versions.each
       @passing_version_links = {}
       @passing_versions.each do |version|
-        @version_links[version] = version_url(version.number)
+        @passing_version_links[version] = version_url(version.number)
       end
     end
 
