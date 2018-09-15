@@ -40,7 +40,6 @@ class MorningMailer < ApplicationMailer
     end
 
     unless @passing_versions.empty?
-      @passing_versions.each
       @passing_version_links = {}
       @passing_versions.each do |version|
         @passing_version_links[version] = version_url(version.number)
