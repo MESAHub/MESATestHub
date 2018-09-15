@@ -8,33 +8,34 @@
 
 .row
   .col
-    %table.table.table-responsive
-      %thead.thead-default
-        %tr
-          %th Name
-          - if @show_users
-            %th User
-          %th Platform
-          %th Processor
-          %th Ram [GB]
-          %th
-          -if self_or_admin?
-            %th
-            %th
-
-      %tbody
-        - @computers.each do |computer|
+    .table-responsive
+      %table.table
+        %thead.thead-default
           %tr
-            %td.align-middle= computer.name
+            %th Name
             - if @show_users
-              %td.align_middle= link_to computer.user.name, user_computer_path(computer.user, computer)
-            %td.align-middle= computer.platform
-            %td.align-middle= computer.processor
-            %td.align-middle= computer.ram_gb
-            %td.align-middle= link_to 'Show', user_computer_path(computer.user, computer), class: 'btn btn-sm btn-secondary text-light'
-            - if self_or_admin?
-              %td.align-middle= link_to 'Edit', edit_user_computer_path(computer.user, computer), class: 'btn btn-sm btn-primary text-light'
-              %td.align-middle= link_to 'Delete', user_computer_path(computer.user, computer), method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-sm btn-danger text-light'
+              %th User
+            %th Platform
+            %th Processor
+            %th Ram [GB]
+            %th
+            -if self_or_admin?
+              %th
+              %th
+
+        %tbody
+          - @computers.each do |computer|
+            %tr
+              %td.align-middle= computer.name
+              - if @show_users
+                %td.align_middle= link_to computer.user.name, user_computer_path(computer.user, computer)
+              %td.align-middle= computer.platform
+              %td.align-middle= computer.processor
+              %td.align-middle= computer.ram_gb
+              %td.align-middle= link_to 'Show', user_computer_path(computer.user, computer), class: 'btn btn-sm btn-secondary text-light'
+              - if self_or_admin?
+                %td.align-middle= link_to 'Edit', edit_user_computer_path(computer.user, computer), class: 'btn btn-sm btn-primary text-light'
+                %td.align-middle= link_to 'Delete', user_computer_path(computer.user, computer), method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-sm btn-danger text-light'
 
 .row
   .col

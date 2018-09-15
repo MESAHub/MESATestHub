@@ -50,13 +50,14 @@
         %h4= "#{@user.name} has not yet run any tests"
     - else
       %h3= "Latest results from #{@user.name}"
-      %table.table.table-hover.table-sm.table-responsive
-        %thead.thead-default
-          %tr
-            %th Version
-            %th Date Uploaded
-            %th Test Case
-            %th Computer
+      .table-responsive
+        %table.table.table-hover.table-sm.table-responsive
+          %thead.thead-default
+            %tr
+              %th Version
+              %th Date Uploaded
+              %th Test Case
+              %th Computer
           %tbody
             - @test_instances.each do |instance|
               %tr{class: @test_instance_classes[instance] + ' clickable-row', 'data-href': test_case_test_instance_path(instance.test_case, instance)}

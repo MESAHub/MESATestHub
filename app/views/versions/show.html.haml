@@ -57,32 +57,33 @@
 
 .row
   .col
-    %table.table.table-hover.table-responsive#test_summary
-      %thead.thead-default
-        %tr
-          %th Name
-          %th Computers Tested
-          %th Last Tested Date
-          %th Diff?
+    .table-responsive
+      %table.table.table-hover#test_summary
+        %thead.thead-default
+          %tr
+            %th Name
+            %th Computers Tested
+            %th Last Tested Date
+            %th Diff?
 
-      %tbody
-        - @test_cases.each do |test_case|
-          %tr{class: @row_classes[test_case] + ' clickable-row', "data-href":test_case_path(test_case, version: @selected), id: test_case.name + '-row'}
-            %td
-              %samp= test_case.name
-            - if @selected == 'all'
-              %td= @last_versions[test_case]
-            - else
-              %td= @computer_counts[test_case]
-            %td= format_time(@last_tested[test_case]) #.localtime.strftime("%F %H:%M %Z")
-            %td
-              - case @diffs[test_case]
-              - when 0
-                &#x2717
-              - when 1
-                &#x2713
+        %tbody
+          - @test_cases.each do |test_case|
+            %tr{class: @row_classes[test_case] + ' clickable-row', "data-href":test_case_path(test_case, version: @selected), id: test_case.name + '-row'}
+              %td
+                %samp= test_case.name
+              - if @selected == 'all'
+                %td= @last_versions[test_case]
               - else
-                &#x3f
+                %td= @computer_counts[test_case]
+              %td= format_time(@last_tested[test_case]) #.localtime.strftime("%F %H:%M %Z")
+              %td
+                - case @diffs[test_case]
+                - when 0
+                  &#x2717
+                - when 1
+                  &#x2713
+                - else
+                  &#x3f
 -# .row
 -#   .col.text-center
 -#     - if admin?

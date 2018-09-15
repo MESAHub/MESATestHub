@@ -43,26 +43,27 @@
 
 .row
   .col
-    %table.table.table-hover.table-responsive#test_summary
-      %thead.thead-default
-        %tr
-          %th Name
-          - if @selected == 'all'
-            %th Last Version Tested
-          - else
-            %th Computers Tested
-          %th Last Tested Date
-
-      %tbody
-        - @test_cases.each do |test_case|
-          %tr{class: @row_classes[test_case] + ' clickable-row', "data-href":test_case_path(test_case, version: @selected), id: test_case.name + '-row'}
-            %td
-              %samp= test_case.name
+    .table-responsive
+      %table.table.table-hover#test_summary
+        %thead.thead-default
+          %tr
+            %th Name
             - if @selected == 'all'
-              %td= @last_versions[test_case]
+              %th Last Version Tested
             - else
-              %td= @computer_counts[test_case]
-            %td= @last_tested[test_case]
+              %th Computers Tested
+            %th Last Tested Date
+
+        %tbody
+          - @test_cases.each do |test_case|
+            %tr{class: @row_classes[test_case] + ' clickable-row', "data-href":test_case_path(test_case, version: @selected), id: test_case.name + '-row'}
+              %td
+                %samp= test_case.name
+              - if @selected == 'all'
+                %td= @last_versions[test_case]
+              - else
+                %td= @computer_counts[test_case]
+              %td= @last_tested[test_case]
 .row
   .col.text-center
     - if admin?

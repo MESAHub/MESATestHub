@@ -58,27 +58,28 @@
       - else
         ="Last #{@instance_limit} instances for version #{@version_number}"
     - if not @test_instances.empty?
-      %table.table.table-hover.table-sm.table-responsive#test-detail
-        %thead.thead-default
-          %tr
-            %th Date Uploaded
-            %th Computer
-            %th Runtime
-            %th Diff?
-        %tbody
-          - @test_instances.each do |instance|
-            %tr{class: @test_instance_classes[instance] + " clickable-row", "data-href": test_case_test_instance_path(@test_case, instance)}
-              %td=format_time(instance.created_at)
-              %td=instance.computer.name
-              %td=instance.runtime_seconds.to_s + ' s'
-              %td
-                - case instance.diff
-                - when 0
-                  &#x2717
-                - when 1
-                  &#x2713
-                - else
-                  &#x3f
+      .table-responsive
+        %table.table.table-hover.table-sm#test-detail
+          %thead.thead-default
+            %tr
+              %th Date Uploaded
+              %th Computer
+              %th Runtime
+              %th Diff?
+          %tbody
+            - @test_instances.each do |instance|
+              %tr{class: @test_instance_classes[instance] + " clickable-row", "data-href": test_case_test_instance_path(@test_case, instance)}
+                %td=format_time(instance.created_at)
+                %td=instance.computer.name
+                %td=instance.runtime_seconds.to_s + ' s'
+                %td
+                  - case instance.diff
+                  - when 0
+                    &#x2717
+                  - when 1
+                    &#x2713
+                  - else
+                    &#x3f
 
 
     - else

@@ -22,6 +22,7 @@ gem 'rails_12factor', group: :production
 gem 'scout_apm', group: :production
 # gem 'sprockets', '~> 4.0.0.beta4'
 gem 'mini_racer', :require => nil
+gem 'rubyzip', '~>1.2.2'
 gem 'barista'
 group :development, :test do
   gem 'byebug', platforms: [:mri, :mingw, :x64_mingw]
