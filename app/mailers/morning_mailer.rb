@@ -21,14 +21,14 @@ class MorningMailer < ApplicationMailer
     start_date = 1.day.ago
     @failing_versions = TestInstance.failing_versions_since(start_date)
     @passing_versions = TestInstance.passing_versions_since(start_date)
+    @version_links = {}
     @cases = {}
+    @case_links = {}
     unless @failing_versions.empty?
       @failing_versions.each do |version|
         @cases[version] = TestInstance.failing_cases_since(start_date, version)
       end
       # ornery links from SendGrid... doing this the hard way
-      @version_links = {}
-      @case_links = {}
       @cases.each do |version, cases|
         @version_links[version] = version_url(version.number)
         @case_links[version] = {}
@@ -36,6 +36,12 @@ class MorningMailer < ApplicationMailer
           @case_links[version][test_case] =
             test_case_url(test_case, version: version.number)
         end
+      end
+    end
+
+    unless @passing_versions.empty?
+      @passing_versions.each do |version|
+        @version_links[version] = version_url(version.number)
       end
     end
 
