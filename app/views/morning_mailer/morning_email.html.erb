@@ -3,14 +3,48 @@
   <% @passing_versions.each do |version| %>
     <h3>
       <a clicktracking=off style="color: rgb(0,153,51)" href=<%= @version_links[version] %>>
-        <%= version %>
+        <%= version %> (<%= @computer_counts[version] %> computer(s) tested)
       </a>
     </h3>
+    <ul>
+      <li> <b> Author: </b> <%= version.author %> </li>
+      <li> <b> Commit Message: </b> <%= version.log %> </li>
+      <li> <%= @case_counts[version] %> cases submitted </li>
+    </ul>
   <% end %>
   <hr>
 <% end %>
 
-<% if @failing_versions.empty? && @passing_versions.empty? %>
+<% unless @mixed_versions.empty? %>
+  <h2 style='color: rgb(255, 153, 0)'>Mixed Revisions in Last 24 Hours</h2>
+  <% @mixed_versions.each do |version| %>
+    <h3>
+      <a clicktracking=off style="color: rgb(255, 153, 0)" href=<%= @version_links[version] %>>
+        <%= version %> (<%= @computer_counts[version] %> computer(s) tested)
+      </a>
+    </h3>
+    <ul>
+      <li> <b> Author: </b> <%= version.author %> </li>
+      <li> <b> Commit Message: </b> <%= version.log %> </li>
+      <li> <%= @case_counts[version] %> cases submitted </li>
+      <% @mixed_cases[version].each do |test_case| %>
+        <li>
+          <samp> 
+            <a style="color:rgb(255, 153, 0)" clicktracking=off href=<%= @case_links[version][test_case] %>>
+              <%= test_case.name %> 
+            </a> ( <b> Failures: </b> <%= @pass_counts[version][test_case] %>; <b> Successes: </b> <%= @fail_counts[version][test_case] %> )
+          </samp>
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
+  <hr>
+<% end %>
+
+### TODO: put computer counts in case by case, indicate mixed status case by 
+### case
+
+<% if @failing_versions.empty? && @passing_versions.empty? && @mixed_versions.empty? %>
   <p>
     No tests were run in the last 24 hours. This e-mail serves to let you know
     that everything is running fine. Visit 
@@ -22,18 +56,18 @@
   <% @failing_versions.each do |version| %>
     <h3>
       <a style="color:rgb(204, 0, 0)" clicktracking=off href=<%= @version_links[version] %>>
-        <%= version %>
+        <%= version %> (<%= @computer_counts[version][:total] %> computer(s) tested to date)
       </a>
     </h3>
     <ul>
       <li> <b> Author: </b> <%= version.author %> </li>
       <li> <b> Commit Message: </b> <%= version.log %> </li>
-      <% @cases[version].each do |test_case| %>
+      <% @failing_cases[version].each do |test_case| %>
         <li>
           <samp> 
             <a style="color:rgb(204, 0, 0)" clicktracking=off href=<%= @case_links[version][test_case] %>>
               <%= test_case.name %>
-            </a>
+            </a> (<%= @computer_counts[version][test_case] %> total submissions)
           </samp>
         </li>
       <% end %>

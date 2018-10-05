@@ -80,7 +80,6 @@ class TestCase < ApplicationRecord
     name[0,17] + '...'
   end
 
-
   # list of version numbers with test instances that have failed since a
   # particular date (handled by TestInstance... unclear where this should live)
   def self.failing_versions_since(date)
@@ -138,7 +137,8 @@ class TestCase < ApplicationRecord
   #   test_instances.pluck(:mesa_version).uniq.sort.reverse
   # end
 
-  def version_instances(version, limit=nil)
+  # instances that were run for a particular version
+  def version_instances(version, limit = nil)
     return test_instances if version == :all
     # hit the database directly if needed
     unless test_instances.loaded?
@@ -161,6 +161,11 @@ class TestCase < ApplicationRecord
     else
       res
     end
+  end
+
+  # computers that have tested this case for a particular version
+  def version_computers(version, limit = nil)
+    version_instances(version, limit).map(&:computer).uniq
   end
 
   def version_status(version)
