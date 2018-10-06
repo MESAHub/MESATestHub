@@ -18,7 +18,7 @@ class MorningMailer < ApplicationMailer
   def morning_email
     # first gather data from database; bail if there are no failure in the last
     # 24 hours
-    start_date = 1.day.ago
+    start_date = 3.days.ago
     @failing_versions = TestInstance.failing_versions_since(start_date)
     @passing_versions = TestInstance.passing_versions_since(start_date)
     @mixed_versions = []
@@ -35,11 +35,11 @@ class MorningMailer < ApplicationMailer
         @failing_cases[version] = TestInstance.failing_cases_since(start_date, version)
         @version_links[version] = version_url(version.number)
         @computer_counts[version] = {total: version.computers.uniq.length}
+        @case_links[version] = {}
+        @mixed_cases[version] = []
       end
       # ornery links from SendGrid... doing this the hard way
       @failing_cases.each do |version, cases|
-        @case_links[version] = {}
-        @mixed_cases[version] = []
         cases.each do |test_case|
           @case_links[version][test_case] =
             test_case_url(test_case, version: version.number)
@@ -47,18 +47,18 @@ class MorningMailer < ApplicationMailer
             test_case.version_computers(version).uniq.count
 
           # move mixed cases from @failing_cases to @mixed_cases
-          cases.select do |this_case|
-            this_case.version_status(version) == 2
+          cases.select do |test_case|
+            test_case.version_status(version) == 2
           end.each do |this_case|
             # case is actually MIXED, so move to mixed_cases hash
-            @mixed_cases[version].append(this_case)
-            @failing_cases[version].delete(this_case)
+            @mixed_cases[version].append(test_case)
+            @failing_cases[version].delete(test_case)
             @pass_counts[version] ||= {}
             @fail_counts[version] ||= {}
-            @pass_counts[version][this_case] = this_case.test_instances.where(
+            @pass_counts[version][this_case] = test_case.test_instances.where(
               version: version, passed: true
             ).count
-            @fail_counts[version][this_case] = this_case.test_instances.where(
+            @fail_counts[version][this_case] = test_case.test_instances.where(
               version: version, passed: false
             ).count
           end
