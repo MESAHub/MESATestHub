@@ -81,8 +81,8 @@ class MorningMailer < ApplicationMailer
 
     # gather sender, recipient(s), subject, and body before composing email
     from = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    # to = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    to = Email.new(email: 'wmwolf@asu.edu', name: 'Bill Wolf')
+    to = Email.new(email: 'mesa-developers@lists.mesastar.org')
+    # to = Email.new(email: 'wmwolf@asu.edu', name: 'Bill Wolf')
     subject = ''
     # subject line shows latest failing version, if there is one
     if !@failing_versions.empty?
