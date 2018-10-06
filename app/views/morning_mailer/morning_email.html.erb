@@ -3,7 +3,7 @@
   <% @passing_versions.each do |version| %>
     <h3>
       <a clicktracking=off style="color: rgb(0,153,51)" href=<%= @version_links[version] %>>
-        <%= version %> (<%= @computer_counts[version] %> computer(s) tested)
+        <%= version %> (<%= @computer_counts[version][:total] %> computer(s) tested to date)
       </a>
     </h3>
     <ul>
@@ -20,7 +20,7 @@
   <% @mixed_versions.each do |version| %>
     <h3>
       <a clicktracking=off style="color: rgb(255, 153, 0)" href=<%= @version_links[version] %>>
-        <%= version %> (<%= @computer_counts[version] %> computer(s) tested)
+        <%= version %> (<%= @computer_counts[version][:total] %> computer(s) tested to date)
       </a>
     </h3>
     <ul>
@@ -32,8 +32,8 @@
           <samp> 
             <a style="color:rgb(255, 153, 0)" clicktracking=off href=<%= @case_links[version][test_case] %>>
               <%= test_case.name %> 
-            </a> ( <b> Failures: </b> <%= @pass_counts[version][test_case] %>; <b> Successes: </b> <%= @fail_counts[version][test_case] %> )
-          </samp>
+            </a> 
+          </samp> ( <b> Failures: </b> <%= @pass_counts[version][test_case] %>; <b> Successes: </b> <%= @fail_counts[version][test_case] %> )
         </li>
       <% end %>
     </ul>
@@ -67,8 +67,8 @@
           <samp> 
             <a style="color:rgb(204, 0, 0)" clicktracking=off href=<%= @case_links[version][test_case] %>>
               <%= test_case.name %>
-            </a> (<%= @computer_counts[version][test_case] %> total submissions)
-          </samp>
+            </a>
+          </samp> (<%= @computer_counts[version][test_case] %> total submissions)
         </li>
       <% end %>
     </ul>
