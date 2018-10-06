@@ -41,7 +41,7 @@
                 <% end %>
               </ul>
             <% end %>
-          </samp> ( <b> Failures: </b> <%= @fail_counts[version][test_case] %>; <b> Successes: </b> <%= @pass_counts[version][test_case] %> )
+          </samp> (<b>Failures: </b> <%= @fail_counts[version][test_case] %>; <b> Successes: </b> <%= @pass_counts[version][test_case]%>)
         </li>
       <% end %>
       <% @failing_cases[version].each do |test_case| %>
