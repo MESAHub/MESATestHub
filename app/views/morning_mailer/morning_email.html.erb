@@ -4,7 +4,7 @@
     <h3>
       <a clicktracking=off style="color: rgb(0,153,51)" href=<%= @version_links[version] %>>
         <%= version %>
-      </a> (<%= @computer_counts[version][:total] %> computer(s) tested to date)
+      </a> (<%= "#{@computer_counts[version][:total]} " + "computer".pluralize(@computer_counts[version][:total])%> tested to date)
     </h3>
     <ul>
       <li> <b> Author: </b> <%= version.author %> </li>
@@ -21,7 +21,7 @@
     <h3>
       <a clicktracking=off style="color: rgb(255, 153, 0)" href=<%= @version_links[version] %>>
         <%= version %>
-      </a> (<%= @computer_counts[version][:total] %> computer(s) tested to date)
+      </a> (<%= "#{@computer_counts[version][:total]} " + "computer".pluralize(@computer_counts[version][:total]) %> tested to date)
     </h3>
     <ul>
       <li> <b> Author: </b> <%= version.author %> </li>
@@ -71,11 +71,12 @@
     <h3>
       <a style="color:rgb(204, 0, 0)" clicktracking=off href=<%= @version_links[version] %>>
         <%= version %>
-      </a> (<%= @computer_counts[version][:total] %> computer(s) tested to date)
+      </a> (<%= "#{@computer_counts[version][:total]} " + "computer".pluralize(@computer_counts[version][:total]) %> tested to date)
     </h3>
     <ul>
       <li> <b> Author: </b> <%= version.author %> </li>
       <li> <b> Commit Message: </b> <%= version.log %> </li>
+      <li> <%= @case_counts[version] %> cases submitted </li>
       <% @failing_cases[version].each do |test_case| %>
         <li>
           <samp> 

@@ -18,7 +18,7 @@ class MorningMailer < ApplicationMailer
   def morning_email
     # first gather data from database; bail if there are no failure in the last
     # 24 hours
-    start_date = 3.days.ago
+    start_date = 3.day.ago
     @failing_versions = TestInstance.failing_versions_since(start_date)
     @passing_versions = TestInstance.passing_versions_since(start_date)
     @mixed_versions = []
