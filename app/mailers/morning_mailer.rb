@@ -37,8 +37,8 @@ class MorningMailer < ApplicationMailer
         @computer_counts[version] = {total: version.computers.uniq.length}
         @case_links[version] = {}
         @mixed_cases[version] = []
-        @pass_counts[version] = []
-        @fail_counts[version] = []
+        @pass_counts[version] = {}
+        @fail_counts[version] = {}
       end
       # ornery links from SendGrid... doing this the hard way
       @failing_cases.each do |version, cases|
@@ -51,14 +51,14 @@ class MorningMailer < ApplicationMailer
           # move mixed cases from @failing_cases to @mixed_cases
           cases.select do |test_case|
             test_case.version_status(version) == 2
-          end.each do |this_case|
+          end.each do |test_case|
             # case is actually MIXED, so move to mixed_cases hash
             @mixed_cases[version].append(test_case)
             @failing_cases[version].delete(test_case)
-            @pass_counts[version][this_case] = test_case.test_instances.where(
+            @pass_counts[version][test_case] = test_case.test_instances.where(
               version: version, passed: true
             ).count
-            @fail_counts[version][this_case] = test_case.test_instances.where(
+            @fail_counts[version][test_case] = test_case.test_instances.where(
               version: version, passed: false
             ).count
           end
