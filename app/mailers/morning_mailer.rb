@@ -44,7 +44,7 @@ class MorningMailer < ApplicationMailer
           @case_links[version][test_case] =
             test_case_url(test_case, version: version.number)
           @computer_counts[version][test_case] =
-            test_case.version_computers(version).count
+            test_case.version_computers(version).uniq.count
 
           # move mixed cases from @failing_cases to @mixed_cases
           cases.select do |this_case|
@@ -63,7 +63,7 @@ class MorningMailer < ApplicationMailer
             ).count
           end
         end
-        @case_counts[version] = version.test_cases.count
+        @case_counts[version] = version.test_cases.uniq.count
         unless @mixed_cases[version].empty?
           @mixed_versions.append(version)
           @failing_versions.delete(version)
@@ -75,7 +75,7 @@ class MorningMailer < ApplicationMailer
       @passing_versions.each do |version|
         @version_links[version] = version_url(version.number)
         @computer_counts[version] = version.computers.uniq.count
-        @case_counts[version] = version.test_cases.count
+        @case_counts[version] = version.test_cases.uniq.count
       end
     end
 
