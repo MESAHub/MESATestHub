@@ -81,20 +81,20 @@ class MorningMailer < ApplicationMailer
 
     # gather sender, recipient(s), subject, and body before composing email
     from = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    to = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    # to = Email.new(email: 'wmwolf@asu.edu', name: 'Bill Wolf')
-    subject = ''
+    # to = Email.new(email: 'mesa-developers@lists.mesastar.org')
+    to = Email.new(email: 'wmwolf@asu.edu', name: 'Bill Wolf')
+    subject = "MesaTestHub Report #{Date.today}"
     # subject line shows latest failing version, if there is one
-    if !@failing_versions.empty?
-      subject = "Failing tests in revision #{@failing_versions.max}"
-      subject += ' and others' if @failing_versions.length > 1
-    # no failing tests: say how many versions have passed
-    elsif !@passing_versions.empty?
-      subject = "#{@passing_versions.length} versions with all tests passing"
-    # no tests at all... send a worthless e-mail so we know it's working
-    else
-      subject = 'No tests submitted in the last 24 hours.'
-    end
+    # if !@failing_versions.empty?
+    #   subject = "Failing tests in revision #{@failing_versions.max}"
+    #   subject += ' and others' if @failing_versions.length > 1
+    # # no failing tests: say how many versions have passed
+    # elsif !@passing_versions.empty?
+    #   subject = "#{@passing_versions.length} versions with all tests passing"
+    # # no tests at all... send a worthless e-mail so we know it's working
+    # else
+    #   subject = 'No tests submitted in the last 24 hours.'
+    # end
     html_content = ApplicationController.render(
       template: 'morning_mailer/morning_email.html.erb',
       layout: 'mailer',

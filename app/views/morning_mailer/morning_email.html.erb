@@ -20,8 +20,8 @@
   <% @mixed_versions.each do |version| %>
     <h3>
       <a clicktracking=off style="color: rgb(255, 153, 0)" href=<%= @version_links[version] %>>
-        <%= version %> (<%= @computer_counts[version][:total] %> computer(s) tested to date)
-      </a>
+        <%= version %>
+      </a> (<%= @computer_counts[version][:total] %> computer(s) tested to date)
     </h3>
     <ul>
       <li> <b> Author: </b> <%= version.author %> </li>
