@@ -39,7 +39,7 @@ class MorningMailer < ApplicationMailer
       # ornery links from SendGrid... doing this the hard way
       @failing_cases.each do |version, cases|
         @case_links[version] = {}
-        @mixed_cases = []
+        @mixed_cases[version] = []
         cases.each do |test_case|
           @case_links[version][test_case] =
             test_case_url(test_case, version: version.number)
