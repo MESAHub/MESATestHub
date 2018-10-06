@@ -3,8 +3,8 @@
   <% @passing_versions.each do |version| %>
     <h3>
       <a clicktracking=off style="color: rgb(0,153,51)" href=<%= @version_links[version] %>>
-        <%= version %> (<%= @computer_counts[version][:total] %> computer(s) tested to date)
-      </a>
+        <%= version %>
+      </a> (<%= @computer_counts[version][:total] %> computer(s) tested to date)
     </h3>
     <ul>
       <li> <b> Author: </b> <%= version.author %> </li>
@@ -35,7 +35,7 @@
               <% unless @case_links[version].include?(test_case) %>
                 (link unavailbale in the following)
                 <ul>
-                  <% @case_links[version].each |test_case, url| %>
+                  <% @case_links[version].each do |test_case, url| %>
                     <li><%= test_case.name + ': ' + url %></li>
                   <% end %>
                 </ul>
@@ -70,8 +70,8 @@
   <% @failing_versions.each do |version| %>
     <h3>
       <a style="color:rgb(204, 0, 0)" clicktracking=off href=<%= @version_links[version] %>>
-        <%= version %> (<%= @computer_counts[version][:total] %> computer(s) tested to date)
-      </a>
+        <%= version %>
+      </a> (<%= @computer_counts[version][:total] %> computer(s) tested to date)
     </h3>
     <ul>
       <li> <b> Author: </b> <%= version.author %> </li>
