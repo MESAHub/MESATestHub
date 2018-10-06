@@ -67,7 +67,7 @@ class TestInstance < ApplicationRecord
     TestCase.find(where(passed: false)
                     .where(created_at: date...Time.now)
                     .where(version: version)
-                    .pluck(:test_case_id)).sort_by(&:name)
+                    .pluck(:test_case_id).uniq).sort_by(&:name)
   end
 
   def computer_specification
