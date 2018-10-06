@@ -33,7 +33,7 @@
             <a style="color:rgb(255, 153, 0)" clicktracking=off href=<%= @case_links[version][test_case] %>>
               <%= test_case.name %> 
             </a> 
-          </samp> ( <b> Failures: </b> <%= @pass_counts[version][test_case] %>; <b> Successes: </b> <%= @fail_counts[version][test_case] %> )
+          </samp> ( <b> Failures: </b> <%= @fail_counts[version][test_case] %>; <b> Successes: </b> <%= @pass_counts[version][test_case] %> )
         </li>
       <% end %>
       <% @failing_cases[version].each do |test_case| %>

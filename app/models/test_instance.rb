@@ -47,7 +47,7 @@ class TestInstance < ApplicationRecord
   # particular date
   def self.failing_versions_since(date)
     Version.find(where(passed: false, created_at: date...Time.now)
-      .pluck(:version_id).uniq).sort_by(&:number)
+      .pluck(:version_id).uniq).sort_by(&:number).reverse
   end
 
   # list of version numbers with ONLY passing test cases
@@ -56,7 +56,7 @@ class TestInstance < ApplicationRecord
     passing_something = Version.find(
       where(passed: true, created_at: date...Time.now)
       .pluck(:version_id).uniq
-    ).sort_by(&:number)
+    ).sort_by(&:number).reverse
     # remove versions that have even one failing test
     passing_something - failing_versions_since(date)
   end
