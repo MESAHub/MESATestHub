@@ -14,7 +14,7 @@ Failing Revisions in the Last 24 Hours:
 <% @failing_versions.each do |version| %>
 - <%= version.to_s %>
   ==============================
-<% @cases[version].each do |test_case| %>
+<% @failing_cases[version].each do |test_case| %>
   + <%= test_case.name %>
 <% end %>
 
