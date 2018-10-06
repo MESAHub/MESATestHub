@@ -68,7 +68,8 @@ class MorningMailer < ApplicationMailer
           @mixed_versions.append(version)
         end
       end
-      @failng_versions = @failing_versions - @mixed_versions
+      # throw mixed versions out so they don't appear twice
+      @failng_versions.reject! { |version| @mixed_versions.include? version}
     end
 
     unless @passing_versions.empty?
