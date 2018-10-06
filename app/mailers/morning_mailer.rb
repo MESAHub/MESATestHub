@@ -74,7 +74,7 @@ class MorningMailer < ApplicationMailer
     unless @passing_versions.empty?
       @passing_versions.each do |version|
         @version_links[version] = version_url(version.number)
-        @computer_counts[version] = version.computers.uniq.count
+        @computer_counts[version] = {total: version.computers.uniq.count}
         @case_counts[version] = version.test_cases.uniq.count
       end
     end
