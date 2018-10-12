@@ -21,6 +21,7 @@ class TestInstance < ApplicationRecord
   belongs_to :computer
   belongs_to :test_case
   belongs_to :version
+  belongs_to :test_case_version
   has_many :test_data, dependent: :destroy
   validates_presence_of :runtime_seconds, :version_id, :computer_id,
                         :test_case_id, :compiler

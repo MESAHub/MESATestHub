@@ -3,6 +3,7 @@ class Version < ApplicationRecord
   validates_uniqueness_of :number
 
   has_many :test_instances, dependent: :destroy
+  has_many :test_case_versions, dependent: :destroy
   has_many :test_cases, through: :test_instances
   has_many :computers, through: :test_instances
   has_many :users, through: :computers
