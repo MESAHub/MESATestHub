@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20181012222925) do
+ActiveRecord::Schema.define(version: 20181012233421) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -31,8 +31,8 @@ ActiveRecord::Schema.define(version: 20181012222925) do
     t.bigint "version_id", null: false
     t.bigint "test_case_id", null: false
     t.integer "status", default: -1, null: false
-    t.integer "submissions", default: 0, null: false
-    t.integer "computers", default: 0, null: false
+    t.integer "submission_count", default: 0, null: false
+    t.integer "computer_count", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["test_case_id"], name: "index_test_case_versions_on_test_case_id"
@@ -104,6 +104,7 @@ ActiveRecord::Schema.define(version: 20181012222925) do
     t.text "summary_text"
     t.integer "diff", default: 2
     t.bigint "test_case_version_id"
+    t.string "checksum"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
     t.index ["mesa_version"], name: "index_test_instances_on_mesa_version"
     t.index ["test_case_id"], name: "index_test_instances_on_test_case_id"
