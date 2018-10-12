@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20180330214511) do
+ActiveRecord::Schema.define(version: 20181012222925) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -25,6 +25,18 @@ ActiveRecord::Schema.define(version: 20180330214511) do
     t.bigint "user_id"
     t.index ["name"], name: "index_computers_on_name", unique: true
     t.index ["user_id"], name: "index_computers_on_user_id"
+  end
+
+  create_table "test_case_versions", force: :cascade do |t|
+    t.bigint "version_id", null: false
+    t.bigint "test_case_id", null: false
+    t.integer "status", default: -1, null: false
+    t.integer "submissions", default: 0, null: false
+    t.integer "computers", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["test_case_id"], name: "index_test_case_versions_on_test_case_id"
+    t.index ["version_id"], name: "index_test_case_versions_on_version_id"
   end
 
   create_table "test_cases", force: :cascade do |t|
@@ -91,9 +103,11 @@ ActiveRecord::Schema.define(version: 20180330214511) do
     t.integer "backups"
     t.text "summary_text"
     t.integer "diff", default: 2
+    t.bigint "test_case_version_id"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
     t.index ["mesa_version"], name: "index_test_instances_on_mesa_version"
     t.index ["test_case_id"], name: "index_test_instances_on_test_case_id"
+    t.index ["test_case_version_id"], name: "index_test_instances_on_test_case_version_id"
     t.index ["version_id"], name: "index_test_instances_on_version_id"
   end
 
@@ -120,9 +134,12 @@ ActiveRecord::Schema.define(version: 20180330214511) do
     t.index ["number"], name: "index_versions_on_number", unique: true
   end
 
+  add_foreign_key "test_case_versions", "test_cases"
+  add_foreign_key "test_case_versions", "versions"
   add_foreign_key "test_cases", "versions"
   add_foreign_key "test_data", "test_instances"
   add_foreign_key "test_instances", "computers"
+  add_foreign_key "test_instances", "test_case_versions"
   add_foreign_key "test_instances", "test_cases"
   add_foreign_key "test_instances", "versions"
 end
