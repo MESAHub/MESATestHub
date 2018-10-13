@@ -32,6 +32,9 @@ class TestInstance < ApplicationRecord
                                         allow_blank: true
   validates_inclusion_of :compiler, in: @@compilers
 
+  after_save :update_test_case_version
+  before_validation :set_test_case_version
+
   def self.success_types
     @@success_types
   end
@@ -168,6 +171,32 @@ class TestInstance < ApplicationRecord
     end
   end
 
+  def set_test_case_version
+    puts "in set_test_case_version"
+    return if test_case_version
+    candidate = TestCaseVersion.find_by(
+      version: version, test_case: test_case
+    )
+    if candidate
+      # found it!
+      self.test_case_version = candidate
+    else
+      # doesn't exist, so make a new one
+      # this one doesn't have status and other values set; this should
+      # happen when `update_test_case_version` is called
+      self.test_case_version = TestCaseVersion.create!(
+        version_id: version.id, test_case_id: test_case.id
+      )
+    end
+  end
+
+  def update_test_case_version
+    # make sure we have a test_case version
+    set_test_case_version unless test_case_version
+
+    # tell the test_case_version to update itself
+    test_case_version.update_and_save_scalars
+  end
 
   # make test_data easier to access as if they were attributes
   def method_missing(method_name, *args, &block)

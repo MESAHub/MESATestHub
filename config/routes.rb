@@ -14,6 +14,8 @@ Rails.application.routes.draw do
 
   get 'versions', to: 'versions#index', as: 'versions'
   get 'versions/:number', to: 'versions#show', as: 'version'
+  get 'versions/:number/:test_case', to: 'test_case_versions#show', as:
+      'test_case_version'
   # this one just takes number from params nad redirects to version_path
   get 'show_version', to: 'versions#show_version'
 
