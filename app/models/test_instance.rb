@@ -32,6 +32,7 @@ class TestInstance < ApplicationRecord
                                         allow_blank: true
   validates_inclusion_of :compiler, in: @@compilers
 
+  before_save :update_computer_specification, :update_computer_name
   after_save :update_test_case_version
   before_validation :set_test_case_version
 
@@ -74,13 +75,41 @@ class TestInstance < ApplicationRecord
                     .pluck(:test_case_id).uniq).sort_by(&:name)
   end
 
-  def computer_specification
+  def self.assign_checksum_shortcuts(test_instances)
+    unique_checksums = test_instances.to_a.map(&:checksum).reject(&:nil?).uniq
+    # create names that are series of letters. Only make them as long as they 
+    # need to be
+    max_length = 1
+    while 26**max_length < unique_checksums.count
+      max_length += 1
+    end
+    alphabet = ('A'..'Z').to_a
+    shortcuts = ['']
+    max_length.times do
+      shortcuts = shortcuts.product(alphabet).map(&:join)
+    end
+    encoder = Hash[unique_checksums.zip(shortcuts)]
+    encoder[nil] = "-"
+    encoder
+  end
+
+
+
+  def update_computer_name
+    self.computer_name ||= computer.name
+  end
+
+  def update_computer_specification
+    self.computer_specification ||= generate_computer_specification
+  end
+
+  def generate_computer_specification
     spec = ''
     spec += computer.platform + ' ' if computer.platform
     spec += platform_version + ' ' if platform_version
     spec += compiler + ' ' if compiler
     spec += compiler_version if compiler_version
-    return 'no specificaiton' if spec.empty?
+    spec = 'no specificaiton' if spec.empty?
     spec.strip
   end
 
@@ -99,6 +128,8 @@ class TestInstance < ApplicationRecord
         "\"#{new_computer_name}\"."
     else
       self.computer = new_computer
+      self.computer_name = new_computer.name
+      self.computer_specification = generate_computer_specification
     end
   end
 
@@ -172,7 +203,6 @@ class TestInstance < ApplicationRecord
   end
 
   def set_test_case_version
-    puts "in set_test_case_version"
     return if test_case_version
     candidate = TestCaseVersion.find_by(
       version: version, test_case: test_case
@@ -192,7 +222,7 @@ class TestInstance < ApplicationRecord
 
   def update_test_case_version
     # make sure we have a test_case version
-    set_test_case_version unless test_case_version
+    set_test_case_version unless self.test_case_version_id
 
     # tell the test_case_version to update itself
     test_case_version.update_and_save_scalars

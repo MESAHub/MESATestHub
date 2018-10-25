@@ -9,7 +9,7 @@
   .col-sm-6
     %p
       %b Test Case
-      %samp= link_to @test_case.name, @test_case
+      %samp= link_to @test_case.name, test_case_version_path(number: @test_instance.version.number, test_case: @test_case.name)
     %p
       %b MESA Version:
       = link_to @test_instance.version.number, version_path(@test_instance.version.number)
@@ -31,6 +31,9 @@
         Unknown
       - else
         Invalid Data (probably uknown)
+    %p
+      %b Checksum:
+      = @test_instance.checksum
   .col-sm-6
     %p
       %b Computer:

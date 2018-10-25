@@ -4,53 +4,61 @@ class VersionsController < ApplicationController
 
   def index
     @versions = Version.order(number: :desc)
-                       .includes(:test_instances, :test_cases)
+                       .includes(:test_case_versions)
                        .page(params[:page])
     @row_classes = {}
     @pass_counts = {}
     @fail_counts = {}
     @mix_counts = {}
-    @case_counts = {}
+    @checksum_counts = {}
+    @other_counts = {}
+    # @case_counts = {}
     @last_tested = {}
     @versions.each do |version|
-      status, pass_count, fail_count, mix_count = version.summary_status
+      status, pass_count, fail_count, mix_count, checksum_count, other_count = version.summary_status
       @row_classes[version] = case status
                               when 0 then 'table-success'
                               when 1 then 'table-danger'
                               when 2 then 'table-warning'
+                              when 3 then 'table-primary'
                               else
-                                'row-info'
+                                'table-info'
                               end
       @pass_counts[version] = pass_count
       @fail_counts[version] = fail_count
       @mix_counts[version] = mix_count
-      @case_counts[version] = version.test_cases.uniq.length
+      @checksum_counts[version] = checksum_count
+      @other_counts[version] = other_count
+      # @case_counts[version] = version.test_cases.uniq.length
     end
   end
 
   def show
     @mesa_versions = Version.order(number: :desc).pluck(:number)
     @selected = params[:number] || 'latest'
-    # big daddy query, hopefully optimized
     @version_number = case @selected
                       when 'latest' then @mesa_versions.max
                       else
                         @selected.to_i
                       end
-    @version = Version.includes(:test_cases, test_instances: :computer)
-                      .find_by(number: @version_number)
-                      
-    passing, mixed, failing = @version.passing_mixed_failing_test_cases
-    @test_cases = [mixed, failing, passing].flatten
-    
+    @version = Version.includes(test_case_versions: [:test_case]).find_by(number: @version_number)
+
+    @test_case_versions = [@version.other, @version.checksums, @version.mixed,
+                           @version.failing, @version.passing].flatten
     @header_text = "Test Cases Tested on Version #{@version_number}"
     @specs = @version.computer_specs
     @statistics = @version.statistics
-    status, @pass_count, @fail_count, @mix_count = @version.summary_status
+
+
+    status, @pass_count, @fail_count, @mix_count, @checksum_count, @other_count = @version.summary_status
+
+
     @version_status = case status
                       when 0 then :passing
                       when 1 then :failing
                       when 2 then :mixed
+                      when 3 then :checksum
+                      when -1 then :other
                       else
                         :untested
                       end
@@ -58,8 +66,10 @@ class VersionsController < ApplicationController
     @status_text = case @version_status
                    when :passing then 'All tests passing on all computers.'
                    when :mixed
-                     'Some tests fail on at least some computers.'
-                   when :failing then 'All tests fail with all computers.'
+                     'Some tests fail on some computers and pass on others.'
+                   when :failing then 'Some tests fail with all computers.'
+                   when :checksum then 'Some tests pass with different checksums on different computers.'
+                   when :other then 'Some tests have anomalous results.'
                    else
                      'No tests have been run for this version.'
                    end
@@ -68,6 +78,7 @@ class VersionsController < ApplicationController
                     when :passing then 'text-success'
                     when :mixed then 'text-warning'
                     when :failing then 'text-danger'
+                    when :checksum then 'text-primary'
                     else
                       'text-info'
                     end
@@ -93,31 +104,26 @@ class VersionsController < ApplicationController
                            0
                          end
 
-
-
-    # for populating version select menu
-    @mesa_versions.prepend('latest')
-
     # set up colored table rows depending on passage status
     @computer_counts = {}
     @last_versions = {}
     @row_classes = {}
     @last_tested = {}
     @diffs = {}
-    @test_cases.each do |t|
-      @computer_counts[t] = @version.computers_count(t)
-      @last_tested[t] = @version.last_tested(t)
-      @row_classes[t] =
-        case @version.status(t)
+    @test_case_versions.each do |tcv|
+      @last_tested[tcv] = tcv.last_tested
+      @row_classes[tcv] =
+        case tcv.status
         when 0 then 'table-success'
         when 1 then 'table-danger'
+        when 2 then 'table-warning'
+        when 3 then 'table-primary'
         else
-          'table-warning'
+          'table-info'
         end
-      @diffs[t] = @version.diff_status(t)
+      # @diffs[t] = @version.diff_status(t)
     end
-
-  end
+  end 
 
   def show_version
     # puts "redirecting to #{version_path(params[:number])}"

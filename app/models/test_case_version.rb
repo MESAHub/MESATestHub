@@ -26,6 +26,7 @@ class TestCaseVersion < ApplicationRecord
     update_submission_count
     update_computer_count
     update_status
+    update_last_tested
     save
   end
 
@@ -39,6 +40,10 @@ class TestCaseVersion < ApplicationRecord
     else
       self.computer_count = computers.uniq.count
     end
+  end
+
+  def update_last_tested
+    self.last_tested = test_instances.pluck(:created_at).max
   end
 
   def update_status

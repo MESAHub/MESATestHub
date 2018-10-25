@@ -71,6 +71,8 @@
             = f.text_field :compiler_version, label: "Compiler version (e.g. 7.0.2 or 20170921)"
           .field
             = f.text_area :summary_text, label: "Summary Text (runtime, steps, retries, backups from test output)"
+          .field
+            = f.text_field :checksum, label: "Checksum (only if passed)"
   .form-row
     .col.text-center
       .btn-group.actions

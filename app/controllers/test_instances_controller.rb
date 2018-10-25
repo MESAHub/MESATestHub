@@ -54,8 +54,8 @@ class TestInstancesController < ApplicationController
   # POST /test_instances.json
   def create
     @test_instance = @test_case.test_instances.build(test_instance_params)
-    
-    # jankety solution to set version properly, similar to 
+
+    # jankety solution to set version properly, similar to
     # Version#update_version
     version = Version.find_or_create_by(
       number: test_instance_params[:mesa_version])
@@ -204,7 +204,7 @@ class TestInstancesController < ApplicationController
 
   # Use callbacks to share common setup or constraints between actions.
   def set_test_instance
-    @test_instance = @test_case.test_instances.find(params[:id])
+    @test_instance = @test_case.test_instances.includes(:test_case_version).find(params[:id])
   end
 
   def set_test_case
@@ -231,7 +231,7 @@ class TestInstancesController < ApplicationController
   def instance_keys
     %i[runtime_seconds mesa_version omp_num_threads compiler compiler_version
        platform_version passed failure_type success_type steps retries backups
-       summary_text diff]
+       summary_text diff checksum]
   end
 
   # allowed params for using the submit controller action
@@ -260,7 +260,7 @@ class TestInstancesController < ApplicationController
       :runtime_seconds, :mesa_version, :omp_num_threads, :compiler,
       :compiler_version, :platform_version, :passed, :computer_id,
       :test_case_id, :success_type, :failure_type, :steps, :retries, :backups,
-      :summary_text, :diff
+      :summary_text, :diff, :checksum
     )
   end
 end

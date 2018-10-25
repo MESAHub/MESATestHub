@@ -14,7 +14,9 @@ version_select =
     version_select.listen_for_change()
   change_form_style: ->
     $('#version_select').parent().parent().removeClass('form-inline')
-  listen_for_change: -> $('#version_select').change(-> this.form.submit())
+  listen_for_change: -> 
+    $('#version_select').change(-> this.form.submit())
+    $('#test_case_select').change(-> this.form.submit())
 
 $ ->
   index.setup()

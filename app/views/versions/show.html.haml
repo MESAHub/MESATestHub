@@ -32,59 +32,76 @@
 
 
 
+- unless @version_status == :untested
+  .row#index-desc
+    .col
+      .card-deck
+        - if @other_count.positive?
+          .card.border-info
+            .card-body.text-info                    
+              %h3.card-title Other
+              %p.card-text
+                %b=@other_count
+                tests with anomalous submission data.
+        - if @mix_count.positive?
+          .card.border-warning
+            .card-body.text-warning
+              %h3.card-title Mixed
+              %p.card-text
+                %b=@mix_count
+                tests where some computers report passing and others report failing.
+        - if @checksum_count.positive?
+          .card.border-primary
+            .card-body.text-primary
+              %h3.card-title Checksums
+              %p.card-text
+                %b=@checksum_count
+                tests where different computers give different checksums.
+        - if @fail_count.positive?
+          .card.border-danger
+            .card-body.text-danger
+              %h3.card-title Failing
+              %p.card-text
+                %b=@fail_count
+                tests where all computers report failing.
+        - if @pass_count.positive?
+          .card.border-success
+            .card-body.text-success
+              %h4.card-title Passing
+              %p.card-text
+                %b=@pass_count
+                tests where all computers report passing.
 
-.row#index-desc
-  .col
-    .card-deck
-      .card.border-success
-        .card-body.text-success
-          %h4.card-title Passing
-          %p.card-text
-            %b=@pass_count
-            tests where all computers report passing.
-      .card.border-warning
-        .card-body.text-warning
-          %h3.card-title Mixed
-          %p.card-text
-            %b=@mix_count
-            tests where some computers report passing and others report failing.
-      .card.border-danger
-        .card-body.text-danger
-          %h3.card-title Failing
-          %p.card-text
-            %b=@fail_count
-            tests where all computers report failing.
+  .row
+    .col
+      .table-responsive
+        %table.table.table-hover#test_summary
+          %thead.thead-default
+            %tr
+              %th Name
+              %th Computers Tested
+              %th Last Tested Date
+              -# %th Diff?
 
-.row
-  .col
-    .table-responsive
-      %table.table.table-hover#test_summary
-        %thead.thead-default
-          %tr
-            %th Name
-            %th Computers Tested
-            %th Last Tested Date
-            %th Diff?
-
-        %tbody
-          - @test_cases.each do |test_case|
-            %tr{class: @row_classes[test_case] + ' clickable-row', "data-href":test_case_path(test_case, version: @selected), id: test_case.name + '-row'}
-              %td
-                %samp= test_case.name
-              - if @selected == 'all'
-                %td= @last_versions[test_case]
-              - else
-                %td= @computer_counts[test_case]
-              %td= format_time(@last_tested[test_case]) #.localtime.strftime("%F %H:%M %Z")
-              %td
-                - case @diffs[test_case]
-                - when 0
-                  &#x2717
-                - when 1
-                  &#x2713
+          %tbody
+            - @test_case_versions.each do |tcv|
+              %tr{class: @row_classes[tcv] + ' clickable-row', "data-href":test_case_version_path(number: @selected, test_case: tcv.test_case.name), id: tcv.test_case.name + '-row'}
+                %td
+                  %samp= tcv.test_case.name
+                - if @selected == 'all'
+                  %td= @last_versions[tcv]
                 - else
-                  &#x3f
--# .row
--#   .col.text-center
--#     - if admin?
--#       =link_to "Create Test Case", new_test_case_path, class: 'btn btn-lg btn-primary text-light'
+                  %td= tcv.computer_count
+                  %td= format_time(@last_tested[tcv]) #.localtime.strftime("%F %H:%M %Z")
+                -# %td
+                -#   - case @diffs[test_case]
+                -#   - when 0
+                -#     &#x2717
+                -#   - when 1
+                -#     &#x2713
+                -#   - else
+                -#     &#x3f
+  -# .row
+  -#   .col.text-center
+  -#     - if admin?
+  -#       =link_to "Create Test Case", new_test_case_path, class: 'btn btn-lg btn-primary text-light'

@@ -4,7 +4,13 @@ class TestCaseVersionsController < ApplicationController
   def show
     # big daddy query, hopefully optimized
     @mesa_versions = @test_case.versions.order(number: :desc).uniq.pluck(:number)
-    @version_number = params[:version]
+    @mesa_versions = Version.find(TestCaseVersion.where(test_case: @test_case).pluck(:version_id)).pluck(:number).sort.reverse
+    @selected = @version.number
+    @test_case_versions = @version.test_case_versions.order(status: :desc).includes(:test_case)
+    @test_case_versions.to_a.sort_by! { |tcv| [-tcv.status, tcv.test_case.name] }
+    @tc_options = @test_case_versions.map { |tcv| tcv.test_case.name }
+
+    @version_number = params[:number]
     @version_number = @version_number.to_i unless @version_number == 'latest'
 
     # all test instances, sorted by upload date
@@ -22,21 +28,28 @@ class TestCaseVersionsController < ApplicationController
         end
     end
 
+    @encoder = TestInstance.assign_checksum_shortcuts(@test_case_version.test_instances)
+    @unique_checksum_count = @test_case_version.test_instances.pluck(:checksum).uniq.reject(&:nil?).count
+    
     # text and class for last version test status
     @version_status, @version_class = passing_status_and_class
 
-    # for populating select list
-    @mesa_versions.prepend('latest')
+  end
+
+  def show_test_case_version
+    redirect_to test_case_version_path(
+      number: params[:number], test_case: params[:test_case]
+    )
   end
 
   private
   # Use callbacks to share common setup or constraints between actions.
 
   def set_test_case_version
-    @version = if params[:version] == 'latest'
+    @version = if params[:number] == 'latest'
                  Version.order(number: :desc).first
                else
-                 Version.find_by(number: params[:version].to_i)
+                 Version.find_by(number: params[:number].to_i)
                end
     @test_case = TestCase.find_by(name: params[:test_case])
     @test_case_version = TestCaseVersion.find_by(
