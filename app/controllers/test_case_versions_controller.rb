@@ -6,8 +6,8 @@ class TestCaseVersionsController < ApplicationController
     @mesa_versions = @test_case.versions.order(number: :desc).uniq.pluck(:number)
     @mesa_versions = Version.find(TestCaseVersion.where(test_case: @test_case).pluck(:version_id)).pluck(:number).sort.reverse
     @selected = @version.number
-    @test_case_versions = @version.test_case_versions.order(status: :desc).includes(:test_case)
-    @test_case_versions.to_a.sort_by! { |tcv| [-tcv.status, tcv.test_case.name] }
+    @test_case_versions = @version.test_case_versions.includes(:test_case).to_a
+    @test_case_versions.sort_by! { |tcv| [-tcv.status, tcv.test_case.name] }
     @tc_options = @test_case_versions.map { |tcv| tcv.test_case.name }
 
     @version_number = params[:number]
@@ -30,7 +30,7 @@ class TestCaseVersionsController < ApplicationController
 
     @encoder = TestInstance.assign_checksum_shortcuts(@test_case_version.test_instances)
     @unique_checksum_count = @test_case_version.test_instances.pluck(:checksum).uniq.reject(&:nil?).count
-    
+
     # text and class for last version test status
     @version_status, @version_class = passing_status_and_class
 
