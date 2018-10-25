@@ -207,9 +207,12 @@ class TestCasesController < ApplicationController
       sts = 'Failing'
       cls = 'text-danger'
     elsif status == 2
+      sts = 'Mismatched checksums'
+      cls = 'text-primary'
+    elsif status == 3
       sts = 'Mixed'
       cls = 'text-warning'
-    elsif status == 3
+    else
       sts = 'Not yet run'
       cls = 'text-warning'
     end

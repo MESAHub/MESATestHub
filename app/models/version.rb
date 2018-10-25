@@ -52,8 +52,8 @@ class Version < ApplicationRecord
       case tcv.status
       when 0 then @passing << tcv
       when 1 then @failing << tcv
-      when 2 then @mixed << tcv
-      when 3 then @checksums << tcv
+      when 2 then @checksums << tcv
+      when 3 then @mixed << tcv
       else
         @other << tcv
       end
@@ -102,9 +102,9 @@ class Version < ApplicationRecord
 
   def statistics
     { passing: test_case_versions.where(status: 0).count,
-      mixed: test_case_versions.where(status: 2).count,
+      mixed: test_case_versions.where(status: 3).count,
       failing: test_case_versions.where(status: 1).count,
-      checksums: test_case_versions.where(status: 3).count,
+      checksums: test_case_versions.where(status: 2).count,
       other: test_case_versions.where(status: -1).count
     }
     # passing, mixed, failing = passing_mixed_failing_test_cases
@@ -162,8 +162,8 @@ class Version < ApplicationRecord
       case tcv.status
       when 0 then pass_count += 1
       when 1 then fail_count += 1
-      when 2 then mix_count += 1
-      when 3 then checksum_count += 1
+      when 2 then checksum_count += 1
+      when 3 then mix_count += 1
       else
         other_count += 1
       end
@@ -171,9 +171,9 @@ class Version < ApplicationRecord
     status = if other_count.positive?
                -1 # something weird happened with at least one test, scream about this
              elsif mix_count.positive?
-               2  # at least one mixed results test. This is important
+               3  # at least one mixed results test. This is important
              elsif checksum_count.positive?
-               3  # no mixed tests, but at least one with inconsistent checksums
+               2  # no mixed tests, but at least one with inconsistent checksums
              elsif fail_count.positive?
                1  # no checksum or mixed problems, but one test fails everyone
              elsif pass_count.positive?

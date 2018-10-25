@@ -93,8 +93,6 @@ class TestInstance < ApplicationRecord
     encoder
   end
 
-
-
   def update_computer_name
     self.computer_name ||= computer.name
   end

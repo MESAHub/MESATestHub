@@ -19,8 +19,8 @@ class VersionsController < ApplicationController
       @row_classes[version] = case status
                               when 0 then 'table-success'
                               when 1 then 'table-danger'
-                              when 2 then 'table-warning'
-                              when 3 then 'table-primary'
+                              when 2 then 'table-primary'
+                              when 3 then 'table-warning'
                               else
                                 'table-info'
                               end
@@ -43,7 +43,7 @@ class VersionsController < ApplicationController
                       end
     @version = Version.includes(test_case_versions: [:test_case]).find_by(number: @version_number)
 
-    @test_case_versions = [@version.other, @version.checksums, @version.mixed,
+    @test_case_versions = [@version.other, @version.mixed, @version.checksums,
                            @version.failing, @version.passing].flatten
     @header_text = "Test Cases Tested on Version #{@version_number}"
     @specs = @version.computer_specs
@@ -56,8 +56,8 @@ class VersionsController < ApplicationController
     @version_status = case status
                       when 0 then :passing
                       when 1 then :failing
-                      when 2 then :mixed
-                      when 3 then :checksum
+                      when 2 then :checksum
+                      when 3 then :mixed
                       when -1 then :other
                       else
                         :untested
@@ -116,8 +116,8 @@ class VersionsController < ApplicationController
         case tcv.status
         when 0 then 'table-success'
         when 1 then 'table-danger'
-        when 2 then 'table-warning'
-        when 3 then 'table-primary'
+        when 2 then 'table-primary'
+        when 3 then 'table-warning'
         else
           'table-info'
         end

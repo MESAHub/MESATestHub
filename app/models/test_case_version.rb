@@ -8,16 +8,16 @@ class TestCaseVersion < ApplicationRecord
   # -1: Untested: no submissions at all
   # 0:  Passing:  at least one submission, all passing
   # 1:  Failing:  at least one submission, all failing
-  # 2:  Mixed:    at least two submissions, some passing, some failing
-  # 3:  Mixed Checksums: at least two submissions, all passing, different 
+  # 2:  Mixed Checksums: at least two submissions, all passing, different 
   #                      checksums
+  # 3:  Mixed:    at least two submissions, some passing, some failing
 
   @@status_decoder = {
     -1 => :untested,
     0 => :passing,
     1 => :failing,
-    2 => :mixed,
-    3 => :mixed_checksums
+    2 => :mixed_checksums,
+    3 => :mixed
   }
 
   @@status_encoder = @@status_decoder.invert

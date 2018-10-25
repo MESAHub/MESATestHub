@@ -70,11 +70,11 @@ class TestCaseVersionsController < ApplicationController
       sts = 'Failing'
       cls = 'text-danger'
     elsif @test_case_version.status == 2
-      sts = 'Mixed'
-      cls = 'text-warning'
-    elsif @test_case_version.status == 3
       sts = 'Checksum mismatch'
       cls = 'text-primary'
+    elsif @test_case_version.status == 3
+      sts = 'Mixed'
+      cls = 'text-warning'
     elsif @test_case_version.status == -1
       sts = 'Not yet run'
       cls = 'text-info'
