@@ -13,7 +13,7 @@ Rails.application.routes.draw do
   root to: 'versions#show' #, params: { number: 'latest' }
 
   get '/versions/:number/test_cases/:test_case',
-    to: 'test_case_versions#show', as:'test_case_version'
+    to: 'test_case_versions#show', as:'test_case_version', test_case: /[^\/]+/
   get '/versions/:number', to: 'versions#show', as: 'version'
 
   match '/version/test_case' => 'test_case_versions#show_test_case_version', via: :get
