@@ -18,7 +18,7 @@ class MorningMailer < ApplicationMailer
   def morning_email
     # first gather data from database; bail if there are no failure in the last
     # 24 hours
-    start_date = 10.days.ago
+    start_date = 4.days.ago
     @versions_tested = Version.tested_between(start_date, DateTime.now)
     @versions_tested.sort_by! { |version| -version.number }
     @mixed_versions = []
@@ -46,9 +46,9 @@ class MorningMailer < ApplicationMailer
       else
         @other_versions.append(version)
       end
-      @failing_cases[version] = version.test_case_versions.where(status: 1)
-      @checksum_cases[version] = version.test_case_versions.where(status: 2)
-      @mixed_cases[version] = version.test_case_versions.where(status: 3)
+      @failing_cases[version] = version.test_case_versions.where(status: 1).to_a
+      @checksum_cases[version] = version.test_case_versions.where(status: 2).to_a
+      @mixed_cases[version] = version.test_case_versions.where(status: 3).to_a
 
       @version_links[version] = version_url(version.number)
       @case_counts[version] = version.test_case_versions.count
