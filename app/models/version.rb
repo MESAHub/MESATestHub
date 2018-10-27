@@ -121,7 +121,7 @@ class Version < ApplicationRecord
     # stats
   end
 
-  def computers_count(test_case)
+  def computers_count
     test_case_versions.pluck(:computer_count).max
   end
 

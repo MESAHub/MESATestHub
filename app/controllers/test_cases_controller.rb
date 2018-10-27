@@ -67,7 +67,7 @@ class TestCasesController < ApplicationController
       if @selected == 'all'
         @last_versions[t] = t.last_version
       else
-        @computer_counts[t] = @version.computers_count(t)
+        @computer_counts[t] = TestCaseVersion.find_by(version: @version, test_case: @test_case).computer_count
       end
       @last_tested[t] = t.last_tested
       @row_classes[t] =
