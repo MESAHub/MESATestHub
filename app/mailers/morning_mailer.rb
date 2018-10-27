@@ -31,6 +31,7 @@ class MorningMailer < ApplicationMailer
     @case_counts = {}
     @failing_cases = {}
     @mixed_cases = {}
+    @checksum_cases = {}
     @pass_counts = {}
     @fail_counts = {}
     @checksum_counts = {}
