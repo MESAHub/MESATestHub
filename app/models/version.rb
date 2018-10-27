@@ -9,7 +9,14 @@ class Version < ApplicationRecord
   has_many :computers, through: :test_instances
   has_many :users, through: :computers
 
-  paginates_per 10
+  paginates_per 25
+
+  def self.tested_between(start_date, stop_date=DateTime.now)
+    Version.includes(test_case_versions: :test_case).find(
+      TestCaseVersion.where(last_tested: start_date..stop_date).pluck(:version_id).uniq
+    )
+  end
+
 
   # array of arrays. First element is array of test cases that pass all
   # instances. Second element is array of test cases that pass and fail at
@@ -118,8 +125,25 @@ class Version < ApplicationRecord
     test_case_versions.pluck(:computer_count).max
   end
 
-  def status(test_case)
-    TestCaseVersion.find_or_create_by(version: self, test_case: test_case).status
+  def status(test_case=nil)
+    if test_case.nil?
+      # get status for whole revision
+      statuses = self.test_case_versions.pluck(:status).uniq
+      if statuses.count.zero?
+        # if there are no resulsts, return -1, meaning not tested/error
+        -1
+      elsif statuses.min < 0
+        # if there's a single error test case, return it as the whole status
+        statuses.min
+      else
+        # return the max (mixed most important, then mixed checksums, then
+        # then failures, then all successes)
+        statuses.max
+      end
+    else
+      # get status for a particular test case
+      TestCaseVersion.find_or_create_by(version: self, test_case: test_case).status
+    end
   end
 
   def diff_status(test_case)
@@ -168,19 +192,19 @@ class Version < ApplicationRecord
         other_count += 1
       end
     end
-    status = if other_count.positive?
-               -1 # something weird happened with at least one test, scream about this
-             elsif mix_count.positive?
-               3  # at least one mixed results test. This is important
-             elsif checksum_count.positive?
-               2  # no mixed tests, but at least one with inconsistent checksums
-             elsif fail_count.positive?
-               1  # no checksum or mixed problems, but one test fails everyone
-             elsif pass_count.positive?
-               0  # no troublesome tests at all, we're passing and good!
-             else
-               -2 # no tests of any kind; we didn't test anything
-             end
+    # status = if other_count.positive?
+    #            -1 # something weird happened with at least one test, scream about this
+    #          elsif mix_count.positive?
+    #            3  # at least one mixed results test. This is important
+    #          elsif checksum_count.positive?
+    #            2  # no mixed tests, but at least one with inconsistent checksums
+    #          elsif fail_count.positive?
+    #            1  # no checksum or mixed problems, but one test fails everyone
+    #          elsif pass_count.positive?
+    #            0  # no troublesome tests at all, we're passing and good!
+    #          else
+    #            -2 # no tests of any kind; we didn't test anything
+    #          end
     # status = if [pass_count, fail_count, mix_count, checksum_count, other_count].sum.zero?
     #            3  # not tested
     #          elsif [fail_count, mix_count, checksum_count, other_count].sum.zero?
@@ -190,7 +214,7 @@ class Version < ApplicationRecord
     #          elsif [checksum_count, other_count].sum.zero?].sum.zero?
     #            2  
     #          end
-    return status, pass_count, fail_count, mix_count, checksum_count, other_count
+    return self.status, pass_count, fail_count, mix_count, checksum_count, other_count
   end
 
   # update compilation success/fail counts and corresponding compilation status

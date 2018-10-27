@@ -76,7 +76,7 @@ class TestInstance < ApplicationRecord
   end
 
   def self.assign_checksum_shortcuts(test_instances)
-    unique_checksums = test_instances.to_a.map(&:checksum).reject(&:nil?).uniq
+    unique_checksums = test_instances.to_a.map(&:checksum).reject(&:nil?).reject(&:empty?).uniq
     # create names that are series of letters. Only make them as long as they 
     # need to be
     max_length = 1
@@ -90,6 +90,7 @@ class TestInstance < ApplicationRecord
     end
     encoder = Hash[unique_checksums.zip(shortcuts)]
     encoder[nil] = "-"
+    encoder[''] = "-"
     encoder
   end
 

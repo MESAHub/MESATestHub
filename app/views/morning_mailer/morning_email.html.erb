@@ -27,30 +27,39 @@
       <li> <b> Author: </b> <%= version.author %> </li>
       <li> <b> Commit Message: </b> <%= version.log %> </li>
       <li> <%= @case_counts[version] %> cases submitted </li>
-      <% @mixed_cases[version].each do |test_case| %>
+      <% @mixed_cases[version].each do |tcv| %>
         <li>
           <samp> 
-            <a style="color:rgb(255, 153, 0)" clicktracking=off href=<%= @case_links[version][test_case] %>>
-              <%= test_case.name %>
+            <a style="color:rgb(255, 153, 0)" clicktracking=off href=<%= @case_links[version][tcv] %>>
+              <%= tcv.test_case.name %>
             </a> 
-            <% unless @case_links[version].include?(test_case) %>
+            <% unless @case_links[version].include?(tcv) %>
               (link unavailbale in the following)
               <ul>
-                <% @case_links[version].each do |test_case, url| %>
-                  <li><%= test_case.name + ': ' + url %></li>
+                <% @case_links[version].each do |tcv, url| %>
+                  <li><%= tcv.test_case.name + ': ' + url %></li>
                 <% end %>
               </ul>
             <% end %>
-          </samp> (<b>Failures: </b> <%= @fail_counts[version][test_case] %>; <b> Successes: </b> <%= @pass_counts[version][test_case]%>)
+          </samp> (<b>Failures: </b> <%= @fail_counts[version][tcv] %>; <b> Successes: </b> <%= @pass_counts[version][tcv]%>)
         </li>
       <% end %>
-      <% @failing_cases[version].each do |test_case| %>
+      <% @checksum_cases[version].each do |tcv| %>
         <li>
           <samp> 
-            <a style="color:rgb(204, 0, 0)" clicktracking=off href=<%= @case_links[version][test_case] %>>
-              <%= test_case.name %>
+            <a style="color:rgb(78, 114, 219)" clicktracking=off href=<%= @case_links[version][tcv] %>>
+              <%= tcv.test_case.name %>
             </a>
-          </samp> (<%= @computer_counts[version][test_case] %> total submissions)
+          </samp> (<%= @computer_counts[version][tcv] %> submissions; <%= @checksum_counts[version][tcv] %> distinct checksums)
+        </li>
+      <% end %>      
+      <% @failing_cases[version].each do |tcv| %>
+        <li>
+          <samp> 
+            <a style="color:rgb(204, 0, 0)" clicktracking=off href=<%= @case_links[version][tcv] %>>
+              <%= tcv.test_case.name %>
+            </a>
+          </samp> (<%= @computer_counts[version][tcv] %> total submissions)
         </li>
       <% end %>
     </ul>
@@ -58,7 +67,42 @@
   <hr>
 <% end %>
 
-<% if @failing_versions.empty? && @passing_versions.empty? && @mixed_versions.empty? %>
+<% if !@mixed_checksums_versions.empty? %>
+  <h2 style="color:rgb(78, 114, 219)">Mixed Checksums Revisions in Last 24 Hours</h2>
+  <% @mixed_checksums_versions.each do |version| %>
+    <h3>
+      <a style="color:rgb(78, 114, 219)" clicktracking=off href=<%= @version_links[version] %>>
+        <%= version %>
+      </a> (<%= "#{@computer_counts[version][:total]} " + "computer".pluralize(@computer_counts[version][:total]) %> tested to date)
+    </h3>
+    <ul>
+      <li> <b> Author: </b> <%= version.author %> </li>
+      <li> <b> Commit Message: </b> <%= version.log %> </li>
+      <li> <%= @case_counts[version] %> cases submitted </li>
+      <% @checksum_cases[version].each do |tcv| %>
+        <li>
+          <samp> 
+            <a style="color:rgb(78, 114, 219)" clicktracking=off href=<%= @case_links[version][tcv] %>>
+              <%= tcv.test_case.name %>
+            </a>
+          </samp> (<%= @computer_counts[version][tcv] %> submissions; <%= @checksum_counts[version][tcv] %> distinct checksums)
+        </li>
+      <% end %>
+      <% @failing_cases[version].each do |tcv| %>
+        <li>
+          <samp> 
+            <a style="color:rgb(204, 0, 0)" clicktracking=off href=<%= @case_links[version][tcv] %>>
+              <%= tcv.test_case.name %>
+            </a>
+          </samp> (<%= @computer_counts[version][tcv] %> total submissions)
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
+<% end %>
+
+
+<% if @failing_versions.empty? && @passing_versions.empty? && @mixed_versions.empty? && @mixed_checksums_versions.empty? %>
   <p>
     No tests were run in the last 24 hours. This e-mail serves to let you know
     that everything is running fine. Visit 
@@ -77,13 +121,13 @@
       <li> <b> Author: </b> <%= version.author %> </li>
       <li> <b> Commit Message: </b> <%= version.log %> </li>
       <li> <%= @case_counts[version] %> cases submitted </li>
-      <% @failing_cases[version].each do |test_case| %>
+      <% @failing_cases[version].each do |tcv| %>
         <li>
           <samp> 
-            <a style="color:rgb(204, 0, 0)" clicktracking=off href=<%= @case_links[version][test_case] %>>
-              <%= test_case.name %>
+            <a style="color:rgb(204, 0, 0)" clicktracking=off href=<%= @case_links[version][tcv] %>>
+              <%= tcv.test_case.name %>
             </a>
-          </samp> (<%= @computer_counts[version][test_case] %> total submissions)
+          </samp> (<%= @computer_counts[version][tcv] %> total submissions)
         </li>
       <% end %>
     </ul>

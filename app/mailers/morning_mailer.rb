@@ -18,10 +18,14 @@ class MorningMailer < ApplicationMailer
   def morning_email
     # first gather data from database; bail if there are no failure in the last
     # 24 hours
-    start_date = 1.day.ago
-    @failing_versions = TestInstance.failing_versions_since(start_date)
-    @passing_versions = TestInstance.passing_versions_since(start_date)
+    start_date = 10.days.ago
+    @versions_tested = Version.tested_between(start_date, DateTime.now)
+    @versions_tested.sort_by! { |version| -version.number }
     @mixed_versions = []
+    @mixed_checksums_versions = []
+    @failing_versions = []
+    @passing_versions = []
+    @other_versions = []
     @version_links = {}
     @computer_counts = {}
     @case_counts = {}
@@ -29,61 +33,108 @@ class MorningMailer < ApplicationMailer
     @mixed_cases = {}
     @pass_counts = {}
     @fail_counts = {}
+    @checksum_counts = {}
     @case_links = {}
-    unless @failing_versions.empty?
-      @failing_versions.each do |version|
-        @failing_cases[version] = TestInstance.failing_cases_since(start_date, version)
-        @version_links[version] = version_url(version.number)
-        @computer_counts[version] = {total: version.computers.uniq.length}
-        @case_links[version] = {}
-        @mixed_cases[version] = []
-        @pass_counts[version] = {}
-        @fail_counts[version] = {}
-      end
-      # ornery links from SendGrid... doing this the hard way
-      @failing_cases.each do |version, cases|
-        cases.uniq.each do |test_case|
-          @case_links[version][test_case] =
-            test_case_url(test_case, version: version.number)
-          @computer_counts[version][test_case] =
-            test_case.version_computers(version).uniq.count
 
-          # move mixed cases from @failing_cases to @mixed_cases
-          cases.select do |test_case|
-            test_case.version_status(version) == 2
-          end.each do |test_case|
-            # case is actually MIXED, so move to mixed_cases hash
-            @mixed_cases[version].append(test_case)
-            @failing_cases[version].delete(test_case)
-            @pass_counts[version][test_case] = test_case.test_instances.where(
-              version: version, passed: true
-            ).count
-            @fail_counts[version][test_case] = test_case.test_instances.where(
-              version: version, passed: false
-            ).count
-          end
-        end
-        @case_counts[version] = version.test_cases.uniq.count
-        unless @mixed_cases[version].empty?
-          @mixed_versions.append(version)
+    @versions_tested.each do |version|
+      case version.status
+      when 3 then @mixed_versions.append(version)
+      when 2 then @mixed_checksums_versions.append(version)
+      when 1 then @failing_versions.append(version)
+      when 0 then @passing_versions.append(version)
+      else
+        @other_versions.append(version)
+      end
+      @failing_cases[version] = version.test_case_versions.where(status: 1)
+      @checksum_cases[version] = version.test_case_versions.where(status: 2)
+      @mixed_cases[version] = version.test_case_versions.where(status: 3)
+
+      @version_links[version] = version_url(version.number)
+      @case_counts[version] = version.test_case_versions.count
+      @computer_counts[version] = {total: version.computers_count}
+      @pass_counts[version] = {}
+      @fail_counts[version] = {}
+      @case_links[version] = {}
+
+      version.test_case_versions.each do |tcv|
+        @pass_counts[version][tcv] = tcv.test_instances.where(passed: true).count
+        @fail_counts[version][tcv] = tcv.test_instances.where(passed: false).count
+        @computer_counts[version][tcv] = tcv.computer_count
+        @case_links[version][tcv] = test_case_version_url(version.number, tcv.test_case.name)
+        # this has to do another database hit, so only do it if we need to
+        if tcv.stats >= 2
+          # total number of distinct non-nil, non-empty checksum strings
+          @checksum_counts[version][tcv] = tcv.test_instances.pluck(&:checksum)
+            .reject(&:nil?).reject(&:empty?).uniq.count
         end
       end
-      # throw mixed versions out so they don't appear twice
-      @failing_versions.reject! { |version| @mixed_versions.include? version}
-    end
 
-    unless @passing_versions.empty?
-      @passing_versions.each do |version|
-        @version_links[version] = version_url(version.number)
-        @computer_counts[version] = {total: version.computers.uniq.count}
-        @case_counts[version] = version.test_cases.uniq.count
-      end
-    end
+    # @failing_versions = TestInstance.failing_versions_since(start_date)
+    # @passing_versions = TestInstance.passing_versions_since(start_date)
+    # @mixed_versions = []
+    # @version_links = {}
+    # @computer_counts = {}
+    # @case_counts = {}
+    # @failing_cases = {}
+    # @mixed_cases = {}
+    # @pass_counts = {}
+    # @fail_counts = {}
+    # @case_links = {}
+
+    # unless @failing_versions.empty?
+    #   @failing_versions.each do |version|
+    #     @failing_cases[version] = TestInstance.failing_cases_since(start_date, version)
+    #     @version_links[version] = version_url(version.number)
+    #     @computer_counts[version] = {total: version.computers.uniq.length}
+    #     @case_links[version] = {}
+    #     @mixed_cases[version] = []
+    #     @pass_counts[version] = {}
+    #     @fail_counts[version] = {}
+    #   end
+    #   # ornery links from SendGrid... doing this the hard way
+    #   @failing_cases.each do |version, cases|
+    #     cases.uniq.each do |test_case|
+    #       @case_links[version][test_case] =
+    #         test_case_url(test_case, version: version.number)
+    #       @computer_counts[version][test_case] =
+    #         test_case.version_computers(version).uniq.count
+
+    #       # move mixed cases from @failing_cases to @mixed_cases
+    #       cases.select do |test_case|
+    #         test_case.version_status(version) == 2
+    #       end.each do |test_case|
+    #         # case is actually MIXED, so move to mixed_cases hash
+    #         @mixed_cases[version].append(test_case)
+    #         @failing_cases[version].delete(test_case)
+    #         @pass_counts[version][test_case] = test_case.test_instances.where(
+    #           version: version, passed: true
+    #         ).count
+    #         @fail_counts[version][test_case] = test_case.test_instances.where(
+    #           version: version, passed: false
+    #         ).count
+    #       end
+    #     end
+    #     @case_counts[version] = version.test_cases.uniq.count
+    #     unless @mixed_cases[version].empty?
+    #       @mixed_versions.append(version)
+    #     end
+    #   end
+    #   # throw mixed versions out so they don't appear twice
+    #   @failing_versions.reject! { |version| @mixed_versions.include? version}
+    # end
+
+    # unless @passing_versions.empty?
+    #   @passing_versions.each do |version|
+    #     @version_links[version] = version_url(version.number)
+    #     @computer_counts[version] = {total: version.computers.uniq.count}
+    #     @case_counts[version] = version.test_cases.uniq.count
+    #   end
+    # end
 
     # gather sender, recipient(s), subject, and body before composing email
     from = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    to = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    # to = Email.new(email: 'wmwolf@asu.edu', name: 'Bill Wolf')
+    # to = Email.new(email: 'mesa-developers@lists.mesastar.org')
+    to = Email.new(email: 'wmwolf@asu.edu', name: 'Bill Wolf')
     subject = "MesaTestHub Report #{Date.today}"
     # subject line shows latest failing version, if there is one
     # if !@failing_versions.empty?

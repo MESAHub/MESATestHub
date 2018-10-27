@@ -68,7 +68,7 @@ class TestCaseVersion < ApplicationRecord
     # if all are passing, insure that checksums match
     if self.status == @@status_encoder[:passing]
       # collect unique non-nil checksums
-      checksums = test_instances.pluck(:checksum).uniq.reject(&:nil?)
+      checksums = test_instances.pluck(:checksum).uniq.reject(&:nil?).reject(&:empty?)
       # set to mixed checksums status if more than one distinct checksum
       # found
       self.status = @@status_encoder[:mixed_checksums] if checksums.count > 1
