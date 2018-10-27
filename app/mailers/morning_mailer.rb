@@ -56,6 +56,7 @@ class MorningMailer < ApplicationMailer
       @pass_counts[version] = {}
       @fail_counts[version] = {}
       @case_links[version] = {}
+      @checksum_counts[version] = {}
 
       version.test_case_versions.each do |tcv|
         @pass_counts[version][tcv] = tcv.test_instances.where(passed: true).count
