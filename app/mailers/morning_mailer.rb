@@ -63,7 +63,7 @@ class MorningMailer < ApplicationMailer
         @computer_counts[version][tcv] = tcv.computer_count
         @case_links[version][tcv] = test_case_version_url(version.number, tcv.test_case.name)
         # this has to do another database hit, so only do it if we need to
-        if tcv.stats >= 2
+        if tcv.status >= 2
           # total number of distinct non-nil, non-empty checksum strings
           @checksum_counts[version][tcv] = tcv.test_instances.pluck(&:checksum)
             .reject(&:nil?).reject(&:empty?).uniq.count
