@@ -71,6 +71,7 @@ class MorningMailer < ApplicationMailer
         end
       end
     end
+    puts @checksum_cases
 
     # @failing_versions = TestInstance.failing_versions_since(start_date)
     # @passing_versions = TestInstance.passing_versions_since(start_date)
