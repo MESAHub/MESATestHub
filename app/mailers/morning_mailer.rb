@@ -68,6 +68,7 @@ class MorningMailer < ApplicationMailer
             .reject(&:nil?).reject(&:empty?).uniq.count
         end
       end
+    end
 
     # @failing_versions = TestInstance.failing_versions_since(start_date)
     # @passing_versions = TestInstance.passing_versions_since(start_date)
