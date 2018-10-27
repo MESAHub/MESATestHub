@@ -71,7 +71,6 @@ class MorningMailer < ApplicationMailer
         end
       end
     end
-    puts @checksum_cases
 
     # @failing_versions = TestInstance.failing_versions_since(start_date)
     # @passing_versions = TestInstance.passing_versions_since(start_date)
@@ -161,7 +160,9 @@ class MorningMailer < ApplicationMailer
                  fail_counts: @fail_counts, pass_counts: @pass_counts,
                  computer_counts: @computer_counts, case_counts: @case_counts,
                  host: @host, root_url: root_url, version_links: @version_links,
-                 case_links: @case_links }
+                 case_links: @case_links, checksum_cases: @checksum_cases, 
+                 mixed_checksums_versions: @mixed_checksums_versions,
+                 checksum_counts: @checksum_counts }
     )
     text_content = ApplicationController.render(
       template: 'morning_mailer/morning_email.text.erb',
@@ -173,7 +174,9 @@ class MorningMailer < ApplicationMailer
                  fail_counts: @fail_counts, pass_counts: @pass_counts,
                  computer_counts: @computer_counts, case_counts: @case_counts,
                  host: @host, root_url: root_url, version_links: @version_links,
-                 case_links: @case_links }
+                 case_links: @case_links, checksum_cases: @checksum_cases, 
+                 mixed_checksums_versions: @mixed_checksums_versions,
+                 checksum_counts: @checksum_counts }
     )
 
     # compose e-mail
