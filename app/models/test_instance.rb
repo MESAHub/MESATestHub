@@ -213,7 +213,8 @@ class TestInstance < ApplicationRecord
       # this one doesn't have status and other values set; this should
       # happen when `update_test_case_version` is called
       self.test_case_version = TestCaseVersion.create!(
-        version_id: version.id, test_case_id: test_case.id
+        version_id: version.id,
+        test_case_id: test_case.id
       )
     end
   end

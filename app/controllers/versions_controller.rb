@@ -207,7 +207,8 @@ class VersionsController < ApplicationController
 
   def submit_instance(ti_params, extra_params)
     # set up basic test instance
-    test_instance = @version.test_instances.build(ti_params)
+    test_instance = TestInstance.new(ti_params)
+    test_instance.version = @version
     test_instance.mesa_version = @version.number
 
     # set up associations
@@ -294,7 +295,7 @@ class VersionsController < ApplicationController
     instance_pair.require(:test_instance).permit(
       :runtime_seconds, :omp_num_threads, :compiler, :compiler_version,
       :platform_version, :passed, :failure_type, :success_type, :steps,
-      :retries, :backups, :summary_text, :diff)
+      :retries, :backups, :summary_text, :diff, :checksum)
   end
 
   def extra_params(instance_pair)
