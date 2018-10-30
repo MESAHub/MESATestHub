@@ -66,7 +66,7 @@ class MorningMailer < ApplicationMailer
         # this has to do another database hit, so only do it if we need to
         if tcv.status >= 2
           # total number of distinct non-nil, non-empty checksum strings
-          @checksum_counts[version][tcv] = tcv.test_instances.pluck(&:checksum).uniq.reject(&:nil?).reject(&:empty?).count
+          @checksum_counts[version][tcv] = tcv.unique_checksum_count
         end
       end
     end
