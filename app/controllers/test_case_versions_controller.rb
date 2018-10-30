@@ -29,7 +29,7 @@ class TestCaseVersionsController < ApplicationController
     end
 
     @encoder = TestInstance.assign_checksum_shortcuts(@test_case_version.test_instances)
-    @unique_checksum_count = @test_case_version.test_instances.pluck(:checksum).uniq.reject(&:nil?).reject(&:empty?).count
+    @unique_checksum_count = @test_case_version.unique_checksum_count
 
     # text and class for last version test status
     @version_status, @version_class = passing_status_and_class
