@@ -4,13 +4,20 @@
     %h3{class: @compilation_class}= @compilation_text
     %h3{class: @status_class}= @status_text
 .row
-  .col-lg-4.col-md-5.col-xs-12
+  .col-lg-5.col-md-8.col-xs-12
     %h4 Computers Tested:
     %ul
       - @specs.each do |spec, comps|
-        %li= "#{spec}: #{comps.join(', ')}"
-  .col-lg-4.col-md-7.col-xs-12
-    %h4 Change MESA Version
+        %li
+          ="#{spec}: "
+          -comps.each do |comp|
+            =link_to(comp.name, user_computer_path(comp.user, comp))
+            (
+            %a{href: user_path(comp.user)}><
+              =comp.user.name
+            )
+  .col-lg-3.col-md-4.col-xs-12
+    %h4 MESA Version
     %form{action: '/show_version', class: 'form-inline'}
       -# .col-auto.col-form-label.align-middle
       -#   =label_tag "number", 'MESA version: ', class: 'control-label form-control-lg'

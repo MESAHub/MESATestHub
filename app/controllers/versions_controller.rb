@@ -41,7 +41,7 @@ class VersionsController < ApplicationController
                       else
                         @selected.to_i
                       end
-    @version = Version.includes(test_case_versions: [:test_case]).find_by(number: @version_number)
+    @version = Version.includes(test_case_versions: [:test_case, test_instances: {computer: :user}]).find_by(number: @version_number)
 
     @test_case_versions = [@version.other, @version.mixed, @version.checksums,
                            @version.failing, @version.passing].flatten

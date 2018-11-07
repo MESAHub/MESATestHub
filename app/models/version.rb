@@ -101,7 +101,7 @@ class Version < ApplicationRecord
     test_instances.each do |instance|
       spec = instance.computer_specification
       specs[spec] = [] unless specs.include?(spec)
-      specs[spec] << instance.computer_name
+      specs[spec] << instance.computer
     end
     specs.each_value(&:uniq!)
     specs

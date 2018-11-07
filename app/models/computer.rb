@@ -25,4 +25,8 @@ class Computer < ApplicationRecord
     return if creator.admin? || (creator.id == user_id)
     errors.add(:user, 'must be current user unless you are an admin.')
   end
+
+  def to_s
+    self.name
+  end
 end
