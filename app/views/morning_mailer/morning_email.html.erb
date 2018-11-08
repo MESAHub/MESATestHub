@@ -50,7 +50,7 @@
             <a style="color:rgb(78, 114, 219)" clicktracking=off href=<%= @case_links[version][tcv] %>>
               <%= tcv.test_case.name %>
             </a>
-          </samp> (<%= @computer_counts[version][tcv] %> computers; <%= @checksum_counts[version][tcv] %> distinct checksums)
+          </samp> (<%= @computer_counts[version][tcv] %> computers; multiple distinct checksums)
         </li>
       <% end %>      
       <% @failing_cases[version].each do |tcv| %>
@@ -85,7 +85,7 @@
             <a style="color:rgb(78, 114, 219)" clicktracking=off href=<%= @case_links[version][tcv] %>>
               <%= tcv.test_case.name %>
             </a>
-          </samp> (<%= @computer_counts[version][tcv] %> computers; <%= @checksum_counts[version][tcv] %> distinct checksums)
+          </samp> (<%= @computer_counts[version][tcv] %> computers; multiple distinct checksums)
         </li>
       <% end %>
       <% @failing_cases[version].each do |tcv| %>
