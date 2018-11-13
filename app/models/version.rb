@@ -97,13 +97,24 @@ class Version < ApplicationRecord
   end
 
   def computer_specs
+    # special call that collects a version's test instances and groups them
+    # by unique combinations of computer and computer specificaiton, and
+    # ONLY gathers that information
+    tis = TestInstance.where(version_id: id)
+                      .select('computer_id, computer_specification')
+                      .group('computer_id, computer_specification')
+    # now build up a dictionary that maps one specificaiton to a list of
+    # computers (multiple computers may have the same spec, though in practice,
+    # it's rare)
     specs = {}
-    test_instances.each do |instance|
-      spec = instance.computer_specification
-      specs[spec] = [] unless specs.include?(spec)
-      specs[spec] << instance.computer
+    tis.each do |ti|
+      specs[ti.computer_specification] = 
+        (specs[ti.computer_specification] || []) + [ti.computer_id]
     end
-    specs.each_value(&:uniq!)
+    # convert to Computer objects instead of ids
+    specs.keys.each do |spec|
+      specs[spec] = Computer.find(specs[spec])
+    end
     specs
   end
 

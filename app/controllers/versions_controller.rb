@@ -49,9 +49,7 @@ class VersionsController < ApplicationController
     @specs = @version.computer_specs
     @statistics = @version.statistics
 
-
     status, @pass_count, @fail_count, @mix_count, @checksum_count, @other_count = @version.summary_status
-
 
     @version_status = case status
                       when 0 then :passing
