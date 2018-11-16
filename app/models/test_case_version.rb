@@ -30,6 +30,14 @@ class TestCaseVersion < ApplicationRecord
     save
   end
 
+  def unique_checksums
+    self.test_instances.pluck(:checksum).uniq.reject(&:nil?).reject(&:empty?)
+  end
+
+  def unique_checksum_count
+    unique_checksums.count
+  end
+
   def update_submission_count
     self.submission_count = test_instances.count
   end

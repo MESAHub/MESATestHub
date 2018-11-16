@@ -66,7 +66,7 @@ class MorningMailer < ApplicationMailer
         # this has to do another database hit, so only do it if we need to
         if tcv.status >= 2
           # total number of distinct non-nil, non-empty checksum strings
-          @checksum_counts[version][tcv] = tcv.test_instances.pluck(&:checksum).uniq.reject(&:nil?).reject(&:empty?).count
+          @checksum_counts[version][tcv] = tcv.unique_checksum_count
         end
       end
     end
@@ -159,7 +159,7 @@ class MorningMailer < ApplicationMailer
                  fail_counts: @fail_counts, pass_counts: @pass_counts,
                  computer_counts: @computer_counts, case_counts: @case_counts,
                  host: @host, root_url: root_url, version_links: @version_links,
-                 case_links: @case_links, checksum_cases: @checksum_cases, 
+                 case_links: @case_links, checksum_cases: @checksum_cases,
                  mixed_checksums_versions: @mixed_checksums_versions,
                  checksum_counts: @checksum_counts }
     )
@@ -173,7 +173,7 @@ class MorningMailer < ApplicationMailer
                  fail_counts: @fail_counts, pass_counts: @pass_counts,
                  computer_counts: @computer_counts, case_counts: @case_counts,
                  host: @host, root_url: root_url, version_links: @version_links,
-                 case_links: @case_links, checksum_cases: @checksum_cases, 
+                 case_links: @case_links, checksum_cases: @checksum_cases,
                  mixed_checksums_versions: @mixed_checksums_versions,
                  checksum_counts: @checksum_counts }
     )
