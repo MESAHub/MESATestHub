@@ -21,55 +21,92 @@ class MorningMailer < ApplicationMailer
     start_date = 1.day.ago
     @versions_tested = Version.tested_between(start_date, DateTime.now)
     @versions_tested.sort_by! { |version| -version.number }
-    @mixed_versions = []
-    @mixed_checksums_versions = []
-    @failing_versions = []
-    @passing_versions = []
-    @other_versions = []
-    @version_links = {}
-    @computer_counts = {}
-    @case_counts = {}
-    @failing_cases = {}
-    @mixed_cases = {}
-    @checksum_cases = {}
-    @pass_counts = {}
-    @fail_counts = {}
-    @checksum_counts = {}
-    @case_links = {}
-
-    @versions_tested.each do |version|
-      case version.status
-      when 3 then @mixed_versions.append(version)
-      when 2 then @mixed_checksums_versions.append(version)
-      when 1 then @failing_versions.append(version)
-      when 0 then @passing_versions.append(version)
-      else
-        @other_versions.append(version)
-      end
-      @failing_cases[version] = version.test_case_versions.where(status: 1).to_a
-      @checksum_cases[version] = version.test_case_versions.where(status: 2).to_a
-      @mixed_cases[version] = version.test_case_versions.where(status: 3).to_a
-
-      @version_links[version] = version_url(version.number)
-      @case_counts[version] = version.test_case_versions.count
-      @computer_counts[version] = {total: version.computers_count}
-      @pass_counts[version] = {}
-      @fail_counts[version] = {}
-      @case_links[version] = {}
-      @checksum_counts[version] = {}
-
+    @version_data = @versions_tested.map do |version|
+      res = {
+        version: version,
+        status: :unknown,
+        link: version_url(version.number),
+        case_count: version.test_case_versions.count,
+        computer_count: { total: version.computers_count },
+        failing_cases: version.test_case_versions.where(status: 1).to_a,
+        checksum_cases: version.test_case_versions.where(status: 2).to_a,
+        mixed_cases: version.test_case_versions.where(status: 3).to_a,
+        case_links: {},
+        pass_counts: {},
+        fail_counts: {},
+        checksum_counts: {}
+      }
+      res[:status] = if res[:mixed_cases].count.positive?
+                       :mixed
+                     elsif res[:checksum_cases].count.positive?
+                       :checksum
+                     elsif res[:failing_cases].count.positive?
+                       :failing
+                     else
+                       :other
+                     end
       version.test_case_versions.each do |tcv|
-        @pass_counts[version][tcv] = tcv.test_instances.where(passed: true).count
-        @fail_counts[version][tcv] = tcv.test_instances.where(passed: false).count
-        @computer_counts[version][tcv] = tcv.computer_count
-        @case_links[version][tcv] = test_case_version_url(version.number, tcv.test_case.name)
-        # this has to do another database hit, so only do it if we need to
+        res[:computer_counts][tcv] = tcv.computer_count
+        res[:pass_counts][tcv] = tcv.test_instances.where(passed: true).count
+        res[:fail_counts][tcv] = tcv.test_instances.where(passed: false).count
         if tcv.status >= 2
-          # total number of distinct non-nil, non-empty checksum strings
-          @checksum_counts[version][tcv] = tcv.unique_checksum_count
+          res[:checksum_counts][tcv] = tcv.unique_checksum_count
         end
+        res[:case_links][tcv] = test_case_version_url(
+          version.number, tcv.test_case.name
+        )
       end
+      res
     end
+    # @mixed_versions = []
+    # @mixed_checksums_versions = []
+    # @failing_versions = []
+    # @passing_versions = []
+    # @other_versions = []
+    # @version_links = {}
+    # @computer_counts = {}
+    # @case_counts = {}
+    # @failing_cases = {}
+    # @mixed_cases = {}
+    # @checksum_cases = {}
+    # @pass_counts = {}
+    # @fail_counts = {}
+    # @checksum_counts = {}
+    # @case_links = {}
+
+    # @versions_tested.each do |version|
+    #   case version.status
+    #   when 3 then @mixed_versions.append(version)
+    #   when 2 then @mixed_checksums_versions.append(version)
+    #   when 1 then @failing_versions.append(version)
+    #   when 0 then @passing_versions.append(version)
+    #   else
+    #     @other_versions.append(version)
+    #   end
+    #   @failing_cases[version] = version.test_case_versions.where(status: 1).to_a
+    #   @checksum_cases[version] = version.test_case_versions.where(status: 2).to_a
+    #   @mixed_cases[version] = version.test_case_versions.where(status: 3).to_a
+
+    #   @version_links[version] = version_url(version.number)
+    #   @case_counts[version] = version.test_case_versions.count
+    #   @computer_counts[version] = {total: version.computers_count}
+    #   @pass_counts[version] = {}
+    #   @fail_counts[version] = {}
+    #   @case_links[version] = {}
+    #   @checksum_counts[version] = {}
+
+    #   version.test_case_versions.each do |tcv|
+    #     @pass_counts[version][tcv] = tcv.test_instances.where(passed: true).count
+    #     @fail_counts[version][tcv] = tcv.test_instances.where(passed: false).count
+    #     @computer_counts[version][tcv] = tcv.computer_count
+    #     @case_links[version][tcv] = test_case_version_url(version.number, tcv.test_case.name)
+    #     # this has to do another database hit, so only do it if we need to
+    #     if tcv.status >= 2
+    #       # total number of distinct non-nil, non-empty checksum strings
+    #       @checksum_counts[version][tcv] = tcv.unique_checksum_count
+    #     end
+    #   end
+    # end
 
     # @failing_versions = TestInstance.failing_versions_since(start_date)
     # @passing_versions = TestInstance.passing_versions_since(start_date)
@@ -152,31 +189,32 @@ class MorningMailer < ApplicationMailer
     html_content = ApplicationController.render(
       template: 'morning_mailer/morning_email.html.erb',
       layout: 'mailer',
-      assigns: { failing_versions: @failing_versions,
-                 passing_versions: @passing_versions,
-                 mixed_versions: @mixed_versions,
-                 failing_cases: @failing_cases, mixed_cases: @mixed_cases,
-                 fail_counts: @fail_counts, pass_counts: @pass_counts,
-                 computer_counts: @computer_counts, case_counts: @case_counts,
-                 host: @host, root_url: root_url, version_links: @version_links,
-                 case_links: @case_links, checksum_cases: @checksum_cases,
-                 mixed_checksums_versions: @mixed_checksums_versions,
-                 checksum_counts: @checksum_counts }
+      # assigns: { failing_versions: @failing_versions,
+      #            passing_versions: @passing_versions,
+      #            mixed_versions: @mixed_versions,
+      #            failing_cases: @failing_cases, mixed_cases: @mixed_cases,
+      #            fail_counts: @fail_counts, pass_counts: @pass_counts,
+      #            computer_counts: @computer_counts, case_counts: @case_counts,
+      #            host: @host, root_url: root_url, version_links: @version_links,
+      #            case_links: @case_links, checksum_cases: @checksum_cases,
+      #            mixed_checksums_versions: @mixed_checksums_versions,
+      #            checksum_counts: @checksum_counts }
+      assigns: { version_data => @version_data }
     )
-    text_content = ApplicationController.render(
-      template: 'morning_mailer/morning_email.text.erb',
-      layout: 'mailer',
-      assigns: { failing_versions: @failing_versions,
-                 passing_versions: @passing_versions,
-                 mixed_versions: @mixed_versions,
-                 failing_cases: @failing_cases, mixed_cases: @mixed_cases,
-                 fail_counts: @fail_counts, pass_counts: @pass_counts,
-                 computer_counts: @computer_counts, case_counts: @case_counts,
-                 host: @host, root_url: root_url, version_links: @version_links,
-                 case_links: @case_links, checksum_cases: @checksum_cases,
-                 mixed_checksums_versions: @mixed_checksums_versions,
-                 checksum_counts: @checksum_counts }
-    )
+    # text_content = ApplicationController.render(
+    #   template: 'morning_mailer/morning_email.text.erb',
+    #   layout: 'mailer',
+    #   assigns: { failing_versions: @failing_versions,
+    #              passing_versions: @passing_versions,
+    #              mixed_versions: @mixed_versions,
+    #              failing_cases: @failing_cases, mixed_cases: @mixed_cases,
+    #              fail_counts: @fail_counts, pass_counts: @pass_counts,
+    #              computer_counts: @computer_counts, case_counts: @case_counts,
+    #              host: @host, root_url: root_url, version_links: @version_links,
+    #              case_links: @case_links, checksum_cases: @checksum_cases,
+    #              mixed_checksums_versions: @mixed_checksums_versions,
+    #              checksum_counts: @checksum_counts }
+    # )
 
     # compose e-mail
     email = Mail.new
@@ -187,7 +225,7 @@ class MorningMailer < ApplicationMailer
     email.add_personalization(per)
 
     # due to SendGrid weirdness, plain text MUST come first or it won't send
-    email.add_content(Content.new(type: 'text/plain', value: text_content))
+    # email.add_content(Content.new(type: 'text/plain', value: text_content))
     email.add_content(Content.new(type: 'text/html', value: html_content))
 
     # send the message
