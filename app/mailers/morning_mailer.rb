@@ -46,10 +46,12 @@ class MorningMailer < ApplicationMailer
       }
       version.test_case_versions.each do |tcv|
         res[:computer_counts][tcv] = tcv.computer_count
-        res[:pass_counts][tcv] = tcv.test_instances.where(passed: true).count
-        res[:fail_counts][tcv] = tcv.test_instances.where(passed: false).count
         if tcv.status >= 2
           res[:checksum_counts][tcv] = tcv.unique_checksum_count
+        end
+        if tcv.status >= 3
+          res[:pass_counts][tcv] = tcv.test_instances.where(passed: true).count
+          res[:fail_counts][tcv] = tcv.test_instances.where(passed: false).count
         end
         res[:case_links][tcv] = test_case_version_url(
           version.number, tcv.test_case.name

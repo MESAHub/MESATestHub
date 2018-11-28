@@ -25,7 +25,7 @@
           <a <%=@make_yellow%> clicktracking=off href=<%= data[:case_links][tcv] %>>
             <%= tcv.test_case.name %>
           </a> 
-        </samp> (<b>Failures: </b> <%= data[:fail_counts][tcv] %>; <b> Successes: </b> <%= data[:pass_counts][tcv]%>)
+        </samp> (<b>Failures: </b> <%= data[:fail_counts][tcv].to_s %>; <b> Successes: </b> <%= data[:pass_counts][tcv].to_s%>)
       </li>
     <%end%>
     <% data[:checksum_cases].each do |tcv| %>
@@ -34,7 +34,7 @@
           <a <%=@make_blue%> clicktracking=off href=<%= data[:case_links][tcv] %>>
             <%= tcv.test_case.name %>
           </a> 
-        </samp> (<%= data[:computer_counts][tcv] + ' ' + 'computer'.pluralize(data[:computer_counts][tcv])%> computers; multiple distinct checksums)
+        </samp> (<%= data[:computer_counts][tcv].to_s + ' ' + 'computer'.pluralize(data[:computer_counts][tcv])%> computers; multiple distinct checksums)
       </li>
     <%end%>
     <% data[:failing_cases].each do |tcv| %>
@@ -43,7 +43,7 @@
           <a <%=@make_red%> clicktracking=off href=<%= data[:case_links][tcv] %>>
             <%= tcv.test_case.name %>
           </a> 
-        </samp> (<%= data[:computer_counts][tcv] + ' ' + 'computer'.pluralize(data[:computer_counts][tcv])%>)
+        </samp> (<%= data[:computer_counts][tcv].to_s + ' ' + 'computer'.pluralize(data[:computer_counts][tcv])%>)
       </li>
     <%end%>
   </ul>
