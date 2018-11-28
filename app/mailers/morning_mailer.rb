@@ -21,7 +21,8 @@ class MorningMailer < ApplicationMailer
     start_date = 1.day.ago
     @versions_tested = Version.tested_between(start_date, DateTime.now)
     @versions_tested.sort_by! { |version| -version.number }
-    @version_data = @versions_tested.map do |version|
+    @version_data = {}
+    @versions_tested.each do |version|
       res = {
         version: version,
         status: case version.status
@@ -54,7 +55,7 @@ class MorningMailer < ApplicationMailer
           version.number, tcv.test_case.name
         )
       end
-      res
+      @version_data[version] = res
     end
     @make_green = "style='color: rgb(0, 153, 51)'"
     @make_yellow = "style= 'color: rgb(255, 153, 0)'"
