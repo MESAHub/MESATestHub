@@ -12,7 +12,7 @@ class Version < ApplicationRecord
   paginates_per 25
 
   def self.tested_between(start_date, stop_date=DateTime.now)
-    Version.includes(test_case_versions: :test_case).find(
+    Version.includes(test_case_versions: [:test_case, :test_instances]).find(
       TestCaseVersion.where(last_tested: start_date..stop_date).pluck(:version_id).uniq
     )
   end
