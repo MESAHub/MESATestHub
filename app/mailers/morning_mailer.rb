@@ -18,7 +18,7 @@ class MorningMailer < ApplicationMailer
   def morning_email
     # first gather data from database; bail if there are no failure in the last
     # 24 hours
-    start_date = 1.day.ago
+    start_date = 10.day.ago
     @versions_tested = Version.tested_between(start_date, DateTime.now)
     @versions_tested.sort_by! { |version| -version.number }
     @version_data = {}
