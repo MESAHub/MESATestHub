@@ -57,10 +57,10 @@ class MorningMailer < ApplicationMailer
       end
       @version_data[version] = res
     end
-    @make_green = "style='color: rgb(0, 153, 51)'"
-    @make_yellow = "style= 'color: rgb(255, 153, 0)'"
-    @make_blue = "style= 'color: rgb(78, 114, 219)'"
-    @make_red = "style='color: rgb(204, 0, 0)'"
+    @make_green = "style='color: rgb(0, 153, 51)'".html_safe
+    @make_yellow = "style= 'color: rgb(255, 153, 0)'".html_safe
+    @make_blue = "style= 'color: rgb(78, 114, 219)'".html_safe
+    @make_red = "style='color: rgb(204, 0, 0)'".html_safe
 
     # @mixed_versions = []
     # @mixed_checksums_versions = []
