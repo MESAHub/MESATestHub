@@ -1,18 +1,18 @@
 <% @versions_tested.each do |version| %>
   <% data = @version_data[version] %>
-  <% if data[:status] == :passing %>
-    <h3 <%=@make_green%>>
-  <% elsif data[:status] == :mixed %>
-    <h3 <%=@make_yellow%>>
-  <% elsif data[:status] == :checksums %>
-    <h3 <%=@make_blue%>>
-  <% elsif data[:status] == :failing %>
-    <h3 <%=@make_red%>>
-  <% else %>
-    <h3>
-  <%end%>
-    <a clicktracking=off href=<%= data[:link] %>>
-        <%= version %>
+  <h3>
+    <% if data[:status] == :passing %>
+      <a clicktracking=off href=<%= data[:link] %> <%=@make_green%>>
+    <% elsif data[:status] == :mixed %>
+      <a clicktracking=off href=<%= data[:link] %> <%=@make_yellow%>>
+    <% elsif data[:status] == :checksums %>
+      <a clicktracking=off href=<%= data[:link] %> <%=@make_blue%>>
+    <% elsif data[:status] == :failing %>
+      <a clicktracking=off href=<%= data[:link] %> <%=@make_red%>>
+    <% else %>
+      <a clicktracking=off href=<%= data[:link] %>>
+    <%end%>
+      <%= version %>
     </a> (<%= "#{data[:computer_counts][:total]} " + "computer".pluralize(data[:computer_counts][:total])%> tested to date)
   </h3>
   <ul>
