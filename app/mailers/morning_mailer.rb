@@ -18,7 +18,7 @@ class MorningMailer < ApplicationMailer
   def morning_email
     # first gather data from database; bail if there are no failure in the last
     # 24 hours
-    start_date = 10.day.ago
+    start_date = 1.day.ago
     @versions_tested = Version.tested_between(start_date, DateTime.now)
     @versions_tested.sort_by! { |version| -version.number }
     @version_data = {}
@@ -178,8 +178,8 @@ class MorningMailer < ApplicationMailer
 
     # gather sender, recipient(s), subject, and body before composing email
     from = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    # to = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    to = Email.new(email: 'wmwolf@asu.edu', name: 'Bill Wolf')
+    to = Email.new(email: 'mesa-developers@lists.mesastar.org')
+    # to = Email.new(email: 'wmwolf@asu.edu', name: 'Bill Wolf')
     subject = "MesaTestHub Report #{Date.today}"
     # subject line shows latest failing version, if there is one
     # if !@failing_versions.empty?
