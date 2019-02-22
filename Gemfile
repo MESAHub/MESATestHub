@@ -44,7 +44,7 @@ group :development do
   gem 'spring-watcher-listen', '~> 2.0.0'
 end
 gem 'tzinfo-data', platforms: [:mingw, :mswin, :x64_mingw, :jruby]
-gem 'bootstrap', '~> 4.1.2'
+gem 'bootstrap', '~> 4.1.3'
 gem 'bootstrap_form'
 gem 'haml', '~> 5.0.4'
 gem 'haml-rails'
