@@ -109,11 +109,6 @@ GEM
     erubi (1.8.0)
     erubis (2.7.0)
     execjs (2.7.0)
-    factory_girl (4.9.0)
-      activesupport (>= 3.0.0)
-    factory_girl_rails (4.9.0)
-      factory_girl (~> 4.9.0)
-      railties (>= 3.0.0)
     faker (1.9.3)
       i18n (>= 0.7)
     ffi (1.10.0)
@@ -374,13 +369,13 @@ DEPENDENCIES
   better_errors
   bootstrap (~> 4.3.1)
   bootstrap_form
+  bundler (~> 2.0.1)
   byebug
   capybara (~> 2.13)
   coffee-rails (~> 4.2)
   cucumber-rails
   cucumber-rails-training-wheels
   database_cleaner
-  factory_girl_rails
   faker
   guard-bundler
   guard-cucumber
@@ -425,7 +420,7 @@ DEPENDENCIES
   web-console (>= 3.3.0)
 
 RUBY VERSION
-   ruby 2.5.1p57
+   ruby 2.6.1p33
 
 BUNDLED WITH
    2.0.1

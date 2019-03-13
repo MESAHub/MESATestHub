@@ -3,7 +3,8 @@ git_source(:github) do |repo_name|
   repo_name = "#{repo_name}/#{repo_name}" unless repo_name.include?("/")
   "https://github.com/#{repo_name}.git"
 end
-ruby '~> 2.4'
+ruby '~> 2.6.1'
+gem 'bundler', '~> 2.0.1'
 gem 'sinatra', '~> 2.0.2'
 gem 'rack', '~> 2.0.6'
 gem 'rails', '~> 5.1.6.2'
@@ -60,7 +61,7 @@ group :development do
   gem 'spring-commands-rspec'
 end
 group :development, :test do
-  gem 'factory_girl_rails'
+  # gem 'factory_girl_rails'
   gem 'faker'
   gem 'rspec-rails'
   gem 'sqlite3'
