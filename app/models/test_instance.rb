@@ -120,6 +120,30 @@ class TestInstance < ApplicationRecord
     test_data.where(name: name).order(updated_at: :desc).first.value = new_val
   end
 
+  def to_minutes(num)
+    num / 60.0
+  end
+
+  def kB_to_GB(mem_kB)
+    mem_kB / (1024**2)
+  end
+
+  def rn_time_minutes
+    to_minutes(rn_time)
+  end
+
+  def re_time_minutes
+    to_minutes(re_time)
+  end
+
+  def rn_mem_GB
+    kB_to_GB(rn_mem)
+  end
+
+  def re_mem_GB
+    kB_to_GB(re_mem)
+  end
+
   def set_computer_name(user, new_computer_name)
     new_computer = user.computers.where(name: new_computer_name).first
     if new_computer.nil?

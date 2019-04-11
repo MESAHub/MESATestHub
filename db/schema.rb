@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20181025192320) do
+ActiveRecord::Schema.define(version: 20190411213221) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -108,6 +108,10 @@ ActiveRecord::Schema.define(version: 20181025192320) do
     t.string "checksum"
     t.string "computer_name"
     t.string "computer_specification"
+    t.integer "rn_time"
+    t.integer "re_time"
+    t.integer "rn_mem"
+    t.integer "re_mem"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
     t.index ["mesa_version"], name: "index_test_instances_on_mesa_version"
     t.index ["test_case_id"], name: "index_test_instances_on_test_case_id"
