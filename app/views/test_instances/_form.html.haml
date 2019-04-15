@@ -66,6 +66,14 @@
           %h4 Optional Details
         .card-body
           .field
+            = f.number_field :rn_time, label: "Time spent in rn script"
+          .field
+            = f.number_field :re_time, label: "Time spent in re script"
+          .field
+            = f.number_field :rn_mem, label: "Maximum memory (in kB) used in rn script"
+          .field
+            = f.number_field :re_mem, label: "Maximum memory (in kB) used in re script"
+          .field
             = f.text_field :platform_version, label: "Platform version (e.g.  10.13 (for macOS) or Ubuntu 16.04 (for linux)"
           .field
             = f.text_field :compiler_version, label: "Compiler version (e.g. 7.0.2 or 20170921)"

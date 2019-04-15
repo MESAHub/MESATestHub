@@ -121,11 +121,20 @@ class TestInstance < ApplicationRecord
   end
 
   def to_minutes(num)
-    num / 60.0
+    num.to_f / 60.0
   end
 
   def kB_to_GB(mem_kB)
-    mem_kB / (1024**2)
+    mem_kB.to_f / (1024**2)
+  end
+
+  # alias for convenience and inconsistent naming (sorry)
+  def rn_time
+    runtime_seconds 
+  end
+
+  def total_runtime_minutes
+    to_minutes(total_runtime_seconds)
   end
 
   def rn_time_minutes

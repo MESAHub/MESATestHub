@@ -293,7 +293,8 @@ class VersionsController < ApplicationController
     instance_pair.require(:test_instance).permit(
       :runtime_seconds, :omp_num_threads, :compiler, :compiler_version,
       :platform_version, :passed, :failure_type, :success_type, :steps,
-      :retries, :backups, :summary_text, :diff, :checksum)
+      :retries, :backups, :summary_text, :diff, :checksum,
+      :total_runtime_seconds, :re_time, :rn_mem, :re_mem)
   end
 
   def extra_params(instance_pair)

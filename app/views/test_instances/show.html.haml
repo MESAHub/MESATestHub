@@ -17,8 +17,16 @@
       %b Date Submitted:
       = format_time(@test_instance.created_at)
     %p
-      %b Runtime:
+      %b rn Runtime:
       = @test_instance.runtime_seconds
+      seconds
+    %p
+      %b re Runtime:
+      = @test_instance.re_time
+      seconds
+    %p
+      %b Total Runtime:
+      = @test_instance.total_runtime_seconds
       seconds
     %p
       %b Diff:
@@ -41,6 +49,14 @@
     %p
       %b Threads:
       = @test_instance.omp_num_threads
+    %p
+      %b rn memory used:
+      -if @test_instance.rn_mem
+        = sprintf("%.2f", @test_instance.rn_mem_GB) + ' GB'
+    %p
+      %b re memory used:
+      -if @test_instance.re_mem
+        = sprintf("%.2f", @test_instance.re_mem_GB) + ' GB'
     %p
       %b Compiler:
       - if @test_instance.compiler.nil? 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20190411213221) do
+ActiveRecord::Schema.define(version: 20190415192153) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -108,7 +108,7 @@ ActiveRecord::Schema.define(version: 20190411213221) do
     t.string "checksum"
     t.string "computer_name"
     t.string "computer_specification"
-    t.integer "rn_time"
+    t.integer "total_runtime_seconds"
     t.integer "re_time"
     t.integer "rn_mem"
     t.integer "re_mem"
