@@ -1,5 +1,5 @@
 class TestInstancesController < ApplicationController
-  before_action :set_test_case, except: [:submit]
+  before_action :set_test_case, except: [:submit, :search]
   before_action :set_test_instance, only: %i[show edit update destroy]
   # set_user depends on @test_instance being set, so it can only be used
   # where set_test_instance has already been called.
@@ -25,6 +25,12 @@ class TestInstancesController < ApplicationController
     @passage_class = @test_instance.passed ? 'text-success' : 'text-danger'
     @passage_status = @test_instance.passage_status
     @self_or_admin = admin? || (@user && @user.id == current_user.id)
+  end
+
+  # GET /test_instances/search
+  # GET /test_instances/search.json
+  def 
+
   end
 
   # GET /test_instances/new
@@ -263,5 +269,14 @@ class TestInstancesController < ApplicationController
       :summary_text, :diff, :checksum, :total_runtime_seconds, :re_time,
       :rn_mem, :re_mem
     )
+  end
+
+  def search_params
+    params.require(:search_query).permit(
+      :test_case, :user, :computer, :version, :min_version, :max_version,
+      :platform, :platform_version, :rn_RAM_min, :rn_RAM_max, :re_RAM_min,
+      :re_RAM_max, :date, :date_min, :date_max, :rn_runtime_min,
+      :rn_runtime_max, :re_runtime_min, :re_runtime_max, :threads,
+      :threads_min, :threads_max, :compiler, :compiler_version)
   end
 end
