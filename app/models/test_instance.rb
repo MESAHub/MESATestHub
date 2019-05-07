@@ -95,7 +95,9 @@ class TestInstance < ApplicationRecord
   end
 
   def self.query(query_text)
-    test_case_ids = TestCase.find_by(name: query_text)
+    test_case_ids = query_text.split(',').map!(&:strip).inject([]) do |res, test_case|
+      res << TestCase.find_by(name: test_case)
+    end
 
     TestInstance.where(test_case: test_case_ids).includes(:computer, :version, :test_case)
   end
