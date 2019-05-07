@@ -32,7 +32,7 @@ Rails.application.routes.draw do
   post '/versions/submit_revision', to: 'versions#submit_revision'
 
   # searching test_instances (should work for remote JSON requests)
-  get '/test_instances/search' to: 'test_instances#search'
+  get '/test_instances/search', to: 'test_instances#search'
 
   get 'admin', to: 'users#admin', as: 'admin'
   get 'admin_edit_user', to: 'users#admin_edit_user', as: 'admin_edit_user'
