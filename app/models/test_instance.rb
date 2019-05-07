@@ -94,6 +94,12 @@ class TestInstance < ApplicationRecord
     encoder
   end
 
+  def self.query(query_text)
+    test_case_ids = TestCase.find_by(name: query_text)
+
+    TestInstance.where(test_case: test_case_ids).includes(:computer, :version, :test_case)
+  end
+
   def update_computer_name
     self.computer_name ||= computer.name
   end

@@ -29,9 +29,11 @@ class TestInstancesController < ApplicationController
 
   # GET /test_instances/search
   # GET /test_instances/search.json
-  def 
-
+  def search
+    # @test_instances = TestInstance.all.includes(:computer, :version, :test_case).page(params[:page])
+    @test_instances = TestInstance.query(params[:query_text])
   end
+
 
   # GET /test_instances/new
   def new
@@ -272,11 +274,11 @@ class TestInstancesController < ApplicationController
   end
 
   def search_params
-    params.require(:search_query).permit(
-      :test_case, :user, :computer, :version, :min_version, :max_version,
-      :platform, :platform_version, :rn_RAM_min, :rn_RAM_max, :re_RAM_min,
-      :re_RAM_max, :date, :date_min, :date_max, :rn_runtime_min,
+    params.permit(:search_query).permit(
+      :test_case, :passed, :user, :computer, :version, :min_version, 
+      :max_version, :platform, :platform_version, :rn_RAM_min, :rn_RAM_max,
+      :re_RAM_min, :re_RAM_max, :date, :date_min, :date_max, :rn_runtime_min,
       :rn_runtime_max, :re_runtime_min, :re_runtime_max, :threads,
-      :threads_min, :threads_max, :compiler, :compiler_version)
+      :threads_min, :threads_max, :compiler, :compiler_version, :query_text)
   end
 end
