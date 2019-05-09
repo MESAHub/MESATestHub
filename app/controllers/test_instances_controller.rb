@@ -31,7 +31,7 @@ class TestInstancesController < ApplicationController
   # GET /test_instances/search.json
   def search
     # @test_instances = TestInstance.all.includes(:computer, :version, :test_case).page(params[:page])
-    @test_instances = TestInstance.query(params[:query_text])
+    @test_instances = TestInstance.query(params[:query_text]) if params[:query_text]
   end
 
 

@@ -94,12 +94,109 @@ class TestInstance < ApplicationRecord
     encoder
   end
 
-  def self.query(query_text)
-    test_case_ids = query_text.split(',').map!(&:strip).inject([]) do |res, test_case|
-      res << TestCase.find_by(name: test_case)
+  def self.get_model_ids(value, model, attribute, method=:find_by)
+    if method == :find_by
+      model.find_by(attribute.to_sym => value)
+    elsif method == :where
+      model.where(attribute.to_sym => value).pluck(:id).uniq
+    end
+  end
+
+  class SearchOption
+    attr_reader :name
+    def initialize(this_name, this_model, this_attribute, &preprocessor)
+      @name = this_name
+      @model = this_model
+      @attribute = this_attribute
+      @has_preprocessor = block_given?
+      @preprocessor = preprocessor if @has_preprocessor
     end
 
-    TestInstance.where(test_case: test_case_ids).includes(:computer, :version, :test_case)
+    def parse_value(value)
+      range_matcher = /^\s*(?<min>[^-]+)-(?<max>[^-]+)$/
+      m2 = value.match(range_matcher)
+      if m2
+        # value is a range, so format query appropriately
+        if @has_preprocessor
+          @preprocessor.call(m2[:min])..@preprocessor.call(m2[:max])
+        else
+          m2[:min]..m2[:max]
+        end
+      else
+        if @has_preprocessor
+          value.split(',').map(&:strip).map(&@preprocessor)
+        else
+          value.split(',').map(&:strip)
+        end
+      end
+    end
+
+    def get_model_ids(value)
+      @model.where(@attribute.to_sym => parse_value(value)).pluck(:id).uniq
+    end
+
+    def query_piece(value)
+      if @model == TestInstance
+        # simple query on TestInstance#where
+        {@attribute.to_sym => parse_value(value)}
+      else
+        # if querying another model, need to convert to from MyModel to
+        # my_model_id for query
+        key = @model.to_s.gsub(/([A-Z])/, '_\1').gsub(/^_/, '').downcase +
+              '_id'
+        {key.to_sym => get_model_ids(value)}
+      end
+    end
+  end
+      
+
+
+  def self.query(query_text)
+    query_hash = {}
+    # see definition of SearchOption class above; this aids in efficiently
+    # building up the search query from many pre-defined searchable options.
+    options = [
+      SearchOption.new('test_case', TestCase, :name),
+      SearchOption.new('version', TestInstance, :mesa_version),
+      SearchOption.new('user', Computer, :user_id) do |user_name|
+        User.find_by_name(user_name)
+      end,
+      SearchOption.new('computer', self, :computer_name)
+    ]
+    option_names = options.map(&:name)
+    options_hash = Hash[option_names.zip(options)]
+    reconstructed_query = ''
+    failed_requirements = []
+    res = TestInstance.where(nil)
+    requirement_matcher = /^(?<key>[^:"']+):\s*("|')?(?<value>[^'"]+)("|')?$/
+    query_text.split(';').map(&:strip).each do |requirement|
+      puts "checking string #{requirement}"
+      m1 = requirement.match(requirement_matcher)
+      
+      unless m1 && option_names.include?(m1[:key])
+        # poorly formed query requirement; add to failure list to report back
+        # later
+        puts "didn't find any valid options"
+        failed_requirements << requirement
+        next
+      end
+      puts "found key: #{m1[:key]} and value: #{m1[:value]}"
+      query_hash[m1[:key]] = m1[:value]
+    end
+
+    # now have key-value pairs, values may be ranges. Reach out to each
+    # SearchOption to actually get query, and shove each into a where call.
+    # ActiveRecord is lazy and will compress these all into a single search
+    # when it is needed.
+    query_hash.each_pair do |key, value|
+      res = res.where(options_hash[key].query_piece(value))
+    end
+    res.includes(:test_case, :version, computer: :user)
+    # test_case_ids = query_text.split(',').map!(&:strip).inject([]) do |res, test_case|
+    #   res << TestCase.find_by(name: test_case)
+    # end
+
+    # TestInstance.where(test_case: test_case_ids).includes(:computer, :version, :test_case)
   end
 
   def update_computer_name
