@@ -1,0 +1,10 @@
+.row
+  .col
+    %h2 Search Test Instances 
+    =bootstrap_form_tag(url: '/test_instances/search', method: 'GET', layout: :horizontal) do |f|
+      =f.text_field :query_text, value: params[:query_text]
+      =f.submit 'Search'
+
+- unless @test_instances.nil? || @test_instances.empty?
+  = render 'search_table'
+  

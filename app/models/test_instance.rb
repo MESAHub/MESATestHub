@@ -76,7 +76,8 @@ class TestInstance < ApplicationRecord
   end
 
   def self.assign_checksum_shortcuts(test_instances)
-    unique_checksums = test_instances.to_a.map(&:checksum).reject(&:nil?).reject(&:empty?).uniq
+    unique_checksums = test_instances.to_a.map(&:checksum).reject(&:nil?).
+      reject(&:empty?).uniq
     # create names that are series of letters. Only make them as long as they 
     # need to be
     max_length = 1
@@ -102,6 +103,31 @@ class TestInstance < ApplicationRecord
     end
   end
 
+  # encapsulates turning a key-value pair to a valid search inquiry.
+  # name : string that is the key in a key-value pair for the search query
+  # model : the model that actually needs to be searched. Usually this will be 
+  #   `self` (TestInstance) when we want to search on attributes of 
+  #   TestInstances. Sometimes, though, the search is on an assoiated model.
+  #   For instance, searching on the user name. The user name is not stored
+  #   in the test instance, and it is not even an association, so instead we
+  #   have to search on the Computer associaiton for computers that belong to
+  #   a particular user, finds those computer ids, and then searches on the
+  #   [existing] attribute `computer_id`
+  # attribute : the actual attribute that gets searched in the model. Often
+  #   this is similar to the name, but sometimes its more esoteric, as in the
+  #   above example, where we have to search for user_id (which we have to find
+  #   by the preprocessor argument, see below). Searching for number of threads
+  #   (name: 'threads' requires searching on the omp_num_threads attribute.)
+  # preprocessor (optional) : a block that takes the input value from the 
+  #   search query, which is ALWAYS A STRING, and converts it into the value
+  #   that gets searched on in the model. ANY ATTRIBUTE THAT EXPECTS SOMETHING
+  #   OTHER THAN A STRING WILL NEED A PREPROCESSOR. For instance, the
+  #   preprocessor that searches on number of threads will necessarily convert
+  #   the input search value to an integer. Others are more complicated. For
+  #   instance, the user name search requires the preprocessor to convert a 
+  #   name to a user_id, since that is what we search on the Computer model
+  #   for. We do this by using User.find_by_name(), which does exactly the
+  #   conversion we want to do.
   class SearchOption
     attr_reader :name
     def initialize(this_name, this_model, this_attribute, &preprocessor)
@@ -113,7 +139,7 @@ class TestInstance < ApplicationRecord
     end
 
     def parse_value(value)
-      range_matcher = /^\s*(?<min>[^-]+)-(?<max>[^-]+)$/
+      range_matcher = /^\s*(?<min>[^-]+)\s*-\s*(?<max>[^-]+)$/
       m2 = value.match(range_matcher)
       if m2
         # value is a range, so format query appropriately
@@ -149,7 +175,25 @@ class TestInstance < ApplicationRecord
     end
   end
       
+  def self.parse_runtime(runtime_str)
+    # start with no time
+    hours = 0
+    minutes = 0
+    seconds = 0
+    m = runtime_str.strip.match(/(?<hours>\d+(\.\d+)?)\s*h+/i)
+    hours = m[:hours].to_f if m
+    m = runtime_str.strip.match(/(?<minutes>\d+(\.\d+)?)\s*m+/i)
+    minutes = m[:minutes].to_f if m
+    m = runtime_str.strip.match(/(?<seconds>\d+(\.\d+)?)\s*s+/i)
+    seconds = m[:seconds].to_f if m
+    if runtime_str.strip.match(/^\d+(\.\d+)?$/)
+      seconds = runtime_str.strip.to_f
+    end
 
+    # add up times
+    minutes += 60 * hours
+    seconds + 60 * minutes
+  end
 
   def self.query(query_text)
     query_hash = {}
@@ -157,11 +201,53 @@ class TestInstance < ApplicationRecord
     # building up the search query from many pre-defined searchable options.
     options = [
       SearchOption.new('test_case', TestCase, :name),
-      SearchOption.new('version', TestInstance, :mesa_version),
+      SearchOption.new('version', TestInstance, :mesa_version) do |number|
+        number.to_i 
+      end,
       SearchOption.new('user', Computer, :user_id) do |user_name|
         User.find_by_name(user_name)
       end,
-      SearchOption.new('computer', self, :computer_name)
+      SearchOption.new('computer', self, :computer_name),
+      # platforms are tied to the computer
+      SearchOption.new('platform', Computer, :platform),
+      SearchOption.new('platform_version', self, :platform_version),
+      # give memory usage in GB, convert to float, and then to kB (how it is in
+      # the database)
+      SearchOption.new('rn_RAM', self, :rn_mem) do |mem_GB|
+        mem_GB.to_f * (1024**2)
+      end,
+      SearchOption.new('re_RAM', self, :re_mem) do |mem_GB|
+        mem_GB.to_f * (1024**2)
+      end,
+      # runtimes in seconds. Note that runtime_seconds is also aliased to
+      # rn_time, so this is the right one
+      SearchOption.new('rn_runtime', self, :runtime_seconds) do |rn_runtime|
+        parse_runtime(rn_runtime)
+      end,
+      SearchOption.new('re_runtime', self, :re_time) do |re_runtime|
+        parse_runtime(re_runtime)
+      end,
+      SearchOption.new('runtime', self, :total_runtime_seconds) do |runtime|
+        parse_runtime(runtime)
+      end,
+      SearchOption.new('date', self, :created_at) do |datestring|
+        Date.parse(datestring)
+      end,
+      SearchOption.new('datetime', self, :created_at) do |datetimestring|
+        DateTime.parse(datetimestring)
+      end,
+      SearchOption.new('threads', self, :omp_num_threads) do |n_threads|
+        n_threads.to_i
+      end,
+      SearchOption.new('compiler', self, :compiler),
+      SearchOption.new('compiler_version', self, :compiler_version),
+      SearchOption.new('passed', self, :passed) do |passage_status|
+        if passage_status =~ /f$|false$/i
+          false
+        elsif passage_status =~ /t$|true$/i
+          true
+        end
+      end
     ]
     option_names = options.map(&:name)
     options_hash = Hash[option_names.zip(options)]
@@ -170,17 +256,17 @@ class TestInstance < ApplicationRecord
     res = TestInstance.where(nil)
     requirement_matcher = /^(?<key>[^:"']+):\s*("|')?(?<value>[^'"]+)("|')?$/
     query_text.split(';').map(&:strip).each do |requirement|
-      puts "checking string #{requirement}"
+      # puts "checking string #{requirement}"
       m1 = requirement.match(requirement_matcher)
       
       unless m1 && option_names.include?(m1[:key])
         # poorly formed query requirement; add to failure list to report back
         # later
-        puts "didn't find any valid options"
+        # puts "didn't find any valid options"
         failed_requirements << requirement
         next
       end
-      puts "found key: #{m1[:key]} and value: #{m1[:value]}"
+      # puts "found key: #{m1[:key]} and value: #{m1[:value]}"
       query_hash[m1[:key]] = m1[:value]
     end
 
@@ -191,12 +277,9 @@ class TestInstance < ApplicationRecord
     query_hash.each_pair do |key, value|
       res = res.where(options_hash[key].query_piece(value))
     end
-    res.includes(:test_case, :version, computer: :user)
-    # test_case_ids = query_text.split(',').map!(&:strip).inject([]) do |res, test_case|
-    #   res << TestCase.find_by(name: test_case)
-    # end
-
-    # TestInstance.where(test_case: test_case_ids).includes(:computer, :version, :test_case)
+    # res
+    return [res.order(mesa_version: :desc, created_at: :desc).
+      includes(:test_case, :version, computer: :user), failed_requirements]
   end
 
   def update_computer_name
@@ -370,7 +453,8 @@ class TestInstance < ApplicationRecord
   def method_missing(method_name, *args, &block)
     if test_case.data_names.include? method_name.to_s
       data(method_name.to_s)
-    elsif test_case.data_names.include? method_name.to_s.chomp('=') and args.length > 0
+    elsif (test_case.data_names.include? method_name.to_s.chomp('=') &&
+           args.length > 0)
       set_data(method_name.to_s.chomp('='), args[0])
     else
       super(method_name, *args, &block)
