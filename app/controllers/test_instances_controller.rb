@@ -1,5 +1,5 @@
 class TestInstancesController < ApplicationController
-  before_action :set_test_case, except: [:submit, :search]
+  before_action :set_test_case, except: [:submit, :search, :search_count]
   before_action :set_test_instance, only: %i[show edit update destroy]
   # set_user depends on @test_instance being set, so it can only be used
   # where set_test_instance has already been called.
@@ -46,12 +46,24 @@ class TestInstancesController < ApplicationController
         @show_instructions = @test_instances.nil?
       end
       format.json do
-        render json: {"results" => @test_instances,
-                      "failures" => failures}.to_json
+        if @test_instances
+          render json: {"results" => @test_instances,
+                        "failures" => failures}.to_json
+        else
+          render json: {"results" => [], "failures" => failures}.to_json
+        end
       end
     end
   end
 
+  def search_count
+    failures = []
+    @test_instances, failures = 
+      TestInstance.query(params[:query_text]) if params[:query_text]
+    respond_to do |format|
+      format.json { render json: @test_instances.count.to_json }
+    end
+  end
 
   # GET /test_instances/new
   def new

@@ -33,6 +33,8 @@ Rails.application.routes.draw do
 
   # searching test_instances (should work for remote JSON requests)
   get '/test_instances/search', to: 'test_instances#search', as: 'search_instances'
+  # just for counts; for API access only to prevent disastrous data dump
+  get '/test_instances/search_count', to: 'test_instances#search_count'
 
   get 'admin', to: 'users#admin', as: 'admin'
   get 'admin_edit_user', to: 'users#admin_edit_user', as: 'admin_edit_user'

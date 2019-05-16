@@ -450,7 +450,7 @@ class TestInstance < ApplicationRecord
   end
 
   # overridden to get user names, computer names, and other details
-  def to_json
+  def as_json(options)
     {
       test_case: test_case.name,
       version: mesa_version,
@@ -471,7 +471,7 @@ class TestInstance < ApplicationRecord
       compiler: compiler,
       compiler_version: compiler_version,
       summary_text: summary_text
-    }.to_json
+    }
   end
 
   # make test_data easier to access as if they were attributes
