@@ -449,6 +449,31 @@ class TestInstance < ApplicationRecord
     test_case_version.update_and_save_scalars
   end
 
+  # overridden to get user names, computer names, and other details
+  def to_json
+    {
+      test_case: test_case.name,
+      version: mesa_version,
+      passed: passed,
+      success_type: success_type,
+      failure_type: failure_type,
+      computer: computer_name,
+      user: computer.user.name,
+      datetime: created_at,
+      platform: computer.platform,
+      platform_version: platform_version,
+      rn_runtime: rn_time,
+      re_runtime: re_time,
+      runtime: total_runtime_seconds,
+      rn_mem: rn_mem_GB,
+      re_mem: re_mem_GB,
+      threads: omp_num_threads,
+      compiler: compiler,
+      compiler_version: compiler_version,
+      summary_text: summary_text
+    }.to_json
+  end
+
   # make test_data easier to access as if they were attributes
   def method_missing(method_name, *args, &block)
     if test_case.data_names.include? method_name.to_s

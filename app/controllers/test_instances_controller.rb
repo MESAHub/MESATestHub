@@ -34,11 +34,22 @@ class TestInstancesController < ApplicationController
     failures = []
     @test_instances, failures = 
       TestInstance.query(params[:query_text]) if params[:query_text]
-    @test_instances = @test_instances.page(params[:page]) if @test_instances
-    unless failures.empty?
-      flash[:warning] = 'Invalid search parameters: ' + failures.join(', ') + '.'
+    respond_to do |format|
+      format.html do
+        if @test_instances
+          @test_instances = @test_instances.page(params[:page])
+        end
+        unless failures.empty?
+          flash[:warning] = 'Invalid search parameters: ' + 
+                            failures.join(', ') + '.'
+        end
+        @show_instructions = @test_instances.nil?
+      end
+      format.json do
+        render json: {"results" => @test_instances,
+                      "failures" => failures}.to_json
+      end
     end
-    @show_instructions = @test_instances.nil?
   end
 
 
