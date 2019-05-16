@@ -112,6 +112,8 @@ GEM
     faker (1.9.3)
       i18n (>= 0.7)
     ffi (1.10.0)
+    font-awesome-rails (4.7.0.5)
+      railties (>= 3.2, < 6.1)
     formatador (0.2.5)
     gherkin (5.1.0)
     globalid (0.4.2)
@@ -377,6 +379,7 @@ DEPENDENCIES
   cucumber-rails-training-wheels
   database_cleaner
   faker
+  font-awesome-rails
   guard-bundler
   guard-cucumber
   guard-rails

@@ -17,3 +17,12 @@
 // Custom bootstrap variables must be set up or imported *before* bootstrap
 @import "_variables.scss";
 @import "bootstrap";
+@import "font-awesome";
+
+div.spacer {
+  height: 50px;
+}
+
+.hidden {
+  display: none;
+}

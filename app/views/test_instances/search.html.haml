@@ -1,10 +1,113 @@
 .row
   .col
-    %h2 Search Test Instances 
-    =bootstrap_form_tag(url: '/test_instances/search', method: 'GET', layout: :horizontal) do |f|
-      =f.text_field :query_text, value: params[:query_text]
-      =f.submit 'Search'
+    %h1 Search Test Instances 
+    .spacer
+    =bootstrap_form_tag(url: '/test_instances/search', method: 'GET') do |f|
+      .form-row.input-group
+        .col-md-9.col-12
+          =f.search_field :query_text, value: params[:query_text], class: 'form-control form-control-lg', hide_label: true, placeholder: "Enter Query Here"
+        .col-md-3.col-12
+          %span.input-group-btn
+            =f.submit 'Search', class: 'btn btn-lg btn-primary mb-2'
+    .spacer
+.row#instructions-head
+  %h2
+    Search Instructions
+    %a{href: "#"}
+      -if @show_instructions
+        =fa_icon "chevron-down", right:true, id:'instructions-toggle'
+      -else
+        =fa_icon "chevron-right", right:true, id:'instructions-toggle'
+
+%div{class: @show_instructions ? '' : 'initially-hidden', id: 'instructions-body'}
+  .row
+    .col-lg-4.col-md-6.col-12
+      %h4 Simple Queries
+      %p
+        Enter queries key-value pairs, with a colons separating key and value. For instance,
+
+      %p
+        %code user: Bill Wolf
+
+      %p
+        will return all test instances submitted by user <samp>Bill Wolf</samp>.
+    .col-lg-4.col-md-6.col-12
+      %h4 Compound Queries
+      %p
+        Multiple queries can be strung together by separating entire key-value pairs with semicolons. For example,
+
+      %p
+        %code user: Bill Wolf; version: 10000
+
+      %p
+        will find all test instances submitted by Bill Wolf for <samp>MESA</samp> version 10000. Multiple search criteria are always combined in an "and" sense (<strong>all</strong> conditions must be met.)
+    .col-lg-4.col-12
+      %h4 Ranges and Lists
+      %p 
+        Multiple values can be searched for each field by either comma-separating individual values or by using a dash to indicate a range. For instance,
+      %p
+        %code version: 10000-10200; test_case: wd2, 1M_thermohaline
+
+      %p
+        will find all test instances for versionsin the range of 10000-10200 that are for either the <samp>wd2</samp> or <samp>1M_thermohaline</samp> test cases.
+  .row
+  %h4 Available Search Options
+  .row
+    .col-md-6.col-12
+      %ul
+        %li
+          %samp.font-weight-bold test_case
+          name of a valid test case
+        %li
+          %samp.font-weight-bold version
+          number of a valid mesa revision
+        %li
+          %samp.font-weight-bold passed
+          whether the test passed or failed. Anything starting with "t" will search for passing instances, and any value starting with "f" will search for failing instances.
+        %li
+          %samp.font-weight-bold computer
+          name of a computer
+        %li
+          %samp.font-weight-bold user
+          name of a user
+        %li
+          %samp.font-weight-bold date
+          date test was submitted; use format YYYY/MM/DD. All dates are relative to UTC, so use with caution.
+        %li
+          %samp.font-weight-bold datetime
+          date and time test was submitted; use format YYYY/MM/DD hh:mm:ss. To escape from UTC requirements, you can add a timezone, like "PST" to the end as well.
+        %li
+          %samp.font-weight-bold platform
+          platform of the computer in use, like <samp>macOS</samp> or <samp>linux</samp>. Does <emph>not</emph> include any version string
+    .col-md-6.col-12
+      %ul
+        %li
+          %samp.font-weight-bold platform_version
+          version of the computer's platform, like <samp>10.14.2</samp> or <samp>Arch</samp>
+        %li
+          %samp.font-weight-bold rn_runtime/re_runtime/runtime
+          Runtime for <samp>rn</samp>/<samp>re</samp> scripts or for entire process including compilation. Instances run before early 2019 will only have <samp>rn_runtime</samp> available. Format this time either as an integer of seconds, or you can specify hours, minutes and seconds via something like <samp>1 hr 30 min</samp> or <samp>2.3 hours</samp>.
+        %li
+          %samp.font-weight-bold rn_RAM/re_RAM
+          maximum memory used in <samp>rn</samp>/<samp>re</samp> script, in GB.
+        %li
+          %samp.font-weight-bold threads
+          Number of OpenMP threads in use.
+        %li
+          %samp.font-weight-bold compiler
+          Compiler in use, not including version. For example, <samp>SDK</samp>, <samp>gfortran</samp>, or <samp>ifort</samp>.
+        %li
+          %samp.font-weight-bold compiler_version
+          Version of compiler in use. The format will vary as this is not a standardzied input, though SDK submissions since some time in 2018 follow the format given by the version-reporting script in the SDK itself, like <samp>x86_64-osx-10.10-10.14-20190408</samp>.
 
 - unless @test_instances.nil? || @test_instances.empty?
+  .spacer
+  %h2 Search Results
+  %p
+    %i= page_entries_info @test_instances
   = render 'search_table'
-  
+
+  .row
+    .col
+      = paginate @test_instances
+    

@@ -27,6 +27,7 @@ gem 'scout_apm', group: :production
 gem 'mini_racer', :require => nil
 gem 'rubyzip', '~>1.2.2'
 gem 'barista'
+gem 'font-awesome-rails'
 group :development, :test do
   gem 'byebug', platforms: [:mri, :mingw, :x64_mingw]
   gem 'guard-bundler'

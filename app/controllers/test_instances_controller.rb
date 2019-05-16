@@ -31,11 +31,14 @@ class TestInstancesController < ApplicationController
   # GET /test_instances/search.json
   def search
     # @test_instances = TestInstance.all.includes(:computer, :version, :test_case).page(params[:page])
+    failures = []
     @test_instances, failures = 
       TestInstance.query(params[:query_text]) if params[:query_text]
+    @test_instances = @test_instances.page(params[:page]) if @test_instances
     unless failures.empty?
       flash[:warning] = 'Invalid search parameters: ' + failures.join(', ') + '.'
     end
+    @show_instructions = @test_instances.nil?
   end
 
 
@@ -114,10 +117,12 @@ class TestInstancesController < ApplicationController
   # DELETE /test_instances/1
   # DELETE /test_instances/1.json
   def destroy
+    session[:return_to] ||= request.referer
     @test_instance.destroy
     respond_to do |format|
       format.html do
-        redirect_to test_case_test_instances_url(@test_instance.test_case),
+        # redirect_to test_case_test_instances_url(@test_instance.test_case),
+        redirect_to session.delete(:return_to),
                     notice: 'Test instance was successfully destroyed.'
       end
       format.json { head :no_content }
