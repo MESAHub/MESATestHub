@@ -30,12 +30,12 @@ class TestInstancesController < ApplicationController
   # GET /test_instances/search
   # GET /test_instances/search.json
   def search
-    # @test_instances = TestInstance.all.includes(:computer, :version, :test_case).page(params[:page])
+    # bail out if doing an unauthenticated API request
     failures = []
-    @test_instances, failures = 
-      TestInstance.query(params[:query_text]) if params[:query_text]
     respond_to do |format|
       format.html do
+        @test_instances, failures = 
+          TestInstance.query(params[:query_text]) if params[:query_text]
         if @test_instances
           @test_instances = @test_instances.page(params[:page])
         end
@@ -46,22 +46,35 @@ class TestInstancesController < ApplicationController
         @show_instructions = @test_instances.nil?
       end
       format.json do
-        if @test_instances
-          render json: {"results" => @test_instances,
-                        "failures" => failures}.to_json
+        if authenticated?
+          @test_instances, failures = 
+            TestInstance.query(params[:query_text]) if params[:query_text]
+          if @test_instances
+            render json: {"results" => @test_instances,
+                          "failures" => failures}.to_json
+          else
+            render json: {"results" => [], "failures" => failures}.to_json
+          end
         else
-          render json: {"results" => [], "failures" => failures}.to_json
+          fail_authenticate_json
         end
       end
     end
   end
 
   def search_count
+    # bail out if doing an unauthenticated API request
     failures = []
-    @test_instances, failures = 
-      TestInstance.query(params[:query_text]) if params[:query_text]
     respond_to do |format|
-      format.json { render json: @test_instances.count.to_json }
+      format.json do 
+        if authenticated?
+          @test_instances, failures = 
+            TestInstance.query(params[:query_text]) if params[:query_text]
+          render json: {count: @test_instances.count, failures: failures}.to_json
+        else
+          fail_authenticate_json
+        end
+      end
     end
   end
 
@@ -79,7 +92,7 @@ class TestInstancesController < ApplicationController
   # POST /test_instances/submit.json
   def submit
     # we are authenticated from params or session
-    if submission_authenticated?
+    if authenticated?
       @test_instance = submission_instance
       submission_save
     # params authentication failed. Redirect (html) or report failure (JSON)
@@ -156,7 +169,7 @@ class TestInstancesController < ApplicationController
 
   # the following methods are helper (read: shorter) methods used as part of
   # the "submit" controller action meant to streamline that definition
-  def submission_authenticated?
+  def authenticated?
     # If logged on to website, we're good
     @user = current_user
     authenticated = !@user.nil?
@@ -190,11 +203,13 @@ class TestInstancesController < ApplicationController
         redirect_to login_url,
                     alert: 'Must be signed in to submit a test instance.'
       end
-      format.json do
-        render json: { error: 'Invalid e-mail or password.' },
-               status: :unprocessable_entity
-      end
+      format.json { fail_authenticate_json }
     end
+  end
+
+  def fail_authenticate_json
+    render json: { error: 'Invalid e-mail or password.' },
+           status: :unprocessable_entity
   end
 
   def submission_set_data
