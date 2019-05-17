@@ -470,7 +470,8 @@ class TestInstance < ApplicationRecord
       threads: omp_num_threads,
       compiler: compiler,
       compiler_version: compiler_version,
-      summary_text: summary_text
+      summary_text: summary_text,
+      checksum: checksum
     }
   end
 
