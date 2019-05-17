@@ -40,7 +40,7 @@ class TestInstancesController < ApplicationController
           @test_instances = @test_instances.page(params[:page])
         end
         unless failures.empty?
-          flash[:warning] = 'Invalid search parameters: ' + 
+          flash.now[:warning] = 'Invalid search parameters: ' + 
                             failures.join(', ') + '.'
         end
         @show_instructions = @test_instances.nil?
