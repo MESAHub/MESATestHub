@@ -475,6 +475,73 @@ class TestInstance < ApplicationRecord
     }
   end
 
+  def recent_passing_with_similar_specs(depth: 50)
+    TestInstance.where(
+      mesa_version: (mesa_version - depth)...mesa_version,
+      computer_id: computer_id,
+      omp_num_threads: omp_num_threads,
+      compiler: compiler,
+      compiler_version: compiler_version,
+      test_case_id: test_case_id,
+      passed: true
+    )
+  end
+
+
+  # get fastest test instances from past submissions from same computer with
+  # same compiler and thread count for which this runtime is `percent` longer
+  # 
+  # `depth` is how far back in versions to look, and `runtime_type` is one of
+  # :rn, :re, and :total
+  def faster_past_instances(depth: 50, percent: 10.0, runtime_type: :rn)
+    runtime_query = case runtime_type
+    when :rn then :runtime_seconds
+    when :re then :re_time
+    when :total then :total_runtime_seconds
+    else
+      return nil      
+    end
+    this_runtime = self.send(runtime_query)
+
+    # old instances don't have all runtimes
+    return nil if this_runtime.nil?
+
+    # longest allowable runtime set by new/old = 100% + `percent`%
+    max_old_runtime = this_runtime * ( 1.0 / (1.0 + percent / 100.0))
+
+    # do query, starting with "similar" past instances
+    recent_passing_with_similar_specs(depth: depth).where(
+      runtime_query => 1e-2..max_old_runtime
+    )
+  end
+
+  # get past test instances from the same computer, compiler, and thread count
+  # for which the current RAM usages is `percent` percent larger
+  #
+  # `depth` is how far back in versions to look, and `runtime_type` is one of
+  # :rn, :re, and :total
+  def more_efficient_past_instances(depth: 50, percent: 10.0, run_type: :rn)
+    # get right method to get desired memory usage (rn or re)
+    memory_query = case run_type
+    when :rn then :rn_mem
+    when :re then :re_mem
+    else
+      return nil      
+    end
+
+    # retrieve memory, ensure it exists or bail
+    this_mem_usage = self.send(memory_query)
+    return nil if this_mem_usage.nil?
+
+    # largest allowable memory usage is set by new/old = 100% + `percent`%
+    max_old_mem = this_mem_usage * (1.0 / (1.0 + percent / 100.0))
+
+    # do query, starting with "similar past instances"
+    recent_passing_with_similar_specs(depth: depth).where(
+      memory_query => 1e-2..max_old_mem
+    )
+  end
+
   # make test_data easier to access as if they were attributes
   def method_missing(method_name, *args, &block)
     if test_case.data_names.include? method_name.to_s
