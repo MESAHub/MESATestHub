@@ -48,6 +48,25 @@ class TestInstance < ApplicationRecord
     @@compilers
   end
 
+  def self.runtime_query(runtime_type)
+    case runtime_type
+    when :rn then :runtime_seconds
+    when :re then :re_time
+    when :total then :total_runtime_seconds
+    else
+      return nil      
+    end
+  end
+
+  def self.memory_query(run_type)
+    case run_type
+    when :rn then :rn_mem
+    when :re then :re_mem
+    else
+      return nil      
+    end
+  end
+
   # list of version numbers with test instances that have failed since a
   # particular date
   def self.failing_versions_since(date)
@@ -494,13 +513,8 @@ class TestInstance < ApplicationRecord
   # `depth` is how far back in versions to look, and `runtime_type` is one of
   # :rn, :re, and :total
   def faster_past_instances(depth: 50, percent: 10.0, runtime_type: :rn)
-    runtime_query = case runtime_type
-    when :rn then :runtime_seconds
-    when :re then :re_time
-    when :total then :total_runtime_seconds
-    else
-      return nil      
-    end
+    runtime_query = TestInstance.runtime_query(runtime_type)
+    return nil unless runtime_query
     this_runtime = self.send(runtime_query)
 
     # old instances don't have all runtimes
@@ -522,12 +536,8 @@ class TestInstance < ApplicationRecord
   # :rn, :re, and :total
   def more_efficient_past_instances(depth: 50, percent: 10.0, run_type: :rn)
     # get right method to get desired memory usage (rn or re)
-    memory_query = case run_type
-    when :rn then :rn_mem
-    when :re then :re_mem
-    else
-      return nil      
-    end
+    memory_query = TestInstance.memory_query(run_type)
+    return nil unless memory_query
 
     # retrieve memory, ensure it exists or bail
     this_mem_usage = self.send(memory_query)

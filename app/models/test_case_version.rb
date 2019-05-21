@@ -54,6 +54,89 @@ class TestCaseVersion < ApplicationRecord
     self.last_tested = test_instances.pluck(:created_at).max
   end
 
+  def slowest_instances_by_computer(runtime_type: :rn)
+    runtime_query = TestInstance.runtime_query(runtime_type)
+    return nil if runtime_query.nil?
+    res = {}
+    computers.uniq.each do |computer|
+      all_with_runtime = test_instances.where(computer: computer).where.not(
+        runtime_query => nil).order(runtime_query => :desc)
+      next unless all_with_runtime.count > 0
+      res[computer] = all_with_runtime.first
+    end
+    res
+  end
+
+  def least_efficient_instances_by_computer(run_type: :rn)
+    memory_query = TestInstance.memory_query(run_type)
+    return nil if memory_query.nil?
+    res = {}
+    computers.uniq.each do |computer|
+      all_with_memory = test_instances.where(computer_id: computer.id).
+        where.not(memory_query => nil).order(memory_query => :desc)
+      next unless all_with_memory.count > 0
+      res[computer] = all_with_memory.first
+    end
+    res
+  end
+
+  def faster_past_instances(depth: 50, percent: 10)
+    # structure is a Hash with keys of :total, :rn, and :re. Each key points
+    # to a hash with keys of computer names that point to the faster test
+    # instances, if there are any that are sufficiently fast
+    res = {}
+    [:total, :rn, :re].each do |runtime_type|
+      res[runtime_type] = {}
+      slowest = slowest_instances_by_computer(runtime_type: runtime_type)
+
+      # iterate through each computer's slowest instances, and save the fastest
+      # past instance
+      slowest.keys.each do |computer|
+        faster_instances = slowest[computer].faster_past_instances(
+          depth: depth, percent: percent, runtime_type: runtime_type)
+        # may not have any, in which case everything is great with this
+        # computer.
+        unless faster_instances.nil?
+          # there are faster ones. Only hold on to the very fastest. We could
+          # hold on to all of them, but if one gets triggered, I imagine MANY
+          # will be triggered, so users should rely on the search feature
+          res[runtime_type][computer] = faster_instances.first
+        end
+      end
+    end
+    res
+  end
+
+  def more_efficient_past_instances(depth: 50, percent: 10)
+    # structure is a Hash with keys of :total, :rn, and :re. Each key points
+    # to a hash with keys of computer names that point to the faster test
+    # instances, if there are any that are sufficiently fast
+    res = {}
+    [:rn, :re].each do |run_type|
+      res[run_type] = {}
+      least_efficient = least_efficient_instances_by_computer(
+        run_type: run_type)
+
+      # iterate through each computer's slowest instances, and save the fastest
+      # past instance
+      least_efficient.keys.each do |computer|
+        more_efficient_instances = 
+          least_efficient[computer].more_efficient_past_instances(
+          depth: depth, percent: percent, run_type: run_type)
+        # may not have any, in which case everything is great with this
+        # computer.
+        unless more_efficient_instances.nil?
+          # there are faster ones. Only hold on to the very fastest. We could
+          # hold on to all of them, but if one gets triggered, I imagine MANY
+          # will be triggered, so users should rely on the search feature
+          res[run_type][computer] = more_efficient_instances.first
+        end
+      end
+    end
+    res
+  end
+
+
   def update_status
     # default status: untested
     self.status ||= @@status_encoder[:untested]
