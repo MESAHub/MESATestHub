@@ -512,7 +512,7 @@ class TestInstance < ApplicationRecord
     # do query, starting with "similar" past instances
     recent_passing_with_similar_specs(depth: depth).where(
       runtime_query => 1e-2..max_old_runtime
-    )
+    ).order(runtime_query)
   end
 
   # get past test instances from the same computer, compiler, and thread count
@@ -539,7 +539,7 @@ class TestInstance < ApplicationRecord
     # do query, starting with "similar past instances"
     recent_passing_with_similar_specs(depth: depth).where(
       memory_query => 1e-2..max_old_mem
-    )
+    ).order(memory_query)
   end
 
   # make test_data easier to access as if they were attributes
