@@ -42,7 +42,9 @@ class MorningMailer < ApplicationMailer
         case_links: {},
         pass_counts: {},
         fail_counts: {},
-        checksum_counts: {}
+        checksum_counts: {},
+        slow_cases: version.slow_test_case_versions,
+        inefficient_cases: version.inefficient_test_case_versions
       }
       version.test_case_versions.each do |tcv|
         res[:computer_counts][tcv] = tcv.computer_count

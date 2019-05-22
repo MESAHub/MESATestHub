@@ -256,7 +256,7 @@ class Version < ApplicationRecord
 
   def slow_test_case_versions(depth: 50, percent: 30)
     res = {}
-    test_case_versions.where(status: 0).each do |tcv|
+    test_case_versions.includes(:test_case).where(status: 0).each do |tcv|
       faster = tcv.faster_past_instances(depth: depth, percent: percent)
 
       # skip only if all run types are the same AND one (hence all) are empty
@@ -273,7 +273,7 @@ class Version < ApplicationRecord
 
   def inefficient_test_case_versions(depth: 50, percent: 10)
     res = {}
-    test_case_versions.where(status: 0).each do |tcv|
+    test_case_versions.includes(:test_case).where(status: 0).each do |tcv|
       more_efficient = tcv.more_efficient_past_instances(
         depth: depth, percent: percent)
 

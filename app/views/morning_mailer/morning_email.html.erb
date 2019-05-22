@@ -46,6 +46,58 @@
         </samp> (<%= data[:computer_counts][tcv].to_s + ' ' + 'computer'.pluralize(data[:computer_counts][tcv])%>)
       </li>
     <%end%>
+    <% data[:problematic_passing].each do |tcv| %>
+      <li>
+        <samp>
+          <a <%=@make_green%> clicktracking=off href=<%= data[:case_links][tcv]%>>
+            <%= tcv.test_case.name %>
+          </a>
+        </samp>
+        <% if data[:slow_cases][tcv] %>
+          <% if data[:inefficient_cases][tcv] %>
+            (runtime and memory usage increases)
+          <% else %>
+            (runtime increase)
+          <% end %>
+        <% else %>
+          (memory usage increase)
+        <% end %>
+        <ul>
+          <% data[:slow_cases][tcv].each_pair do |runtime_type, hash| %>
+            <li> The following computers show increased <%= runtime_type %> runtimes:
+              <% runtime_query = case runtime_type when :rn then :runtime_seconds; when :re then :re_time; else :total_runtime_seconds end %>
+              <ul>
+                <% data[:slow_cases][tcv][runtime_type].each_pair do |computer, hash| %>
+                  <li> <%= computer.name %>:
+                    <span <%= @make_green %>>
+                      <%= data[:slow_cases][tcv][runtime_type][computer][:better].send(runtime_query) %> sec
+                    </span> &#8594; <span <%= @make_red %>>
+                      <%= data[:slow_cases][tcv][runtime_type][computer][:current].send(runtime_query) %> sec
+                    </span>
+                  </li>
+                <% end %>
+              </ul>
+            </li>
+          <% end %>
+          <% data[:inefficient_cases][tcv].each_pair do |run_type, hash| %>
+            <li> The following computers show increased <%= run_type %> memory usage:
+              <% memory_query = run_type == :rn ? :rn_mem : :re_mem %>
+              <ul>
+                <% data[:inefficient_cases][tcv][run_type].each_pair do |computer, hash| %>
+                  <li> <%= computer.name %>:
+                    <span <%= @make_green %>>
+                      <%= data[:inefficient_cases][tcv][run_type][computer][:better].send(memory_query) / (1024**2) %> GB
+                    </span> &#8594; <span <%= @make_red %>>
+                      <%= data[:inefficient_cases][tcv][run_type][computer][:current].send(memory_query) / (1024**2) %> GB
+                    </span>
+                  </li>
+                <% end %>
+              </ul>
+            </li>
+          <% end %>
+        </ul>
+      </li>
+    <% end %>
   </ul>
 <%end%>
 
