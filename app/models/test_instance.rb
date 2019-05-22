@@ -495,7 +495,7 @@ class TestInstance < ApplicationRecord
   end
 
   def recent_passing_with_similar_specs(depth: 50)
-    TestInstance.where(
+    TestInstance.includes(:computer, :test_case_version, :test_case, :version).where(
       mesa_version: (mesa_version - depth)...mesa_version,
       computer_id: computer_id,
       omp_num_threads: omp_num_threads,
@@ -505,7 +505,6 @@ class TestInstance < ApplicationRecord
       passed: true
     )
   end
-
 
   # get fastest test instances from past submissions from same computer with
   # same compiler and thread count for which this runtime is `percent` longer

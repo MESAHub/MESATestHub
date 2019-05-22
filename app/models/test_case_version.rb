@@ -80,7 +80,7 @@ class TestCaseVersion < ApplicationRecord
     res
   end
 
-  def faster_past_instances(depth: 50, percent: 10)
+  def faster_past_instances(depth: 50, percent: 30)
     # structure is a Hash with keys of :total, :rn, and :re. Each key points
     # to a hash with keys of computer names that point to the faster test
     # instances, if there are any that are sufficiently fast

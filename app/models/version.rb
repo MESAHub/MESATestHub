@@ -254,7 +254,7 @@ class Version < ApplicationRecord
                               end
   end
 
-  def slow_test_case_versions(depth: 50, percent: 25)
+  def slow_test_case_versions(depth: 50, percent: 30)
     res = {}
     test_case_versions.where(status: 0).each do |tcv|
       faster = tcv.faster_past_instances(depth: depth, percent: percent)
@@ -267,7 +267,7 @@ class Version < ApplicationRecord
       end
     end
     # just in case, remove any keys with no values; doesn't seem to work...
-    res.each_pair { |key, value| res.delete(value) if value.empty? }
+    res.each_pair { |key, value| res.delete(key) if value.empty? }
     res
   end
 
@@ -286,7 +286,7 @@ class Version < ApplicationRecord
       end
     end
     # just in case, remove any keys with no values; doesn't seem to work...
-    res.each_pair { |key, value| res.delete(value) if value.empty? }
+    res.each_pair { |key, value| res.delete(key) if value.empty? }
     res
   end
 
