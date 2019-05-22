@@ -517,7 +517,8 @@ class TestInstance < ApplicationRecord
     this_runtime = self.send(runtime_query)
 
     # old instances don't have all runtimes
-    return nil if this_runtime.nil?
+    # also skip really short runtimes since they are more unpredictable
+    return nil if (this_runtime.nil? or this_runtime < 60)
 
     # longest allowable runtime set by new/old = 100% + `percent`%
     max_old_runtime = this_runtime * ( 1.0 / (1.0 + percent / 100.0))
