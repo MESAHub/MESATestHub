@@ -254,6 +254,32 @@ class Version < ApplicationRecord
                               end
   end
 
+  def slow_test_case_versions(depth: 50, percent: 10)
+    res = {}
+    test_case_versions.where(status: 0).each do |tcv|
+      faster = tcv.faster_past_instances(depth: depth, percent: percent)
+
+      # skip only if all run types are the same AND one (hence all) are empty
+      next if faster.values.uniq.length == 1 &&
+              faster[faster.keys.first].empty?
+      res[tcv] = faster
+    end
+    res
+  end
+
+  def inefficient_test_case_versions(depth: 50, percent: 10)
+    res = {}
+    test_case_versions.where(status: 0).each do |tcv|
+      more_efficient = tcv.more_efficient_past_instances(
+        depth: depth, percent: percent)
+
+      # skip only if all run types are the same AND one (hence all) are empty
+      next if more_efficient.values.uniq.length == 1 &&
+              more_efficient[more_efficient.keys.first].empty?
+      res[tcv] = more_efficient
+    end
+    res
+  end
 
   def last_tested(test_case=nil)
     test_case_versions.pluck(:last_tested).max

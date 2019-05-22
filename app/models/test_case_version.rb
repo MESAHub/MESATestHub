@@ -91,17 +91,26 @@ class TestCaseVersion < ApplicationRecord
 
       # iterate through each computer's slowest instances, and save the fastest
       # past instance
-      slowest.keys.each do |computer|
-        faster_instances = slowest[computer].faster_past_instances(
+      slowest.each_pair do |computer, current|
+        faster_instances = current.faster_past_instances(
           depth: depth, percent: percent, runtime_type: runtime_type)
         # may not have any, in which case everything is great with this
         # computer.
-        unless faster_instances.nil?
+        unless faster_instances.nil? || faster_instances.empty?
           # there are faster ones. Only hold on to the very fastest. We could
           # hold on to all of them, but if one gets triggered, I imagine MANY
           # will be triggered, so users should rely on the search feature
-          res[runtime_type][computer] = faster_instances.first
+          res[runtime_type][computer] = {
+            current: current,
+            better: faster_instances.first
+          }
         end
+      end
+    end
+    # destroy empty hashes
+    res.keys.each do |key|
+      if res[key].empty?
+        res.delete(key)
       end
     end
     res
@@ -119,18 +128,28 @@ class TestCaseVersion < ApplicationRecord
 
       # iterate through each computer's slowest instances, and save the fastest
       # past instance
-      least_efficient.keys.each do |computer|
+      least_efficient.each_pair do |computer, current|
         more_efficient_instances = 
-          least_efficient[computer].more_efficient_past_instances(
-          depth: depth, percent: percent, run_type: run_type)
+          current.more_efficient_past_instances(
+            depth: depth, percent: percent, run_type: run_type)
         # may not have any, in which case everything is great with this
         # computer.
-        unless more_efficient_instances.nil?
-          # there are faster ones. Only hold on to the very fastest. We could
-          # hold on to all of them, but if one gets triggered, I imagine MANY
-          # will be triggered, so users should rely on the search feature
-          res[run_type][computer] = more_efficient_instances.first
+        if more_efficient_instances.nil? || more_efficient_instances.empty?
+          next
         end
+        # there are faster ones. Only hold on to the very fastest. We could
+        # hold on to all of them, but if one gets triggered, I imagine MANY
+        # will be triggered, so users should rely on the search feature
+        res[run_type][computer] = {
+          current: current,
+          better: more_efficient_instances.first
+        }
+      end
+    end
+    # destroy empty hashes
+    res.keys.each do |key|
+      if res[key].empty?
+        res.delete(key)
       end
     end
     res
