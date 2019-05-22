@@ -264,6 +264,8 @@ class Version < ApplicationRecord
               faster[faster.keys.first].empty?
       res[tcv] = faster
     end
+    # just in case, remove any keys with no values
+    res.each_pair { |key, value| res.delete(value) if value.empty? }
     res
   end
 
@@ -278,6 +280,8 @@ class Version < ApplicationRecord
               more_efficient[more_efficient.keys.first].empty?
       res[tcv] = more_efficient
     end
+    # just in case, remove any keys with no values
+    res.each_pair { |key, value| res.delete(value) if value.empty? }
     res
   end
 

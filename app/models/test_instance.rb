@@ -273,7 +273,7 @@ class TestInstance < ApplicationRecord
     reconstructed_query = ''
     failed_requirements = []
     res = TestInstance.where(nil)
-    requirement_matcher = /^(?<key>[^:"']+):\s*("|')?(?<value>[^'"]+)("|')?$/
+    requirement_matcher = /^(?<key>[^:"']+):\s+("|')?(?<value>[^'"]+)("|')?$/
     query_text.split(';').map(&:strip).each do |requirement|
       # puts "checking string #{requirement}"
       m1 = requirement.match(requirement_matcher)
