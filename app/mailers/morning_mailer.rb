@@ -89,11 +89,13 @@ class MorningMailer < ApplicationMailer
               :total_runtime_seconds
             end
             runtime_hash.each_pair do |computer, computer_hash|
-              # create relevant search query and assign it into the 
-              # computer_hash
+              # create url that creates the relevant search query and assign it
+              # into the computer_hash
               current = computer_hash[:current]
               max_runtime = (current.send(runtime_attribute) *
-                             (1.0 / (1.0 + runtime_percent) / 100.0))
+                             (1.0 / (1.0 + (runtime_percent / 100.0))))
+              max_runtime = sprintf('%.1f', max_runtime)
+
               computer_hash[:url] = 'https://testhub.mesastar.org/' + 
                 'test_instances/search?'
               computer_hash[:url] += {utf8: '✓'}.to_query + '&'
@@ -138,6 +140,7 @@ class MorningMailer < ApplicationMailer
                          (1.0 / (1.0 + (memory_percent / 100.0))) / 
                          (1.024e3 ** 2)
                         )
+              max_RAM = sprintf('%.2f', max_RAM)
               # use search api to create link showing all more efficient test
               # instances in last 50 revisions
               computer_hash[:url] = 'https://testhub.mesastar.org/' + 

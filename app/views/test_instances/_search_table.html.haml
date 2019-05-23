@@ -9,7 +9,7 @@
             %th.text-center Status
             %th.text-center Computer
             %th.text-center Created
-            %th.text-center Runtime
+            %th.text-center rn/re/total Runtime
             %th.text-center rn/re RAM
             %th.text-center Compiler
             %th.text-center Platform
@@ -33,18 +33,20 @@
               %td.align-middle= link_to test_instance.computer.name, [test_instance.computer.user, test_instance.computer]
               %td.align-middle= format_time(test_instance.created_at)
               %td.align-middle
-                = test_instance.runtime_seconds
+                = test_instance.runtime_seconds || 0
+                \/
+                = test_instance.re_time || 0
+                \/
+                = test_instance.total_runtime_seconds || 0
                 s
               -# %td.align-middle=test_instance.steps
               -# %td.align-middle=test_instance.retries
               -# %td.align_middle=test_instance.backups
               %td.align-middle
-                -if test_instance.rn_mem
-                  =sprintf('%.2f', test_instance.rn_mem_GB)
-                -if test_instance.rn_mem && test_instance.re_mem
-                  \/
-                -if test_instance.re_mem
-                  =sprintf('%.2f', test_instance.re_mem_GB)
+                
+                =sprintf('%.2f', test_instance.rn_mem_GB || 0)
+                \/
+                =sprintf('%.2f', test_instance.re_mem_GB || 0)
               %td.align-middle= ((test_instance.compiler || '') + ' ' + (test_instance.compiler_version || '')).strip
               %td.align-middle= ((test_instance.computer.platform || '' ) + ' ' + (test_instance.platform_version || '')).strip
               %td.align-middle= test_instance.omp_num_threads
