@@ -124,7 +124,7 @@ class MorningMailer < ApplicationMailer
               nil
             end
             # what to use to get current value from the model
-            memory_attribute = (memory_query.to_s + '_mem').to_sym
+            memory_attribute = (run_type.to_s + '_mem').to_sym
             run_type_hash.each_pair do |computer, computer_hash|
               # create relevant search query and assign it into the 
               # computer_hash
