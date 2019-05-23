@@ -132,7 +132,10 @@ class MorningMailer < ApplicationMailer
               # this needs to be in GB for the search API
               max_RAM = (current.send(memory_attribute) *
                              (1.0 / (1.0 + memory_percent) / 100.0)) / (1024**2)
-              computer_hash[:url] = [
+              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+                'test_instances/search?'
+              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+              computer_hash[:url] += {query_text: [
                 "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
                 "computer: #{computer.name}",
                 "threads: #{current.omp_num_threads}",
@@ -141,7 +144,7 @@ class MorningMailer < ApplicationMailer
                 "test_case: #{test_case_name}",
                 "passed: true",
                 "#{memory_query}: 0.01-#{max_RAM}"
-              ].join('; ')
+              ].join('; ')}.to_query
               # hold on to current and better RAM in GB for view
               computer_hash[:current_RAM] = sprintf(
                 '%.2f', current.send(memory_attribute) / (1.024e3 ** 2)
