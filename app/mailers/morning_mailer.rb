@@ -104,6 +104,9 @@ class MorningMailer < ApplicationMailer
                 "passed: true",
                 "#{runtime_query}: 0.01-#{max_runtime}"
               ].join('; ')
+              instance_hash[:current_time] = current.send(runtime_attribute)
+              instance_hash[:better_time] = instance_hash[:better].send(
+                runtime_attribute)
             end
           end
         end
@@ -138,6 +141,10 @@ class MorningMailer < ApplicationMailer
                 "passed: true",
                 "#{memory_query}: 0.01-#{max_RAM}"
               ].join('; ')
+              instance_hash[:current_RAM] = (current.send(memory_attribute) /
+                                             (1.024e3 ** 2))
+              instance_hash[:better_RAM] = 
+                instance_hash[:better].send(memory_attribute) / (1.024e3 ** 2)
             end
           end
         end
