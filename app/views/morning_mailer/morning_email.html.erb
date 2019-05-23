@@ -81,7 +81,7 @@
               </li>
             <% end %>
           <% end %>
-          <% if data[:slow_cases][tcv] %>
+          <% if data[:inefficient_cases][tcv] %>
             <% data[:inefficient_cases][tcv].each_pair do |run_type, hash| %>
               <li> The following computers show increased <%= run_type %> memory usage:
                 <% memory_query = run_type == :rn ? :rn_mem : :re_mem %>
