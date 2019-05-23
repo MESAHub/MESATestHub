@@ -89,9 +89,9 @@
                   <% data[:inefficient_cases][tcv][run_type].each_pair do |computer, hash| %>
                     <li> <%= computer.name %>:
                       <span <%= @make_green %>>
-                        <%= data[:inefficient_cases][tcv][run_type][computer][:better].send(memory_query) / (1024**2) %> GB
+                        <%= sprintf('%.2f', data[:inefficient_cases][tcv][run_type][computer][:better].send(memory_query) / ((1.024e3)**2)) %> GB
                       </span> &#8594; <span <%= @make_red %>>
-                        <%= data[:inefficient_cases][tcv][run_type][computer][:current].send(memory_query) / (1024**2) %> GB
+                        <%= sprintf('%.2f', data[:inefficient_cases][tcv][run_type][computer][:current].send(memory_query) / ((1.024e3)**2)) %> GB
                       </span>
                     </li>
                   <% end %>
