@@ -22,6 +22,9 @@ class MorningMailer < ApplicationMailer
     @versions_tested = Version.tested_between(start_date, DateTime.now)
     @versions_tested.sort_by! { |version| -version.number }
     @version_data = {}
+    depth = 50
+    runtime_percent = 30.0
+    memory_percent = 10.0
     @versions_tested.each do |version|
       res = {
         version: version,
@@ -44,15 +47,100 @@ class MorningMailer < ApplicationMailer
         fail_counts: {},
         checksum_counts: {},
         # get test cases that have slowed down in recent versions
-        slow_cases: version.slow_test_case_versions,
+        slow_cases: version.slow_test_case_versions(
+          depth: depth,
+          percent: runtime_percent
+        ),
         # get test cases that have consumed more memory in recent versions
-        inefficient_cases: version.inefficient_test_case_versions
-      }
+        inefficient_cases: version.inefficient_test_case_versions(
+          depth: depth,
+          percent: memory_percent
+        )
+      }        
+
       # get all passing test cases that have memory or speed issues and
       # organize them by name so we can walk through the list later
       res[:problematic_passing] = (res[:slow_cases].keys +
         res[:inefficient_cases].keys).sort do |tcv1, tcv2|
         tcv1.test_case.name <=> tcv2.test_case.name
+      end
+
+      # create links to relevant searches for all expansions in runtimes and
+      # memory usage
+      res[:problematic_passing].each do |tcv|
+        test_case_name = tcv.test_case.name
+        if res[:slow_cases][tcv]
+          # walk through runtime types
+          res[:slow_cases][tcv].each_pair do |runtime_type, computer_hash|
+            # walk through computers and assign link for each
+            
+            # what to put in the search query
+            runtime_query = case runtime_type
+            when :rn then 'rn_runtime'
+            when :re then 're_runtime'
+            else
+              'runtime'
+            end
+            # what to ask the model for
+            runtime_attribute = case runtime_type
+            when :rn then :runtime_seconds
+            when :re then :re_time
+            else
+              :total_runtime_seconds
+            end
+            computer_hash.each_pair do |computer, instance_hash|
+              # create relevant search query and assign it into the 
+              # instance_hash
+              current = instance_hash[:current]
+              max_runtime = (current.send(runtime_attribute) *
+                             (1.0 / (1.0 + runtime_percent) / 100.0))
+              instance_hash[:url] = [
+                "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
+                "computer: #{computer.name}",
+                "threads: #{current.omp_num_threads}",
+                "compiler: #{current.compiler}",
+                "compiler_version: #{current.compiler_version}",
+                "test_case: #{test_case_name}",
+                "passed: true",
+                "#{runtime_query}: 0.01-#{max_runtime}"
+              ].join('; ')
+            end
+          end
+        end
+        if res[:inefficient_cases][tcv]
+          # walk through runtime types
+          res[:inefficient_cases][tcv].each_pair do |run_type, computer_hash|
+            # walk through computers and assign link for each
+
+            # what to put in the search query
+            memory_query = case run_type
+            when :rn then 'rn_RAM'
+            when :re then 're_RAM'
+            else
+              nil
+            end
+            # what to use to get current value from the model
+            memory_attribute = (memory_query.to_s + '_mem').to_sym
+            computer_hash.each_pair do |computer, instance_hash|
+              # create relevant search query and assign it into the 
+              # instance_hash
+              current = instance_hash[:current]
+              # this needs to be in GB for the search API
+              max_RAM = (current.send(memory_attribute) *
+                             (1.0 / (1.0 + memory_percent) / 100.0)) / (1024**2)
+              instance_hash[:url] = [
+                "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
+                "computer: #{computer.name}",
+                "threads: #{current.omp_num_threads}",
+                "compiler: #{current.compiler}",
+                "compiler_version: #{current.compiler_version}",
+                "test_case: #{test_case_name}",
+                "passed: true",
+                "#{memory_query}: 0.01-#{max_RAM}"
+              ].join('; ')
+            end
+          end
+        end
       end
       version.test_case_versions.each do |tcv|
         res[:computer_counts][tcv] = tcv.computer_count
