@@ -52,6 +52,7 @@
           <a <%=@make_green%> clicktracking=off href=<%= data[:case_links][tcv]%>>
             <%= tcv.test_case.name %>
           </a>
+          (<%= data[:computer_counts][tcv].to_s + ' ' + 'computer'.pluralize(data[:computer_counts][tcv])%> tested)
         </samp>
         <% if data[:slow_cases][tcv] %>
           <% if data[:inefficient_cases][tcv] %>
@@ -64,16 +65,18 @@
         <% end %>
         <ul>
           <% if data[:slow_cases][tcv] %>
-            <% data[:slow_cases][tcv].each_pair do |runtime_type, hash| %>
+            <% data[:slow_cases][tcv].each_pair do |runtime_type, runtime_hash| %>
               <li> The following computers show increased <%= runtime_type %> runtimes:
-                <% runtime_query = case runtime_type when :rn then :runtime_seconds; when :re then :re_time; else :total_runtime_seconds end %>
                 <ul>
-                  <% data[:slow_cases][tcv][runtime_type].each_pair do |computer, hash| %>
-                    <li> <%= computer.name %>:
+                  <% runtime_hash.each_pair do |computer, computer_hash| %>
+                    <li> 
+                      <a clicktracking=off href=<%= computer_hash[:url] %>>
+                        <%= computer.name %>
+                      </a>:
                       <span <%= @make_green %>>
-                        <%= data[:slow_cases][tcv][runtime_type][computer][:better].send(runtime_query) %> sec
+                        <%= computer_hash[:better_time] %> sec
                       </span> &#8594; <span <%= @make_red %>>
-                        <%= data[:slow_cases][tcv][runtime_type][computer][:current].send(runtime_query) %> sec
+                        <%= computer_hash[:current_time] %> sec
                       </span>
                     </li>
                   <% end %>
@@ -82,16 +85,18 @@
             <% end %>
           <% end %>
           <% if data[:inefficient_cases][tcv] %>
-            <% data[:inefficient_cases][tcv].each_pair do |run_type, hash| %>
+            <% data[:inefficient_cases][tcv].each_pair do |run_type, run_type_hash| %>
               <li> The following computers show increased <%= run_type %> memory usage:
-                <% memory_query = run_type == :rn ? :rn_mem : :re_mem %>
                 <ul>
-                  <% data[:inefficient_cases][tcv][run_type].each_pair do |computer, hash| %>
-                    <li> <%= computer.name %>:
+                  <% run_type_hash.each_pair do |computer, computer_hash| %>
+                    <li> 
+                      <a clicktracking=off href=<%= computer_hash[:url] %>>
+                        <%= computer.name %>
+                      </a>:
                       <span <%= @make_green %>>
-                        <%= sprintf('%.2f', data[:inefficient_cases][tcv][run_type][computer][:better].send(memory_query) / ((1.024e3)**2)) %> GB
+                        <%= computer_hash[:better_RAM] %> GB
                       </span> &#8594; <span <%= @make_red %>>
-                        <%= sprintf('%.2f', data[:inefficient_cases][tcv][run_type][computer][:current].send(memory_query) / ((1.024e3)**2)) %> GB
+                        <%= computer_hash[:current_RAM] %> GB
                       </span>
                     </li>
                   <% end %>

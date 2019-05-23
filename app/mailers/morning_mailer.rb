@@ -71,7 +71,7 @@ class MorningMailer < ApplicationMailer
         test_case_name = tcv.test_case.name
         if res[:slow_cases][tcv]
           # walk through runtime types
-          res[:slow_cases][tcv].each_pair do |runtime_type, computer_hash|
+          res[:slow_cases][tcv].each_pair do |runtime_type, runtime_hash|
             # walk through computers and assign link for each
             
             # what to put in the search query
@@ -88,13 +88,13 @@ class MorningMailer < ApplicationMailer
             else
               :total_runtime_seconds
             end
-            computer_hash.each_pair do |computer, instance_hash|
+            runtime_hash.each_pair do |computer, computer_hash|
               # create relevant search query and assign it into the 
-              # instance_hash
-              current = instance_hash[:current]
+              # computer_hash
+              current = computer_hash[:current]
               max_runtime = (current.send(runtime_attribute) *
                              (1.0 / (1.0 + runtime_percent) / 100.0))
-              instance_hash[:url] = [
+              computer_hash[:url] = [
                 "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
                 "computer: #{computer.name}",
                 "threads: #{current.omp_num_threads}",
@@ -104,15 +104,16 @@ class MorningMailer < ApplicationMailer
                 "passed: true",
                 "#{runtime_query}: 0.01-#{max_runtime}"
               ].join('; ')
-              instance_hash[:current_time] = current.send(runtime_attribute)
-              instance_hash[:better_time] = instance_hash[:better].send(
+              # hold on to current and better times in seconds
+              computer_hash[:current_time] = current.send(runtime_attribute)
+              computer_hash[:better_time] = computer_hash[:better].send(
                 runtime_attribute)
             end
           end
         end
         if res[:inefficient_cases][tcv]
           # walk through runtime types
-          res[:inefficient_cases][tcv].each_pair do |run_type, computer_hash|
+          res[:inefficient_cases][tcv].each_pair do |run_type, run_type_hash|
             # walk through computers and assign link for each
 
             # what to put in the search query
@@ -124,14 +125,14 @@ class MorningMailer < ApplicationMailer
             end
             # what to use to get current value from the model
             memory_attribute = (memory_query.to_s + '_mem').to_sym
-            computer_hash.each_pair do |computer, instance_hash|
+            run_type_hash.each_pair do |computer, computer_hash|
               # create relevant search query and assign it into the 
-              # instance_hash
-              current = instance_hash[:current]
+              # computer_hash
+              current = computer_hash[:current]
               # this needs to be in GB for the search API
               max_RAM = (current.send(memory_attribute) *
                              (1.0 / (1.0 + memory_percent) / 100.0)) / (1024**2)
-              instance_hash[:url] = [
+              computer_hash[:url] = [
                 "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
                 "computer: #{computer.name}",
                 "threads: #{current.omp_num_threads}",
@@ -141,10 +142,14 @@ class MorningMailer < ApplicationMailer
                 "passed: true",
                 "#{memory_query}: 0.01-#{max_RAM}"
               ].join('; ')
-              instance_hash[:current_RAM] = (current.send(memory_attribute) /
-                                             (1.024e3 ** 2))
-              instance_hash[:better_RAM] = 
-                instance_hash[:better].send(memory_attribute) / (1.024e3 ** 2)
+              # hold on to current and better RAM in GB for view
+              computer_hash[:current_RAM] = sprintf(
+                '%.2f', current.send(memory_attribute) / (1.024e3 ** 2)
+              )
+              computer_hash[:better_RAM] = sprintf(
+                '%.2f',
+                computer_hash[:better].send(memory_attribute) / (1.024e3 ** 2)
+              )
             end
           end
         end
