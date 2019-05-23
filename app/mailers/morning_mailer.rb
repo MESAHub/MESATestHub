@@ -43,9 +43,17 @@ class MorningMailer < ApplicationMailer
         pass_counts: {},
         fail_counts: {},
         checksum_counts: {},
+        # get test cases that have slowed down in recent versions
         slow_cases: version.slow_test_case_versions,
+        # get test cases that have consumed more memory in recent versions
         inefficient_cases: version.inefficient_test_case_versions
       }
+      # get all passing test cases that have memory or speed issues and
+      # organize them by name so we can walk through the list later
+      res[:problematic_passing] = (res[:slow_cases].keys +
+        res[:inefficient_cases].keys).sort do |tcv1, tcv2|
+        tcv1.test_case.name <=> tcv2.test_case.name
+      end
       version.test_case_versions.each do |tcv|
         res[:computer_counts][tcv] = tcv.computer_count
         if tcv.status >= 2
