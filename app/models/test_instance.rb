@@ -539,9 +539,9 @@ class TestInstance < ApplicationRecord
     memory_query = TestInstance.memory_query(run_type)
     return nil unless memory_query
 
-    # retrieve memory, ensure it exists or bail
+    # retrieve memory, ensure it exists or bail (also bail for small RAM)
     this_mem_usage = self.send(memory_query)
-    return nil if this_mem_usage.nil?
+    return nil if (this_mem_usage.nil? || this_mem_usage < 1024**2)
 
     # largest allowable memory usage is set by new/old = 100% + `percent`%
     max_old_mem = this_mem_usage * (1.0 / (1.0 + percent / 100.0))
