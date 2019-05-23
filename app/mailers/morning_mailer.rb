@@ -94,7 +94,11 @@ class MorningMailer < ApplicationMailer
               current = computer_hash[:current]
               max_runtime = (current.send(runtime_attribute) *
                              (1.0 / (1.0 + runtime_percent) / 100.0))
-              computer_hash[:url] = [
+              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+                'test_instances/search?'
+              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+
+              computer_hash[:url] += {query_text: [
                 "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
                 "computer: #{computer.name}",
                 "threads: #{current.omp_num_threads}",
@@ -103,7 +107,7 @@ class MorningMailer < ApplicationMailer
                 "test_case: #{test_case_name}",
                 "passed: true",
                 "#{runtime_query}: 0.01-#{max_runtime}"
-              ].join('; ')
+              ].join('; ')}.to_query
               # hold on to current and better times in seconds
               computer_hash[:current_time] = current.send(runtime_attribute)
               computer_hash[:better_time] = computer_hash[:better].send(
@@ -131,7 +135,11 @@ class MorningMailer < ApplicationMailer
               current = computer_hash[:current]
               # this needs to be in GB for the search API
               max_RAM = (current.send(memory_attribute) *
-                             (1.0 / (1.0 + memory_percent) / 100.0)) / (1024**2)
+                         (1.0 / (1.0 + (memory_percent / 100.0))) / 
+                         (1.024e3 ** 2)
+                        )
+              # use search api to create link showing all more efficient test
+              # instances in last 50 revisions
               computer_hash[:url] = 'https://testhub.mesastar.org/' + 
                 'test_instances/search?'
               computer_hash[:url] += {utf8: '✓'}.to_query + '&'
