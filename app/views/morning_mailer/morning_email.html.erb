@@ -52,8 +52,8 @@
           <a <%=@make_green%> clicktracking=off href=<%= data[:case_links][tcv]%>>
             <%= tcv.test_case.name %>
           </a>
-          (<%= data[:computer_counts][tcv].to_s + ' ' + 'computer'.pluralize(data[:computer_counts][tcv])%> tested)
         </samp>
+        (<%= data[:computer_counts][tcv].to_s + ' ' + 'computer'.pluralize(data[:computer_counts][tcv])%> tested)
         <% if data[:slow_cases][tcv] %>
           <% if data[:inefficient_cases][tcv] %>
             (runtime and memory usage increases)
