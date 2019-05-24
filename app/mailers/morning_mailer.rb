@@ -65,6 +65,10 @@ class MorningMailer < ApplicationMailer
         tcv1.test_case.name <=> tcv2.test_case.name
       end
 
+      # only consider a test case problematic if it has memory and/or runtime
+      # issues on at least two computers
+      problematic_computer_limit = 2
+
       # create links to relevant searches for all expansions in runtimes and
       # memory usage
       res[:problematic_passing].each do |tcv|
@@ -73,98 +77,114 @@ class MorningMailer < ApplicationMailer
           # walk through runtime types
           res[:slow_cases][tcv].each_pair do |runtime_type, runtime_hash|
             # walk through computers and assign link for each
+            # throw whole runtime_type out if there isn't more than one
+            # computer
             
-            # what to put in the search query
-            runtime_query = case runtime_type
-            when :rn then 'rn_runtime'
-            when :re then 're_runtime'
+            if runtime_hash.keys.length < problematic_computer_limit
+              res[:slow_cases][tcv].delete(runtime_type)
             else
-              'runtime'
-            end
-            # what to ask the model for
-            runtime_attribute = case runtime_type
-            when :rn then :runtime_seconds
-            when :re then :re_time
-            else
-              :total_runtime_seconds
-            end
-            runtime_hash.each_pair do |computer, computer_hash|
-              # create url that creates the relevant search query and assign it
-              # into the computer_hash
-              current = computer_hash[:current]
-              max_runtime = (current.send(runtime_attribute) *
-                             (1.0 / (1.0 + (runtime_percent / 100.0))))
-              max_runtime = sprintf('%.1f', max_runtime)
+              # what to put in the search query
+              runtime_query = case runtime_type
+              when :rn then 'rn_runtime'
+              when :re then 're_runtime'
+              else
+                'runtime'
+              end
+              # what to ask the model for
+              runtime_attribute = case runtime_type
+              when :rn then :runtime_seconds
+              when :re then :re_time
+              else
+                :total_runtime_seconds
+              end
+              runtime_hash.each_pair do |computer, computer_hash|
+                # create url that creates the relevant search query and assign it
+                # into the computer_hash
+                current = computer_hash[:current]
+                max_runtime = (current.send(runtime_attribute) *
+                               (1.0 / (1.0 + (runtime_percent / 100.0))))
+                max_runtime = sprintf('%.1f', max_runtime)
 
-              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
-                'test_instances/search?'
-              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+                computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+                  'test_instances/search?'
+                computer_hash[:url] += {utf8: '✓'}.to_query + '&'
 
-              computer_hash[:url] += {query_text: [
-                "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
-                "computer: #{computer.name}",
-                "threads: #{current.omp_num_threads}",
-                "compiler: #{current.compiler}",
-                "compiler_version: #{current.compiler_version}",
-                "test_case: #{test_case_name}",
-                "passed: true",
-                "#{runtime_query}: 0.01-#{max_runtime}"
-              ].join('; ')}.to_query
-              # hold on to current and better times in seconds
-              computer_hash[:current_time] = current.send(runtime_attribute)
-              computer_hash[:better_time] = computer_hash[:better].send(
-                runtime_attribute)
+                computer_hash[:url] += {query_text: [
+                  "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
+                  "computer: #{computer.name}",
+                  "threads: #{current.omp_num_threads}",
+                  "compiler: #{current.compiler}",
+                  "compiler_version: #{current.compiler_version}",
+                  "test_case: #{test_case_name}",
+                  "passed: true",
+                  "#{runtime_query}: 0.01-#{max_runtime}"
+                ].join('; ')}.to_query
+                # hold on to current and better times in seconds
+                computer_hash[:current_time] = current.send(runtime_attribute)
+                computer_hash[:better_time] = computer_hash[:better].send(
+                  runtime_attribute)
+              end
             end
           end
+          # trash whole test case version if we deleted all runtime_types for
+          # not having enough computers.
+          res[:slow_cases].delete(tcv) if res[:slow_cases][tcv].keys.empty? 
         end
         if res[:inefficient_cases][tcv]
           # walk through runtime types
           res[:inefficient_cases][tcv].each_pair do |run_type, run_type_hash|
             # walk through computers and assign link for each
 
-            # what to put in the search query
-            memory_query = case run_type
-            when :rn then 'rn_RAM'
-            when :re then 're_RAM'
+            if run_type_hash.keys.length < problematic_computer_limit
+              res[:inefficient_cases][tcv].delete(run_type)
             else
-              nil
+              # what to put in the search query
+              memory_query = case run_type
+              when :rn then 'rn_RAM'
+              when :re then 're_RAM'
+              else
+                nil
+              end
+              # what to use to get current value from the model
+              memory_attribute = (run_type.to_s + '_mem').to_sym
+              run_type_hash.each_pair do |computer, computer_hash|
+                # create relevant search query and assign it into the 
+                # computer_hash
+                current = computer_hash[:current]
+                # this needs to be in GB for the search API
+                max_RAM = (current.send(memory_attribute) *
+                           (1.0 / (1.0 + (memory_percent / 100.0))) / 
+                           (1.024e3 ** 2)
+                          )
+                max_RAM = sprintf('%.2f', max_RAM)
+                # use search api to create link showing all more efficient test
+                # instances in last 50 revisions
+                computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+                  'test_instances/search?'
+                computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+                computer_hash[:url] += {query_text: [
+                  "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
+                  "computer: #{computer.name}",
+                  "threads: #{current.omp_num_threads}",
+                  "compiler: #{current.compiler}",
+                  "compiler_version: #{current.compiler_version}",
+                  "test_case: #{test_case_name}",
+                  "passed: true",
+                  "#{memory_query}: 0.01-#{max_RAM}"
+                ].join('; ')}.to_query
+                # hold on to current and better RAM in GB for view
+                computer_hash[:current_RAM] = sprintf(
+                  '%.2f', current.send(memory_attribute) / (1.024e3 ** 2)
+                )
+                computer_hash[:better_RAM] = sprintf(
+                  '%.2f',
+                  computer_hash[:better].send(memory_attribute) / (1.024e3 ** 2)
+                )
+              end
             end
-            # what to use to get current value from the model
-            memory_attribute = (run_type.to_s + '_mem').to_sym
-            run_type_hash.each_pair do |computer, computer_hash|
-              # create relevant search query and assign it into the 
-              # computer_hash
-              current = computer_hash[:current]
-              # this needs to be in GB for the search API
-              max_RAM = (current.send(memory_attribute) *
-                         (1.0 / (1.0 + (memory_percent / 100.0))) / 
-                         (1.024e3 ** 2)
-                        )
-              max_RAM = sprintf('%.2f', max_RAM)
-              # use search api to create link showing all more efficient test
-              # instances in last 50 revisions
-              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
-                'test_instances/search?'
-              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
-              computer_hash[:url] += {query_text: [
-                "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
-                "computer: #{computer.name}",
-                "threads: #{current.omp_num_threads}",
-                "compiler: #{current.compiler}",
-                "compiler_version: #{current.compiler_version}",
-                "test_case: #{test_case_name}",
-                "passed: true",
-                "#{memory_query}: 0.01-#{max_RAM}"
-              ].join('; ')}.to_query
-              # hold on to current and better RAM in GB for view
-              computer_hash[:current_RAM] = sprintf(
-                '%.2f', current.send(memory_attribute) / (1.024e3 ** 2)
-              )
-              computer_hash[:better_RAM] = sprintf(
-                '%.2f',
-                computer_hash[:better].send(memory_attribute) / (1.024e3 ** 2)
-              )
-            end
+          end
+          if res[:inefficient_cases][tcv].keys.empty?
+            res[:inefficient_cases].delete(tcv) 
           end
         end
       end
@@ -190,8 +210,8 @@ class MorningMailer < ApplicationMailer
 
     # gather sender, recipient(s), subject, and body before composing email
     from = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    to = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    # to = Email.new(email: 'wmwolf@asu.edu', name: 'Bill Wolf')
+    # to = Email.new(email: 'mesa-developers@lists.mesastar.org')
+    to = Email.new(email: 'wmwolf@asu.edu', name: 'Bill Wolf')
     subject = "MesaTestHub Report #{Date.today}"
     html_content = ApplicationController.render(
       template: 'morning_mailer/morning_email.html.erb',
