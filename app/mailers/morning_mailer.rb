@@ -63,7 +63,7 @@ class MorningMailer < ApplicationMailer
       res[:problematic_passing] = (res[:slow_cases].keys +
         res[:inefficient_cases].keys).sort do |tcv1, tcv2|
         tcv1.test_case.name <=> tcv2.test_case.name
-      end
+      end.uniq
 
       # only consider a test case problematic if it has memory and/or runtime
       # issues on at least two computers
@@ -186,6 +186,11 @@ class MorningMailer < ApplicationMailer
           if res[:inefficient_cases][tcv].keys.empty?
             res[:inefficient_cases].delete(tcv) 
           end
+        end
+        # remove test case from overall list if they don't show slowing or
+        # memory bloat on enough computers.
+        unless res[:inefficient_cases][tcv] || res[:slow_cases][tcv]
+          res[:problematic_passing].delete(tcv)
         end
       end
       version.test_case_versions.each do |tcv|
