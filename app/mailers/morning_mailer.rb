@@ -67,63 +67,65 @@ class MorningMailer < ApplicationMailer
 
       # only consider a test case problematic if it has memory and/or runtime
       # issues on at least two computers
-      problematic_computer_limit = 2
+      problematic_computers_limit = 2
 
       # create links to relevant searches for all expansions in runtimes and
       # memory usage
       res[:problematic_passing].each do |tcv|
         test_case_name = tcv.test_case.name
         if res[:slow_cases][tcv]
-          # walk through runtime types
+          # first get rid of any runtime_types that don't have enough computers
+          res[:slow_cases][tcv].each_key do |key|
+            problematic_computers_count = res[:slow_cases][tcv][key].length
+            if problematic_computers_count < problematic_computers_limit
+              res[:slow_cases][tcv].delete(key)
+            end
+          end
+
+          # walk through surviving runtime types
           res[:slow_cases][tcv].each_pair do |runtime_type, runtime_hash|
             # walk through computers and assign link for each
-            # throw whole runtime_type out if there isn't more than one
-            # computer
-            
-            if runtime_hash.keys.length < problematic_computer_limit
-              res[:slow_cases][tcv].delete(runtime_type)
+            #
+            # what to put in the search query
+            runtime_query = case runtime_type
+            when :rn then 'rn_runtime'
+            when :re then 're_runtime'
             else
-              # what to put in the search query
-              runtime_query = case runtime_type
-              when :rn then 'rn_runtime'
-              when :re then 're_runtime'
-              else
-                'runtime'
-              end
-              # what to ask the model for
-              runtime_attribute = case runtime_type
-              when :rn then :runtime_seconds
-              when :re then :re_time
-              else
-                :total_runtime_seconds
-              end
-              runtime_hash.each_pair do |computer, computer_hash|
-                # create url that creates the relevant search query and assign it
-                # into the computer_hash
-                current = computer_hash[:current]
-                max_runtime = (current.send(runtime_attribute) *
-                               (1.0 / (1.0 + (runtime_percent / 100.0))))
-                max_runtime = sprintf('%.1f', max_runtime)
+              'runtime'
+            end
+            # what to ask the model for
+            runtime_attribute = case runtime_type
+            when :rn then :runtime_seconds
+            when :re then :re_time
+            else
+              :total_runtime_seconds
+            end
+            runtime_hash.each_pair do |computer, computer_hash|
+              # create url that creates the relevant search query and assign it
+              # into the computer_hash
+              current = computer_hash[:current]
+              max_runtime = (current.send(runtime_attribute) *
+                             (1.0 / (1.0 + (runtime_percent / 100.0))))
+              max_runtime = sprintf('%.1f', max_runtime)
 
-                computer_hash[:url] = 'https://testhub.mesastar.org/' + 
-                  'test_instances/search?'
-                computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+                'test_instances/search?'
+              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
 
-                computer_hash[:url] += {query_text: [
-                  "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
-                  "computer: #{computer.name}",
-                  "threads: #{current.omp_num_threads}",
-                  "compiler: #{current.compiler}",
-                  "compiler_version: #{current.compiler_version}",
-                  "test_case: #{test_case_name}",
-                  "passed: true",
-                  "#{runtime_query}: 0.01-#{max_runtime}"
-                ].join('; ')}.to_query
-                # hold on to current and better times in seconds
-                computer_hash[:current_time] = current.send(runtime_attribute)
-                computer_hash[:better_time] = computer_hash[:better].send(
-                  runtime_attribute)
-              end
+              computer_hash[:url] += {query_text: [
+                "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
+                "computer: #{computer.name}",
+                "threads: #{current.omp_num_threads}",
+                "compiler: #{current.compiler}",
+                "compiler_version: #{current.compiler_version}",
+                "test_case: #{test_case_name}",
+                "passed: true",
+                "#{runtime_query}: 0.01-#{max_runtime}"
+              ].join('; ')}.to_query
+              # hold on to current and better times in seconds
+              computer_hash[:current_time] = current.send(runtime_attribute)
+              computer_hash[:better_time] = computer_hash[:better].send(
+                runtime_attribute)
             end
           end
           # trash whole test case version if we deleted all runtime_types for
@@ -131,68 +133,73 @@ class MorningMailer < ApplicationMailer
           res[:slow_cases].delete(tcv) if res[:slow_cases][tcv].keys.empty? 
         end
         if res[:inefficient_cases][tcv]
-          # walk through runtime types
+          # first get rid of any run_types that don't have enough computers
+          res[:inefficient_cases][tcv].each_key do |key|
+            problematic_computers_count = res[:inefficient_cases][tcv][key].length
+            if problematic_computers_count < problematic_computers_limit
+              res[:inefficient_cases][tcv].delete(key)
+            end
+          end
+          # walk through surviving runtime types, which all have enough
+          # computers
           res[:inefficient_cases][tcv].each_pair do |run_type, run_type_hash|
             # walk through computers and assign link for each
-
-            if run_type_hash.keys.length < problematic_computer_limit
-              res[:inefficient_cases][tcv].delete(run_type)
+            # what to put in the search query
+            memory_query = case run_type
+            when :rn then 'rn_RAM'
+            when :re then 're_RAM'
             else
-              # what to put in the search query
-              memory_query = case run_type
-              when :rn then 'rn_RAM'
-              when :re then 're_RAM'
-              else
-                nil
-              end
-              # what to use to get current value from the model
-              memory_attribute = (run_type.to_s + '_mem').to_sym
-              run_type_hash.each_pair do |computer, computer_hash|
-                # create relevant search query and assign it into the 
-                # computer_hash
-                current = computer_hash[:current]
-                # this needs to be in GB for the search API
-                max_RAM = (current.send(memory_attribute) *
-                           (1.0 / (1.0 + (memory_percent / 100.0))) / 
-                           (1.024e3 ** 2)
-                          )
-                max_RAM = sprintf('%.2f', max_RAM)
-                # use search api to create link showing all more efficient test
-                # instances in last 50 revisions
-                computer_hash[:url] = 'https://testhub.mesastar.org/' + 
-                  'test_instances/search?'
-                computer_hash[:url] += {utf8: '✓'}.to_query + '&'
-                computer_hash[:url] += {query_text: [
-                  "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
-                  "computer: #{computer.name}",
-                  "threads: #{current.omp_num_threads}",
-                  "compiler: #{current.compiler}",
-                  "compiler_version: #{current.compiler_version}",
-                  "test_case: #{test_case_name}",
-                  "passed: true",
-                  "#{memory_query}: 0.01-#{max_RAM}"
-                ].join('; ')}.to_query
-                # hold on to current and better RAM in GB for view
-                computer_hash[:current_RAM] = sprintf(
-                  '%.2f', current.send(memory_attribute) / (1.024e3 ** 2)
-                )
-                computer_hash[:better_RAM] = sprintf(
-                  '%.2f',
-                  computer_hash[:better].send(memory_attribute) / (1.024e3 ** 2)
-                )
-              end
+              nil
+            end
+            # what to use to get current value from the model
+            memory_attribute = (run_type.to_s + '_mem').to_sym
+            run_type_hash.each_pair do |computer, computer_hash|
+              # create relevant search query and assign it into the 
+              # computer_hash
+              current = computer_hash[:current]
+              # this needs to be in GB for the search API
+              max_RAM = (current.send(memory_attribute) *
+                         (1.0 / (1.0 + (memory_percent / 100.0))) / 
+                         (1.024e3 ** 2)
+                        )
+              max_RAM = sprintf('%.2f', max_RAM)
+              # use search api to create link showing all more efficient test
+              # instances in last 50 revisions
+              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+                'test_instances/search?'
+              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+              computer_hash[:url] += {query_text: [
+                "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
+                "computer: #{computer.name}",
+                "threads: #{current.omp_num_threads}",
+                "compiler: #{current.compiler}",
+                "compiler_version: #{current.compiler_version}",
+                "test_case: #{test_case_name}",
+                "passed: true",
+                "#{memory_query}: 0.01-#{max_RAM}"
+              ].join('; ')}.to_query
+              # hold on to current and better RAM in GB for view
+              computer_hash[:current_RAM] = sprintf(
+                '%.2f', current.send(memory_attribute) / (1.024e3 ** 2)
+              )
+              computer_hash[:better_RAM] = sprintf(
+                '%.2f',
+                computer_hash[:better].send(memory_attribute) / (1.024e3 ** 2)
+              )
             end
           end
           if res[:inefficient_cases][tcv].keys.empty?
             res[:inefficient_cases].delete(tcv) 
           end
         end
-        # remove test case from overall list if they don't show slowing or
-        # memory bloat on enough computers.
-        unless res[:inefficient_cases][tcv] || res[:slow_cases][tcv]
-          res[:problematic_passing].delete(tcv)
-        end
       end
+
+      # only retain test cases on master list if they have slow or 
+      # inefficient instances on enough computers
+      res[:problematic_passing].select! do |tcv|
+        res[:inefficient_cases][tcv] || res[:slow_cases][tcv]
+      end
+
       version.test_case_versions.each do |tcv|
         res[:computer_counts][tcv] = tcv.computer_count
         if tcv.status >= 2
