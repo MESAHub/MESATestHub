@@ -54,6 +54,45 @@ class TestCaseVersion < ApplicationRecord
     self.last_tested = test_instances.pluck(:created_at).max
   end
 
+  def recent_runtime_statistics_by_computer(runtime_type: :rn, depth: 100)
+    runtime_query = TestInstance.runtime_query(runtime_type)
+    return nil if runtime_query.nil?
+    res = {}
+    computers.uniq.each do |computer|
+      # instances run by this computer in the last N versions
+      all_with_runtime = test_case.test_instances.where(computer: computer,
+        mesa_version: (version.number-depth)...version.number).where.not(
+        runtime_query => nil)
+      next unless all_with_runtime.count > 0
+      runtimes = all_with_runtime.pluck(runtime_query)
+
+      res[computer] = {avg: nil, std: nil}
+      avg = runtimes.inject(:+) / runtimes.count
+      res[computer][:avg] = avg
+      res[computer][:std] = (runtimes.inject(0) do |res, elt|
+        res + (elt - avg)**2
+      end / runtimes.count)**(0.5)
+    end
+    res
+  end
+
+  def slow_instances(depth: 100, threshold: 3)
+    res = {rn: [], re: [], total: []}
+    res.keys.each do |runtime_type|
+      runtime_query = TestInstance.runtime_query(runtime_type)
+      all_stats = recent_runtime_statistics_by_computer(
+        runtime_type: runtime_type, depth: depth)
+      all_stats.each_pair do |comp, comp_stats|
+        slowest = test_instances.where(computer: comp).
+          order(runtime_query => :desc).first
+        if slowest[runtime_query] > comp_stats[:avg] + threshold * comp_stats[:std]
+          res[runtime_type] << slowest
+        end
+      end
+    end
+    res
+  end
+
   def slowest_instances_by_computer(runtime_type: :rn)
     runtime_query = TestInstance.runtime_query(runtime_type)
     return nil if runtime_query.nil?
