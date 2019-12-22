@@ -25,7 +25,7 @@ gem 'rails_12factor', group: :production
 gem 'scout_apm', group: :production
 # gem 'sprockets', '~> 4.0.0.beta4'
 gem 'mini_racer', :require => nil
-gem 'rubyzip', '~>1.2.2'
+gem 'rubyzip', '~>1.3.0'
 gem 'barista'
 gem 'font-awesome-rails'
 group :development, :test do
