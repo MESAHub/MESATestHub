@@ -6,7 +6,7 @@ end
 ruby '~> 2.6.1'
 gem 'bundler', '~> 2.0.1'
 gem 'sinatra', '~> 2.0.2'
-gem 'rack', '~> 2.0.6'
+gem 'rack', '~> 2.0.8'
 gem 'rails', '~> 5.1.6.2'
 gem 'puma', '~> 3.12'
 gem 'sass-rails', '~> 5.0'
