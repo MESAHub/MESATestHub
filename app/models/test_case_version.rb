@@ -54,57 +54,233 @@ class TestCaseVersion < ApplicationRecord
     self.last_tested = test_instances.pluck(:created_at).max
   end
 
+  def relevant_instances_to_depth(depth: 100, force: false)
+    # search query for all instances of this test case that have been tested
+    # by the same computers as this test case version back +depth+ versions
+    # 
+    # By default, return a memoized version if it exists, but force a new 
+    # search if +force+ is true
+    # 
+    # *NOTE* This is sloppy. We are assuming that the +depth+ keyword is not
+    # often changed, and it is behaving more like an instance variable since it
+    # is shared among several methods. Probably good enough for now, though.
+    
+    return @relevant_instances if @relevant_instances && !force
+    query = test_case.test_instances.where(computer: computers,
+      mesa_version: (version.number-depth)...version.number).includes(:computer)
+    @relevant_instances = query.to_a
+    return @relevant_instances
+  end
+
   def recent_runtime_statistics_by_computer(runtime_type: :rn, depth: 100)
+    # Generate hash linking computers to runtime statistics for this test
+    # 
+    # Searches back to <tt>depth</tt> revisions ago and compiles average
+    # runtime of type <tt>runtime_type</tt>, which must be one of
+    # - +:rn+
+    # - +:re+
+    # - +:total+
+    # and then returns a hash with keys that are computers and values that
+    # are themselves hashes with keys of <tt>:avg</tt> and <tt>:std</tt>, which
+    # yield the average and standard deviations of the runtimes for those
+    # computers
     runtime_query = TestInstance.runtime_query(runtime_type)
     return nil if runtime_query.nil?
     res = {}
     computers.uniq.each do |computer|
       # instances run by this computer in the last N versions
-      all_with_runtime = test_case.test_instances.where(computer: computer,
-        mesa_version: (version.number-depth)...version.number).where.not(
-        runtime_query => nil)
+      all_with_runtime = relevant_instances_to_depth(depth: depth).select do |instance|
+        instance.computer == computer && !instance[runtime_query].nil?
+        # test_case.test_instances.where(computer: computer,
+        # mesa_version: (version.number-depth)...version.number).where.not(
+        # runtime_query => nil)
+      end
       next unless all_with_runtime.count > 0
       runtimes = all_with_runtime.pluck(runtime_query)
 
       res[computer] = {avg: nil, std: nil}
       avg = runtimes.inject(:+) / runtimes.count
       res[computer][:avg] = avg
+
+      # calculate sample standard deviation, since we don't use all values
       res[computer][:std] = (runtimes.inject(0) do |res, elt|
         res + (elt - avg)**2
-      end / runtimes.count)**(0.5)
+      end / (runtimes.count - 1)) ** (0.5)
     end
     res
   end
 
-  def slow_instances(depth: 100, threshold: 3)
-    res = {rn: [], re: [], total: []}
-    res.keys.each do |runtime_type|
-      runtime_query = TestInstance.runtime_query(runtime_type)
-      all_stats = recent_runtime_statistics_by_computer(
-        runtime_type: runtime_type, depth: depth)
-      all_stats.each_pair do |comp, comp_stats|
-        slowest = test_instances.where(computer: comp).
-          order(runtime_query => :desc).first
-        if slowest[runtime_query] > comp_stats[:avg] + threshold * comp_stats[:std]
-          res[runtime_type] << slowest
+  def slow_instances_by_computer(depth: 100, threshold: 3)
+    # Generates hash linking runtime type to lists of slow instances
+    # 
+    # "Slow" instances are defined to be instances having runtimes that, on a
+    # computer-by-computer basis, are more than +threshold+ standard deviations
+    # longer than the average, with both statistics computed over the last
+    # +depth+ revisions (total revisions, not revisions tested).
+    # 
+    # *NOTE* to make this fast, load test case versions by including
+    # test instances _and_ computers, via something like
+    # 
+    #    TestCaseVersion.where(version: oldest..newest).includes(:computers, :test_instances)
+    #    
+    # Otherwise you'll make many abusive calls to the database in this method.
+    res = {}
+    statistics = {}
+    statistics[:rn] = recent_runtime_statistics_by_computer(runtime_type: :rn,
+      depth: depth)
+    statistics[:re] = recent_runtime_statistics_by_computer(runtime_type: :re,
+      depth: depth)
+    statistics[:total] = recent_runtime_statistics_by_computer(
+      runtime_type: :total, depth: depth)
+    runtime_queries = {}
+    [:rn, :re, :total].each do |run_type|
+      runtime_queries[run_type] = TestInstance.runtime_query(run_type)
+    end
+    computers.each do |computer|
+      [:rn, :re, :total].each do |run_type|
+        runtime_query = runtime_queries[run_type]
+
+        # determining if it is "slow" by comparing to # of standard devs. from
+        # the average runtime
+        #
+        # find slowest in current test case version (may be multiple!) by
+        # identifying all from the same computer, then sorting on the
+        # appropriate runtime in ascending order, then take the last
+        slowest = test_instances.select do |ti|
+          ti.computer == computer
+        end.sort_by { |ti| ti[runtime_query] }.last
+
+        # skip if we can't find the proper runtime
+        next unless slowest && slowest[runtime_query]
+
+        # skip if we have no statistics
+        next if statistics[run_type][computer].empty?
+
+        # record the slowest as well as the average and standard deviation
+        # used to select it
+        avg = statistics[run_type][computer][:avg]
+        std = statistics[run_type][computer][:std]
+        if slowest[runtime_query] > avg + threshold * std
+          if res[computer]
+            res[computer][run_type] = {instance: slowest, avg: avg, std: avg}
+          else
+            res[computer] = {run_type => {instance: slowest, avg: avg, std: avg}}
+          end
+        end
+      end
+    end
+  end
+
+  def recent_memory_statistics_by_computer(runtime_type: :rn, depth: 100)
+    # Generate hash linking computers to memory statistics for this test
+    # 
+    # Searches back to +depth+ revisions ago and compiles average
+    # runtime of type +runtime_type+, which must be one of
+    # - +:rn+
+    # - +:re+
+    # - +:total+
+    # and then returns a hash with keys that are computers and values that
+    # are themselves hashes with keys of +:avg+ and +:std+, which
+    # yield the average and standard deviations of the runtimes for those
+    # computers
+    memory_query = TestInstance.memory_query(runtime_type)
+    return nil if memory_query.nil?
+    res = {}
+    computers.uniq.each do |computer|
+      # instances run by this computer in the last +depth+ versions
+      all_with_usage = relevant_instances_to_depth(depth: depth).select do |instance|
+        instance.computer == computer && !instance[memory_query].nil?
+      end
+      next unless all_with_usage.count > 0
+      usages = all_with_usage.pluck(memory_query)
+
+      res[computer] = {avg: nil, std: nil}
+      avg = usages.inject(:+) / usages.count
+      res[computer][:avg] = avg
+
+      # calculate sample standard deviation, since we don't use all values
+      res[computer][:std] = (usages.inject(0) do |res, elt|
+        res + (elt - avg)**2
+      end / (usages.count - 1)) ** 0.5
+    end
+    res
+  end
+
+  def inefficient_instances_by_computer(depth: 100, threshold: 3)
+    # Generates hash linking runtime type to lists of memory-hogging instances
+    # 
+    # "Inefficient" instances are defined to be instances having memory usages
+    # that, on a computer-by-computer basis, are more than +threshold+ standard
+    # deviations larger than the average, with both statistics computed over
+    # the last +depth+ revisions (total revisions, not revisions tested).
+    # 
+    # *NOTE* to make this fast, load test case versions by including
+    # test instances _and_ computers, via something like
+    # 
+    #    TestCaseVersion.where(version: oldest..newest).includes(:computers, :test_instances)
+    #    
+    # Otherwise you'll make many abusive calls to the database in this method.
+    res = {}
+    statistics = {}
+    statistics[:rn] = recent_memory_statistics_by_computer(runtime_type: :rn,
+      depth: depth)
+    statistics[:re] = recent_memory_statistics_by_computer(runtime_type: :re,
+      depth: depth)
+    statistics[:total] = recent_memory_statistics_by_computer(
+      runtime_type: :total, depth: depth)
+    memory_queries = {}
+    [:rn, :re, :total].each do |run_type|
+      memory_queries[run_type] = TestInstance.memory_query(run_type)
+    end
+    computers.each do |computer|
+      [:rn, :re, :total].each do |run_type|
+        memory_query = memory_queries[run_type]
+
+        # determining if it is "slow" by comparing to # of standard devs. from
+        # the average runtime
+        #
+        # find slowest in current test case version (may be multiple!) by
+        # identifying all from the same computer, then sorting on the
+        # appropriate runtime in ascending order, then take the last
+        least_efficient = test_instances.select do |ti|
+          ti.computer == computer
+        end.sort_by { |ti| ti[memory_query] }.last
+
+        # skip if we can't find the proper runtime
+        next unless least_efficient && least_efficient[memory_query]
+
+        # skip if we have no statistics
+        next if statistics[run_type][computer].empty?
+
+        # record the slowest as well as the average and standard deviation
+        # used to select it
+        avg = statistics[run_type][computer][:avg]
+        std = statistics[run_type][computer][:std]
+        if least_efficient[memory_query] > avg + threshold * std
+          if res[computer]
+            res[computer][run_type] = {instance: least_efficient, avg: avg, std: avg}
+          else
+            res[computer] = {run_type => {instance: least_efficient, avg: avg, std: avg}}
+          end
         end
       end
     end
     res
   end
 
-  def slowest_instances_by_computer(runtime_type: :rn)
-    runtime_query = TestInstance.runtime_query(runtime_type)
-    return nil if runtime_query.nil?
-    res = {}
-    computers.uniq.each do |computer|
-      all_with_runtime = test_instances.where(computer: computer).where.not(
-        runtime_query => nil).order(runtime_query => :desc)
-      next unless all_with_runtime.count > 0
-      res[computer] = all_with_runtime.first
-    end
-    res
-  end
+  # def slowest_instances_by_computer(runtime_type: :rn)
+  #   # Generates a hash that links computer 
+  #   runtime_query = TestInstance.runtime_query(runtime_type)
+  #   return nil if runtime_query.nil?
+  #   res = {}
+  #   computers.uniq.each do |computer|
+  #     all_with_runtime = test_instances.where(computer: computer).where.not(
+  #       runtime_query => nil).order(runtime_query => :desc)
+  #     next unless all_with_runtime.count > 0
+  #     res[computer] = all_with_runtime.first
+  #   end
+  #   res
+  # end
 
   def least_efficient_instances_by_computer(run_type: :rn)
     memory_query = TestInstance.memory_query(run_type)
