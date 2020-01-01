@@ -67,7 +67,8 @@ class TestCaseVersion < ApplicationRecord
     
     return @relevant_instances if @relevant_instances && !force
     query = test_case.test_instances.where(computer: computers,
-      mesa_version: (version.number-depth)...version.number).includes(:computer)
+      mesa_version: (version.number-depth)...version.number, passed: true).
+      includes(:computer)
     @relevant_instances = query.to_a
     return @relevant_instances
   end
@@ -110,7 +111,7 @@ class TestCaseVersion < ApplicationRecord
     res
   end
 
-  def slow_instances_by_computer(depth: 100, threshold: 3)
+  def slow_instances(depth: 100, threshold: 3)
     # Generates hash linking runtime type to lists of slow instances
     # 
     # "Slow" instances are defined to be instances having runtimes that, on a
@@ -136,10 +137,9 @@ class TestCaseVersion < ApplicationRecord
     [:rn, :re, :total].each do |run_type|
       runtime_queries[run_type] = TestInstance.runtime_query(run_type)
     end
-    computers.each do |computer|
-      [:rn, :re, :total].each do |run_type|
-        runtime_query = runtime_queries[run_type]
-
+    [:rn, :re, :total].each do |run_type|
+      runtime_query = runtime_queries[run_type]
+      computers.each do |computer|
         # determining if it is "slow" by comparing to # of standard devs. from
         # the average runtime
         #
@@ -161,14 +161,15 @@ class TestCaseVersion < ApplicationRecord
         avg = statistics[run_type][computer][:avg]
         std = statistics[run_type][computer][:std]
         if slowest[runtime_query] > avg + threshold * std
-          if res[computer]
+          if res[run_type]
             res[computer][run_type] = {instance: slowest, avg: avg, std: avg}
           else
-            res[computer] = {run_type => {instance: slowest, avg: avg, std: avg}}
+            res[run_type] = {computer => {instance: slowest, avg: avg, std: avg}}
           end
         end
       end
     end
+    res
   end
 
   def recent_memory_statistics_by_computer(runtime_type: :rn, depth: 100)
@@ -206,7 +207,7 @@ class TestCaseVersion < ApplicationRecord
     res
   end
 
-  def inefficient_instances_by_computer(depth: 100, threshold: 3)
+  def inefficient_instances(depth: 100, threshold: 3)
     # Generates hash linking runtime type to lists of memory-hogging instances
     # 
     # "Inefficient" instances are defined to be instances having memory usages
@@ -232,9 +233,9 @@ class TestCaseVersion < ApplicationRecord
     [:rn, :re, :total].each do |run_type|
       memory_queries[run_type] = TestInstance.memory_query(run_type)
     end
-    computers.each do |computer|
-      [:rn, :re, :total].each do |run_type|
-        memory_query = memory_queries[run_type]
+    [:rn, :re, :total].each do |run_type|
+      memory_query = memory_queries[run_type]
+      computers.each do |computer|
 
         # determining if it is "slow" by comparing to # of standard devs. from
         # the average runtime
@@ -257,10 +258,10 @@ class TestCaseVersion < ApplicationRecord
         avg = statistics[run_type][computer][:avg]
         std = statistics[run_type][computer][:std]
         if least_efficient[memory_query] > avg + threshold * std
-          if res[computer]
-            res[computer][run_type] = {instance: least_efficient, avg: avg, std: avg}
+          if res[run_type]
+            res[run_type][computer] = {instance: least_efficient, avg: avg, std: avg}
           else
-            res[computer] = {run_type => {instance: least_efficient, avg: avg, std: avg}}
+            res[run_type] = {computer => {instance: least_efficient, avg: avg, std: avg}}
           end
         end
       end

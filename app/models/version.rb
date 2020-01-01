@@ -254,6 +254,62 @@ class Version < ApplicationRecord
                               end
   end
 
+  def problem_test_case_versions(depth: 100, runtime_threshold: 3,
+    memory_threshold: 3)
+    # Create massive structure from hashes detailing slow and inefficient cases
+    # 
+    # Structure goes:
+    # - test_case
+    #   - :runtime
+    #     - :rn
+    #       - computers
+    #         - instance
+    #         - average
+    #         - standard deviation
+    #     - :re (same as rn)
+    #     - :total (same as rn)
+    #   - :memory (same as :runtime)
+    #   
+    # So to get at a particular total runtime, you'd need to do something like
+    #   res[test_case][:runtime][:total][computer][instance][:total_runtime_seconds]
+    # 
+    # The goal is to get everything in one place so further database calls
+    # need not be made. The parameters determine how far back to do the search
+    # to build baseline statistics and how sensitive the searches should be.
+    # 
+    # +depth+:: how many versions to go back to determine average and standard deviations
+    # +runtime_threshold+:: how many stdevs from the average a time must be to be "slow"
+    # +memory_threshold+:: how many stdevs from the average a memory usage must be to be "inefficient"
+    
+
+    # do pedantic loading of test case versions to ensure loading of computers
+    # and test instances... there's probably a better rails way to do this
+    tcvs = TestCaseVersion.where(version: self).includes(:computers, :test_instances)
+
+    res = {}
+
+    tcvs.each do |tcv|
+      # create template hash; we'll delete empty ones later
+      res[tcv] = {}
+
+      # TestCaseVersion does heavy lifting of finding weak computer/cases
+      runtime_data = tcv.slow_instances(depth: depth,
+        threshold: runtime_threshold)
+      memory_data = tcv.inefficient_instances(depth: depth,
+        threshold: memory_threshold)
+
+      # Thread together data from TestCaseVersion details
+      res[tcv][:runtime] = runtime_data unless runtime_data.empty?
+      res[tcv][:memory] = memory_data unless memory_data.empty?
+
+      # trash entry if neither runtime nor memory problems appear
+      res.delete(tcv) if res[tcv].empty?
+    end
+    res
+  end
+
+
+
   def slow_test_case_versions(depth: 50, percent: 30)
     res = {}
     test_case_versions.includes(:test_case).where(status: 0).each do |tcv|
