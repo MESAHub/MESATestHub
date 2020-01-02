@@ -37,9 +37,10 @@
           %b Commit Message:
           =@version.log
 
-
-
-- unless @version_status == :untested
+- if @version_status == :untested || @version_status == :other
+  %h4.text-danger.text-center.my-5
+    No Tests Submitted
+- else
   .row#index-desc
     .col
       .card-deck
@@ -78,28 +79,99 @@
               %p.card-text
                 %b=@pass_count
                 tests where all computers report passing.
-
   .row
     .col
-      .table-responsive
-        %table.table.table-hover#test_summary
-          %thead.thead-default
-            %tr
-              %th Name
-              %th Computers Tested
-              %th Last Tested Date
-              -# %th Diff?
+      %ul.list-group
+        - @version.other.each do |tcv|
+          %li.list-group-item.list-group-item-action.list-group-item-info
+            .d-flex.w-100.justify-content-between
+              %span.h4.text-monospace
+                =link_to tcv.test_case.name, test_case_version_path(number: @selected, test_case: tcv.test_case.name), class: 'stretched-link text-reset no-hover'
+              %span.badge.badge-success.badge-pill=tcv.test_instances.where(passed: true).count
+              %span.badge.badge-primary.badge-pill=tcv.unique_checksum_count
+              %span.badge.badge-danger.badge-pill=tcv.test_instances.where(passed: false).count
 
-          %tbody
-            - @test_case_versions.each do |tcv|
-              %tr{class: @row_classes[tcv] + ' clickable-row', "data-href":test_case_version_path(number: @selected, test_case: tcv.test_case.name), id: tcv.test_case.name + '-row'}
-                %td
-                  %samp= tcv.test_case.name
-                - if @selected == 'all'
-                  %td= @last_versions[tcv]
-                - else
-                  %td= tcv.computer_count
-                  %td= format_time(@last_tested[tcv]) #.localtime.strftime("%F %H:%M %Z")
+        - @version.mixed.each do |tcv|
+          %li.list-group-item.list-group-item-action.list-group-item-warning
+            .d-flex.w-100.mb-0.justify-content-between
+              %span.h4.text-monospace
+                =link_to tcv.test_case.name, test_case_version_path(number: @selected, test_case: tcv.test_case.name), class: 'stretched-link text-reset no-hover'
+              %p.text-right
+                %span.badge.badge-secondary.badge-pill
+                  =tcv.computer_count
+                  %span.d-none.d-md-inline
+                    computers
+                %span.badge.badge-success.badge-pill
+                  =tcv.test_instances.where(passed: true).count
+                  %span.d-none.d-md-inline
+                    passes
+                %span.badge.badge-primary.badge-pill
+                  =tcv.unique_checksum_count
+                  %span.d-none.d-md-inline
+                    checksums
+                %span.badge.badge-danger.badge-pill
+                  =tcv.test_instances.where(passed: false).count
+                  %span.d-none.d-md-inline
+                    failures
+                %br
+                %small
+                  %em
+                    As of
+                    =format_time(@last_tested[tcv])
+            %p.mb-0
+              - tcv.failing.each_with_index do |inst, i|
+                %strong= inst.computer_name + ': '
+                %em= TestInstance.failure_types[inst.failure_type] + (i < tcv.failing.length - 1 ? ',' : '')
+        - @version.checksums.each do |tcv|
+          %li.list-group-item.list-group-item-action.list-group-item-primary
+            %span.h4.text-monospace
+              =link_to tcv.test_case.name, test_case_version_path(number: @selected, test_case: tcv.test_case.name), class: 'stretched-link text-reset no-hover'
+            %span.badge.badge-success.badge-pill=tcv.test_instances.where(passed: true).count
+            %span.badge.badge-primary.badge-pill=tcv.unique_checksum_count
+            %span.badge.badge-danger.badge-pill=tcv.test_instances.where(passed: false).count
+        - @version.failing.each do |tcv|
+          %li.list-group-item.list-group-item-action.list-group-item-danger
+            %span.h4.text-monospace
+              =link_to tcv.test_case.name, test_case_version_path(number: @selected, test_case: tcv.test_case.name), class: 'stretched-link text-reset no-hover'
+            %span.badge.badge-success.badge-pill=tcv.test_instances.where(passed: true).count
+            %span.badge.badge-primary.badge-pill=tcv.unique_checksum_count
+            %span.badge.badge-danger.badge-pill=tcv.test_instances.where(passed: false).count
+      - if @version.passing.length > 0
+        .text-center.my-4
+          %a.btn.btn-lg.btn-success{href: '#', 'data-target'.to_sym => '#passing', 'data-toggle'.to_sym => 'collapse'}
+            Show/Hide Passing Test Cases
+
+      %ul.list-group.collapse.mb-5#passing
+        - @version.passing.each do |tcv|
+          %li.list-group-item.list-group-item-action.list-group-item-success
+            %span.h4.text-monospace
+              =link_to tcv.test_case.name, test_case_version_path(number: @selected, test_case: tcv.test_case.name), class: 'stretched-link text-reset no-hover'
+            %span.badge.badge-success.badge-pill=tcv.test_instances.where(passed: true).count
+            %span.badge.badge-primary.badge-pill=tcv.unique_checksum_count
+            %span.badge.badge-danger.badge-pill=tcv.test_instances.where(passed: false).count
+
+
+-#  .row
+-#    .col
+-#      .table-responsive
+-#        %table.table.table-hover#test_summary
+-#          %thead.thead-default
+-#            %tr
+-#              %th Name
+-#              %th Computers Tested
+-#              %th Last Tested Date
+-#              -# %th Diff?
+-#
+-#          %tbody
+-#            - @test_case_versions.each do |tcv|
+-#              %tr{class: @row_classes[tcv] + ' clickable-row', "data-href":-#test_case_version_path(number: @selected, test_case: tcv.-#test_case.name), id: tcv.test_case.name + '-row'}
+-#                %td
+-#                  %samp= tcv.test_case.name
+-#                - if @selected == 'all'
+-#                  %td= @last_versions[tcv]
+-#                - else
+-#                  %td= tcv.computer_count
+-#                  %td= format_time(@last_tested[tcv]) #.localtime.strftime("%F %H:%M %Z")
                 -# %td
                 -#   - case @diffs[test_case]
                 -#   - when 0

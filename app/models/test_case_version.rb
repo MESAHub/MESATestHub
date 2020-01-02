@@ -42,6 +42,14 @@ class TestCaseVersion < ApplicationRecord
     self.submission_count = test_instances.count
   end
 
+  def passing
+    test_instances.where(passed: true)
+  end
+
+  def failing
+    test_instances.where(passed: false)
+  end
+
   def update_computer_count
     if submission_count == 0
       self.computer_count = 0

@@ -726,7 +726,7 @@ def do_one_version(version_number)
   end
 end
 
-11910.upto(11928) { |n| puts n; do_one_version(n) }
+11800.upto(11928) { |n| puts n; do_one_version(n) }
 
 # populate test instances including a mix of the computers and test cases
 # must also build test datum objects to include
