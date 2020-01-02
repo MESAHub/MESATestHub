@@ -6,9 +6,9 @@ end
 ruby '~> 2.6.1'
 gem 'bundler', '~> 2.0.1'
 gem 'sinatra', '~> 2.0.2'
-gem 'rack', '~> 2.0.6'
+gem 'rack', '~> 2.0.8'
 gem 'rails', '~> 5.1.6.2'
-gem 'puma', '~> 3.7'
+gem 'puma', '~> 4.3'
 gem 'sass-rails', '~> 5.0'
 gem 'uglifier', '>= 1.3.0'
 gem 'coffee-rails', '~> 4.2'
@@ -18,14 +18,14 @@ gem 'pg'
 gem 'bcrypt', '~> 3.1.7'
 gem 'sendgrid-ruby'
 gem 'kaminari'
-gem 'loofah', '~> 2.2.3'
+gem 'loofah', '~> 2.3.1'
 gem 'lograge'
 gem 'rails-html-sanitizer', '~> 1.0.4'
 gem 'rails_12factor', group: :production
 gem 'scout_apm', group: :production
 # gem 'sprockets', '~> 4.0.0.beta4'
 gem 'mini_racer', :require => nil
-gem 'rubyzip', '~>1.2.2'
+gem 'rubyzip', '~>1.3.0'
 gem 'barista'
 gem 'font-awesome-rails'
 group :development, :test do
