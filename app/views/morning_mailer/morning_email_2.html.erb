@@ -54,8 +54,8 @@
           </a>
         </samp>
         (<%= data[:computer_counts][tcv].to_s + ' ' + 'computer'.pluralize(data[:computer_counts][tcv])%> tested)
-        <% if data[:trouble_cases][:runtime][tcv] %>
-          <% if data[:trouble_cases][:memory][tcv] %>
+        <% if data[:trouble_cases][tcv][:runtime] %>
+          <% if data[:trouble_cases][tcv][:memory] %>
             (runtime and memory usage increases)
           <% else %>
             (runtime increase)
@@ -64,8 +64,8 @@
           (memory usage increase)
         <% end %>
         <ul>
-          <% if data[:trouble_cases][:runtime][tcv] %>
-            <% data[:trouble_cases][:runtime][tcv].each_pair do |runtime_type, runtime_hash| %>
+          <% if data[:trouble_cases][tcv][:runtime] %>
+            <% data[:trouble_cases][tcv][:runtime].each_pair do |runtime_type, runtime_hash| %>
               <li> The following computers show increased <%= runtime_type %> runtimes:
                 <ul>
                   <% runtime_hash.each_pair do |computer, computer_hash| %>
@@ -83,8 +83,8 @@
               </li>
             <% end %>
           <% end %>
-          <% if data[:trouble_cases][:memory][tcv] %>
-            <% data[:trouble_cases][:memory][tcv].each_pair do |run_type, run_type_hash| %>
+          <% if data[:trouble_cases][tcv][:memory] %>
+            <% data[:trouble_cases][tcv][:memory].each_pair do |run_type, run_type_hash| %>
               <li> The following computers show increased <%= run_type %> memory usage:
                 <ul>
                   <% run_type_hash.each_pair do |computer, computer_hash| %>
