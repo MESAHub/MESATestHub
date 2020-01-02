@@ -62,6 +62,55 @@ class MorningMailer < ApplicationMailer
         tcv1.test_case.name <=> tcv2.test_case.name
       end.uniq
 
+      # get useful search query links for trouble cases that show data from
+      # which average and standard deviation are taken from:
+      res[:trouble_cases].each do |tcv|
+        test_case_name = tcv.test_case.name
+        if res[:trouble_cases][tcv][:runtime]
+          res[:trouble_cases][tcv][:runtime].each_pair do |runtime_type, runtime_hash|
+            # walk through computers and assign link for each
+            #
+            runtime_hash.each_pair do |computer, computer_hash|
+              # create url that creates the relevant search query and assign it
+              # into the computer_hash
+              current = computer_hash[:instance]
+              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+                'test_instances/search?'
+              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+              computer_hash[:url] += {query_text: [
+                "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
+                "computer: #{computer.name}",
+                "threads: #{current.omp_num_threads}",
+                "compiler: #{current.compiler}",
+                "compiler_version: #{current.compiler_version}",
+                "test_case: #{test_case_name}",
+                "passed: true",
+              ].join('; ')}.to_query
+            end
+          end
+        end
+        if res[:trouble_cases][tcv][:memory]
+          res[:trouble_cases][tcv][:memory].each_pair do |run_type, run_type_hash|
+            # walk through computers and assign link for each
+              # use search api to create link showing all more efficient test
+              # instances in last `depth` revisions
+              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+                'test_instances/search?'
+              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+              computer_hash[:url] += {query_text: [
+                "version: #{current.mesa_version - depth}-#{current.mesa_version - 1}",
+                "computer: #{computer.name}",
+                "threads: #{current.omp_num_threads}",
+                "compiler: #{current.compiler}",
+                "compiler_version: #{current.compiler_version}",
+                "test_case: #{test_case_name}",
+                "passed: true",
+              ].join('; ')}.to_query
+            end
+          end
+        end
+      end
+
       version.test_case_versions.each do |tcv|
         res[:computer_counts][tcv] = tcv.computer_count
         if tcv.status >= 2
@@ -88,7 +137,7 @@ class MorningMailer < ApplicationMailer
     # to = Email.new(email: 'wmwolf@asu.edu', name: 'Bill Wolf')
     subject = "MesaTestHub Report #{Date.today}"
     html_content = ApplicationController.render(
-      template: 'morning_mailer/morning_email.html.erb',
+      template: 'morning_mailer/morning_email_2.html.erb',
       layout: 'mailer',
       assigns: { version_data: @version_data,
                  versions_tested: @versions_tested,
@@ -129,6 +178,7 @@ class MorningMailer < ApplicationMailer
     # send the message
     @client.mail._('send').post(request_body: email.to_json)
   end
+
   def morning_email
     # first gather data from database; bail if there are no failure in the last
     # 24 hours

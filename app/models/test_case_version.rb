@@ -161,10 +161,12 @@ class TestCaseVersion < ApplicationRecord
         avg = statistics[run_type][computer][:avg]
         std = statistics[run_type][computer][:std]
         if slowest[runtime_query] > avg + threshold * std
+          to_add = {instance: slowest, time: slowest[runtime_query], avg: avg,
+            std: avg}
           if res[run_type]
-            res[computer][run_type] = {instance: slowest, avg: avg, std: avg}
+            res[computer][run_type] = to_add
           else
-            res[run_type] = {computer => {instance: slowest, avg: avg, std: avg}}
+            res[run_type] = {computer => to_add}
           end
         end
       end
@@ -258,10 +260,12 @@ class TestCaseVersion < ApplicationRecord
         avg = statistics[run_type][computer][:avg]
         std = statistics[run_type][computer][:std]
         if least_efficient[memory_query] > avg + threshold * std
+          to_add = {instance: least_efficient, 
+            usage: least_effcient[memory_query], avg: avg, std: avg}
           if res[run_type]
-            res[run_type][computer] = {instance: least_efficient, avg: avg, std: avg}
+            res[run_type][computer] = to_add
           else
-            res[run_type] = {computer => {instance: least_efficient, avg: avg, std: avg}}
+            res[run_type] = {computer => to_add}
           end
         end
       end
