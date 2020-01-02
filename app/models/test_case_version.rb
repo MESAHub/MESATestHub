@@ -100,12 +100,12 @@ class TestCaseVersion < ApplicationRecord
       runtimes = all_with_runtime.pluck(runtime_query)
 
       res[computer] = {avg: nil, std: nil}
-      avg = runtimes.inject(:+) / runtimes.count
+      avg = runtimes.inject(:+) / runtimes.count.to_f
       res[computer][:avg] = avg
 
       # calculate sample standard deviation, since we don't use all values
       res[computer][:std] = (runtimes.inject(0) do |res, elt|
-        res + (elt - avg)**2
+        res + (elt.to_f - avg.to_f)**2
       end / (runtimes.count - 1)) ** (0.5)
     end
     res
@@ -205,12 +205,12 @@ class TestCaseVersion < ApplicationRecord
       # wrong.
       next unless usages.count > 5
       res[computer] = {}
-      avg = usages.inject(:+) / usages.count
+      avg = usages.inject(:+) / usages.count.to_f
       res[computer][:avg] = avg
 
       # calculate sample standard deviation, since we don't use all values
       res[computer][:std] = (usages.inject(0) do |res, elt|
-        res + (elt - avg)**2
+        res + (elt.to_f - avg.to_f)**2
       end / (usages.count - 1)) ** 0.5
     end
     res
@@ -269,7 +269,7 @@ class TestCaseVersion < ApplicationRecord
         std = statistics[run_type][computer][:std]
         if least_efficient[memory_query] > avg + threshold * std
           to_add = {instance: least_efficient, 
-            usage: least_efficient[memory_query], avg: avg, std: avg}
+            usage: least_efficient[memory_query], avg: avg, std: std}
           if res[run_type]
             res[run_type][computer] = to_add
           else
