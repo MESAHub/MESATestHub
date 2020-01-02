@@ -164,7 +164,7 @@ class TestCaseVersion < ApplicationRecord
           to_add = {instance: slowest, time: slowest[runtime_query], avg: avg,
             std: avg}
           if res[run_type]
-            res[computer][run_type] = to_add
+            res[run_type][computer] = to_add
           else
             res[run_type] = {computer => to_add}
           end
