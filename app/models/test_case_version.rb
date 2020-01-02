@@ -267,7 +267,7 @@ class TestCaseVersion < ApplicationRecord
         # used to select it
         avg = statistics[run_type][computer][:avg]
         std = statistics[run_type][computer][:std]
-        if least_efficient[memory_query] > avg + [threshold * std, min_delta_GB].max
+        if least_efficient[memory_query] > avg + [threshold * std, min_delta_GB*1e6].max
           to_add = {instance: least_efficient, 
             usage: least_efficient[memory_query], avg: avg, std: std}
           if res[run_type]
