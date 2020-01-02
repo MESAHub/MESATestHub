@@ -154,7 +154,7 @@ class TestCaseVersion < ApplicationRecord
         next unless slowest && slowest[runtime_query]
 
         # skip if we have no statistics
-        next if statistics[run_type][computer].empty?
+        next if statistics[run_type][computer].nil? || statistics[run_type][computer].empty?
 
         # record the slowest as well as the average and standard deviation
         # used to select it
