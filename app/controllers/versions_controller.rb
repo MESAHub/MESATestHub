@@ -145,11 +145,8 @@ class VersionsController < ApplicationController
                          end
 
     # set up colored table rows depending on passage status
-    @computer_counts = {}
-    @last_versions = {}
     @row_classes = {}
     @last_tested = {}
-    @diffs = {}
     @test_case_versions.each do |tcv|
       @last_tested[tcv] = tcv.last_tested
       @row_classes[tcv] =
