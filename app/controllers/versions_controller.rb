@@ -73,16 +73,25 @@ class VersionsController < ApplicationController
     # to test case versions
     @counts = {}
     @failing_instances = {}
+    @failure_types = {}
     @test_case_versions.each do |tcv|
       @failing_instances[tcv] = tcv.test_instances.select { |ti| !ti.passed }
+      if @failing_instances[tcv].count.positive?
+        @failure_types[tcv] = {}
+        # create hash that has failure types as keys and arrays of computers,
+        # sorted by name, as values
+        @failing_instances[tcv].pluck(:failure_type).uniq.each do |failure_type|
+          @failure_types[tcv][failure_type] = @failing_instances[tcv].select do |ti|
+            ti.failure_type == failure_type
+          end.map { |ti| ti.computer } #.pluck(:computer).uniq.sort { |comp| comp.name }
+        end
+      end
       @counts[tcv] = {}
       @counts[tcv][:computers] = tcv.computer_count
       @counts[tcv][:passes] = tcv.test_instances.count { |ti| ti.passed }
       @counts[tcv][:failures] = @failing_instances[tcv].count
       @counts[tcv][:checksums] = tcv.unique_checksum_count
     end
-
-    # status, @pass_count, @fail_count, @mix_count, @checksum_count, @other_count = @version.summary_status
 
     @version_status = case @version.status
                       when 0 then :passing

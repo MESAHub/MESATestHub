@@ -85,12 +85,8 @@
         - @others.each do |tcv|
           %li.list-group-item.list-group-item-action.list-group-item-info
             .d-flex.w-100.justify-content-between
-              %span.h4.text-monospace
-                =link_to tcv.test_case.name, test_case_version_path(number: @selected, test_case: tcv.test_case.name), class: 'stretched-link text-reset no-hover'
-              %span.badge.badge-success.badge-pill=tcv.test_instances.where(passed: true).count
-              %span.badge.badge-primary.badge-pill=tcv.unique_checksum_count
-              %span.badge.badge-danger.badge-pill=tcv.test_instances.where(passed: false).count
-
+              = render partial: "badges", locals: { tcv: tcv }
+            = render partial: "failures", locals: { tcv: tcv }
         - @mixed.each do |tcv|
           %li.list-group-item.list-group-item-action.list-group-item-warning
             .d-flex.w-100.mb-0.justify-content-between

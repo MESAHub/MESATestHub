@@ -1,4 +1,4 @@
-%span.h4.text-monospace
+%span.h5.text-monospace
   =link_to tcv.test_case.name, test_case_version_path(number: @selected, test_case: tcv.test_case.name), class: 'stretched-link text-reset no-hover'
 %p.text-right
   %span.badge.badge-secondary.badge-pill
@@ -9,14 +9,14 @@
     =@counts[tcv][:passes]
     %span.d-none.d-md-inline
       passes
-  %span.badge.badge-primary.badge-pill
-    =@counts[tcv][:checksums]
-    %span.d-none.d-md-inline
-      checksums
   %span.badge.badge-danger.badge-pill
     =@counts[tcv][:failures]
     %span.d-none.d-md-inline
       failures
+  %span.badge.badge-primary.badge-pill
+    =@counts[tcv][:checksums]
+    %span.d-none.d-md-inline
+      checksums
   %br
   %small
     %em

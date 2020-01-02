@@ -1,4 +1,5 @@
-%p.mb-0
-  - @failing_instances[tcv].each_with_index do |inst, i|
-    %strong= inst.computer_name + ': '
-    %em= TestInstance.failure_types[inst.failure_type] + (i < @failing_instances[tcv].length - 1 ? ',' : '')
+- unless @failure_types[tcv].nil? || @failure_types[tcv].empty?
+  %dl.row.mb-0
+    - @failure_types[tcv].keys.each do |failure_type|
+      %dt.col-6.col-sm-3.mb-0.text-right.text-truncate= TestInstance.failure_types[failure_type] + ' Failure: '
+      %dd.col-6.col-sm-9.mb-0= @failure_types[tcv][failure_type].map { |comp| comp.name }.sort_by { |comp_name| comp_name.downcase }.join(', ')
