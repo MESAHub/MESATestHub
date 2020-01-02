@@ -96,7 +96,7 @@ class TestCaseVersion < ApplicationRecord
         # mesa_version: (version.number-depth)...version.number).where.not(
         # runtime_query => nil)
       end
-      next unless all_with_runtime.count > 0
+      next unless all_with_runtime.count > 5
       runtimes = all_with_runtime.pluck(runtime_query)
 
       res[computer] = {avg: nil, std: nil}
@@ -195,14 +195,15 @@ class TestCaseVersion < ApplicationRecord
         instance.computer == computer && !instance[memory_query].nil?
       end
 
-      next unless all_with_usage.count > 0
+      # set lower limit to make sure we have "statistics"
+      next unless all_with_usage.count > 5
       
       usages = all_with_usage.pluck(memory_query)
       # NOTE: this is here because a divide by zero error occurred before that
       # the first escape clause SHOULD HAVE CAUGHT. I don't understand this, so
       # we might be missing some data in our searches if something is going
       # wrong.
-      next unless usages.count > 0
+      next unless usages.count > 5
       res[computer] = {}
       avg = usages.inject(:+) / usages.count
       res[computer][:avg] = avg
