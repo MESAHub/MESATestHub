@@ -143,11 +143,11 @@ class TestCaseVersion < ApplicationRecord
         # determining if it is "slow" by comparing to # of standard devs. from
         # the average runtime
         #
-        # find slowest in current test case version (may be multiple!) by
-        # identifying all from the same computer, then sorting on the
+        # find slowest passing in current test case version (may be multiple!) by
+        # by identifying all passing from the same computer, then sorting on the
         # appropriate runtime in ascending order, then take the last
         slowest = test_instances.select do |ti|
-          ti.computer == computer
+          ti.computer == computer && ti.passed
         end.sort_by { |ti| ti[runtime_query] }.last
 
         # skip if we can't find the proper runtime
@@ -249,11 +249,12 @@ class TestCaseVersion < ApplicationRecord
         # determining if it is "slow" by comparing to # of standard devs. from
         # the average runtime
         #
-        # find slowest in current test case version (may be multiple!) by
-        # identifying all from the same computer, then sorting on the
-        # appropriate runtime in ascending order, then take the last
+        # find least efficient passing instance in current test case version
+        # (may be multiple!) by identifying all from the same computer, then
+        # sorting on the appropriate memory usage in ascending order, then take
+        # the last
         least_efficient = test_instances.select do |ti|
-          ti.computer == computer
+          ti.computer == computer && ti.passed
         end.sort_by { |ti| ti[memory_query] }.last
 
         # skip if we can't find the proper runtime
