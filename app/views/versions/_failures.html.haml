@@ -1,0 +1,4 @@
+%p.mb-0
+  - @failing_instances[tcv].each_with_index do |inst, i|
+    %strong= inst.computer_name + ': '
+    %em= TestInstance.failure_types[inst.failure_type] + (i < @failing_instances[tcv].length - 1 ? ',' : '')
