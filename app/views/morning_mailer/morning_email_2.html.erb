@@ -76,7 +76,7 @@
                       <span <%= @make_red %>>
                         <%= computer_hash[:time] %> sec
                       </span>
-                      (&mu; = <%= computer_hash[:avg] %>, &sigma; = <%= computer_hash[:std] %>)
+                      (&mu; = <%=sprintf("%.1f", computer_hash[:avg])%> sec, &sigma; = <%=sprintf("%.2f", computer_hash[:std])%> sec)
                     </li>
                   <% end %>
                 </ul>
@@ -95,7 +95,7 @@
                       <span <%= @make_red %>>
                         <%= computer_hash[:usage] %> GB
                       </span>
-                      (&mu; = <%= computer_hash[:avg] %>, &sigma; = <%= computer_hash[:std] %>)
+                      (&mu; = <%=sprintf('%.1f', computer_hash[:avg]/1e6)%> GB, &sigma; = <%=sprintf("%.2f",computer_hash[:std])%> GB)
                     </li>
                   <% end %>
                 </ul>
