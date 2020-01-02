@@ -261,7 +261,7 @@ class TestCaseVersion < ApplicationRecord
         std = statistics[run_type][computer][:std]
         if least_efficient[memory_query] > avg + threshold * std
           to_add = {instance: least_efficient, 
-            usage: least_effcient[memory_query], avg: avg, std: avg}
+            usage: least_efficient[memory_query], avg: avg, std: avg}
           if res[run_type]
             res[run_type][computer] = to_add
           else
