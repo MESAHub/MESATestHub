@@ -94,6 +94,7 @@ class MorningMailer < ApplicationMailer
             run_type_hash.each_pair do |computer, computer_hash|
               # use search api to create link showing all more efficient test
               # instances in last `depth` revisions
+              current = computer_hash[:instance]
               computer_hash[:url] = 'https://testhub.mesastar.org/' + 
                 'test_instances/search?'
               computer_hash[:url] += {utf8: '✓'}.to_query + '&'
