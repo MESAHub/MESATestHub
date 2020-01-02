@@ -64,7 +64,7 @@ class MorningMailer < ApplicationMailer
 
       # get useful search query links for trouble cases that show data from
       # which average and standard deviation are taken from:
-      res[:trouble_cases].each do |tcv|
+      res[:trouble_cases].keys.each do |tcv|
         test_case_name = tcv.test_case.name
         if res[:trouble_cases][tcv][:runtime]
           res[:trouble_cases][tcv][:runtime].each_pair do |runtime_type, runtime_hash|
