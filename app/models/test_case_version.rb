@@ -203,7 +203,7 @@ class TestCaseVersion < ApplicationRecord
       # we might be missing some data in our searches if something is going
       # wrong.
       next unless usages.count > 0
-      
+      res[computer] = {}
       avg = usages.inject(:+) / usages.count
       res[computer][:avg] = avg
 
