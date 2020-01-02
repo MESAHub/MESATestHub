@@ -46,7 +46,7 @@
         </samp> (<%= data[:computer_counts][tcv].to_s + ' ' + 'computer'.pluralize(data[:computer_counts][tcv])%>)
       </li>
     <%end%>
-    <% data[:trouble_cases].each do |tcv| %>
+    <% data[:trouble_cases].keys.each do |tcv| %>
       <li>
         <samp>
           <a <%=@make_green%> clicktracking=off href=<%= data[:case_links][tcv]%>>
