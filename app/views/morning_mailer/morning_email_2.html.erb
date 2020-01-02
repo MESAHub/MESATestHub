@@ -93,9 +93,9 @@
                         <%= computer.name %>
                       </a>:
                       <span <%= @make_red %>>
-                        <%= computer_hash[:usage] %> GB
+                        <%= sprintf('%.1f', computer_hash[:usage]/1e6 %> GB
                       </span>
-                      (&mu; = <%=sprintf('%.1f', computer_hash[:avg]/1e6)%> GB, &sigma; = <%=sprintf("%.2f",computer_hash[:std])%> GB)
+                      (&mu; = <%=sprintf('%.1f', computer_hash[:avg]/1e6)%> GB, &sigma; = <%=sprintf("%.2f",computer_hash[:std]/1e6)%> GB)
                     </li>
                   <% end %>
                 </ul>
