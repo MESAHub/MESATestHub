@@ -27,7 +27,7 @@ class MorningMailer < ApplicationMailer
     @version_data = {}
     depth = 100
     runtime_threshold = 3
-    memory_percent = 2
+    memory_threshold = 2
     @versions_tested.each do |version|
       res = {
         version: version,
@@ -91,7 +91,7 @@ class MorningMailer < ApplicationMailer
         end
         if res[:trouble_cases][tcv][:memory]
           res[:trouble_cases][tcv][:memory].each_pair do |run_type, run_type_hash|
-            # walk through computers and assign link for each
+            run_type_hash.each_pair do |computer, computer_hash|
               # use search api to create link showing all more efficient test
               # instances in last `depth` revisions
               computer_hash[:url] = 'https://testhub.mesastar.org/' + 
