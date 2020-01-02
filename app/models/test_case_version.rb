@@ -99,7 +99,7 @@ class TestCaseVersion < ApplicationRecord
       next unless all_with_runtime.count > 5
       runtimes = all_with_runtime.pluck(runtime_query)
 
-      res[computer] = {avg: nil, std: nil}
+      res[computer] = {}
       avg = runtimes.inject(:+) / runtimes.count.to_f
       res[computer][:avg] = avg
 
@@ -162,7 +162,7 @@ class TestCaseVersion < ApplicationRecord
         std = statistics[run_type][computer][:std]
         if slowest[runtime_query] > avg + threshold * std
           to_add = {instance: slowest, time: slowest[runtime_query], avg: avg,
-            std: avg}
+            std: std}
           if res[run_type]
             res[run_type][computer] = to_add
           else
