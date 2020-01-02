@@ -26,8 +26,8 @@ class MorningMailer < ApplicationMailer
     @versions_tested.sort_by! { |version| -version.number }
     @version_data = {}
     depth = 100
-    runtime_threshold = 3
-    memory_threshold = 2
+    runtime_threshold = 4
+    memory_threshold = 4
     @versions_tested.each do |version|
       res = {
         version: version,

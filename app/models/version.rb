@@ -254,8 +254,8 @@ class Version < ApplicationRecord
                               end
   end
 
-  def problem_test_case_versions(depth: 100, runtime_threshold: 3,
-    memory_threshold: 3)
+  def problem_test_case_versions(depth: 100, runtime_threshold: 4,
+    memory_threshold: 4)
     # Create massive structure from hashes detailing slow and inefficient cases
     # 
     # Structure goes:

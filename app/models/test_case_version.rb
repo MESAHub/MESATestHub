@@ -111,7 +111,7 @@ class TestCaseVersion < ApplicationRecord
     res
   end
 
-  def slow_instances(depth: 100, threshold: 3, min_delta_t: 5)
+  def slow_instances(depth: 100, threshold: 4, min_delta_t: 5)
     # Generates hash linking runtime type to lists of slow instances
     # 
     # "Slow" instances are defined to be instances having runtimes that, on a
@@ -216,7 +216,7 @@ class TestCaseVersion < ApplicationRecord
     res
   end
 
-  def inefficient_instances(depth: 100, threshold: 3, min_delta_GB: 0.1)
+  def inefficient_instances(depth: 100, threshold: 4, min_delta_GB: 0.1)
     # Generates hash linking runtime type to lists of memory-hogging instances
     # 
     # "Inefficient" instances are defined to be instances having memory usages
