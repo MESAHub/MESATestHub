@@ -111,7 +111,7 @@ class TestCaseVersion < ApplicationRecord
     res
   end
 
-  def slow_instances(depth: 100, threshold: 3)
+  def slow_instances(depth: 100, threshold: 3, min_delta_t: 5)
     # Generates hash linking runtime type to lists of slow instances
     # 
     # "Slow" instances are defined to be instances having runtimes that, on a
@@ -160,7 +160,7 @@ class TestCaseVersion < ApplicationRecord
         # used to select it
         avg = statistics[run_type][computer][:avg]
         std = statistics[run_type][computer][:std]
-        if slowest[runtime_query] > avg + threshold * std
+        if slowest[runtime_query] > avg + [threshold * std, min_delta_t].max
           to_add = {instance: slowest, time: slowest[runtime_query], avg: avg,
             std: std}
           if res[run_type]
@@ -216,7 +216,7 @@ class TestCaseVersion < ApplicationRecord
     res
   end
 
-  def inefficient_instances(depth: 100, threshold: 3)
+  def inefficient_instances(depth: 100, threshold: 3, min_delta_GB: 0.1)
     # Generates hash linking runtime type to lists of memory-hogging instances
     # 
     # "Inefficient" instances are defined to be instances having memory usages
@@ -267,7 +267,7 @@ class TestCaseVersion < ApplicationRecord
         # used to select it
         avg = statistics[run_type][computer][:avg]
         std = statistics[run_type][computer][:std]
-        if least_efficient[memory_query] > avg + threshold * std
+        if least_efficient[memory_query] > avg + [threshold * std, min_delta_GB].max
           to_add = {instance: least_efficient, 
             usage: least_efficient[memory_query], avg: avg, std: std}
           if res[run_type]
