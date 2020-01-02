@@ -194,10 +194,16 @@ class TestCaseVersion < ApplicationRecord
       all_with_usage = relevant_instances_to_depth(depth: depth).select do |instance|
         instance.computer == computer && !instance[memory_query].nil?
       end
-      next unless all_with_usage.count > 0
-      usages = all_with_usage.pluck(memory_query)
 
-      res[computer] = {avg: nil, std: nil}
+      next unless all_with_usage.count > 0
+      
+      usages = all_with_usage.pluck(memory_query)
+      # NOTE: this is here because a divide by zero error occurred before that
+      # the first escape clause SHOULD HAVE CAUGHT. I don't understand this, so
+      # we might be missing some data in our searches if something is going
+      # wrong.
+      next unless usages.count > 0
+      
       avg = usages.inject(:+) / usages.count
       res[computer][:avg] = avg
 
