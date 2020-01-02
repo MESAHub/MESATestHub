@@ -41,18 +41,50 @@ class VersionsController < ApplicationController
                       else
                         @selected.to_i
                       end
-    @version = Version.includes(test_case_versions: [:test_case, test_instances: {computer: :user}]).find_by(number: @version_number)
+    @version = Version.find_by(number: @version_number)
     return unless @version
 
-    @test_case_versions = [@version.other, @version.mixed, @version.checksums,
-                           @version.failing, @version.passing].flatten
+    # @test_case_versions = [@version.other, @version.mixed, @version.checksums,
+    #                        @version.failing, @version.passing].flatten
+    # trying to optimize db call
+    @test_case_versions = @version.test_case_versions.includes(:test_case, test_instances: :computer).to_a
+    @test_case_versions.sort_by! { |tcv| tcv.test_case.name }
+
+    # get subsets by status. This duplicates code from Version model, but it
+    # saves tons of database calls.
+    @others = @test_case_versions.select { |tcv| !(0..3).include? tcv.status }
+    @mixed = @test_case_versions.select { |tcv| tcv.status == 3 }
+    @checksums = @test_case_versions.select { |tcv| tcv.status == 2 }
+    @failing = @test_case_versions.select { |tcv| tcv.status == 1 }
+    @passing = @test_case_versions.select { |tcv| tcv.status == 0 }
+    @test_case_versions = [@others, @mixed, @checksums, @failing, @passing].flatten
+
     @header_text = "Test Cases Tested on Version #{@version_number}"
     @specs = @version.computer_specs
-    @statistics = @version.statistics
+    @statistics = {
+      passing: @test_case_versions.select { |tcv| tcv.status.zero? }.count,
+      mixed: @test_case_versions.select { |tcv| tcv.status == 3 }.count,
+      failing: @test_case_versions.select { |tcv| tcv.status == 1 }.count,
+      checksums: @test_case_versions.select { |tcv| tcv.status == 2 }.count,
+      other: @test_case_versions.select { |tcv| !(0..3).include? tcv.status }.count
+    }
 
-    status, @pass_count, @fail_count, @mix_count, @checksum_count, @other_count = @version.summary_status
+    # giant structure that holds all relevant counts for displaying badges next
+    # to test case versions
+    @counts = {}
+    @failing_instances = {}
+    @test_case_versions.each do |tcv|
+      @failing_instances[tcv] = tcv.test_instances.select { |ti| !ti.passed }
+      @counts[tcv] = {}
+      @counts[tcv][:computers] = tcv.computer_count
+      @counts[tcv][:passes] = tcv.test_instances.count { |ti| ti.passed }
+      @counts[tcv][:failures] = @failing_instances[tcv].count
+      @counts[tcv][:checksums] = tcv.unique_checksum_count
+    end
 
-    @version_status = case status
+    # status, @pass_count, @fail_count, @mix_count, @checksum_count, @other_count = @version.summary_status
+
+    @version_status = case @version.status
                       when 0 then :passing
                       when 1 then :failing
                       when 2 then :checksum
@@ -120,7 +152,6 @@ class VersionsController < ApplicationController
         else
           'table-info'
         end
-      # @diffs[t] = @version.diff_status(t)
     end
   end 
 

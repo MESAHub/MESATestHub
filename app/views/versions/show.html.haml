@@ -44,45 +44,45 @@
   .row#index-desc
     .col
       .card-deck
-        - if @other_count.positive?
+        - if @others.count.positive?
           .card.border-info
             .card-body.text-info                    
               %h3.card-title Other
               %p.card-text
-                %b=@other_count
+                %b=@others.count
                 tests with anomalous submission data.
-        - if @mix_count.positive?
+        - if @mixed.count.positive?
           .card.border-warning
             .card-body.text-warning
               %h3.card-title Mixed
               %p.card-text
-                %b=@mix_count
+                %b=@mixed.count
                 tests where some computers report passing and others report failing.
-        - if @checksum_count.positive?
+        - if @checksums.count.positive?
           .card.border-primary
             .card-body.text-primary
               %h3.card-title Checksums
               %p.card-text
-                %b=@checksum_count
+                %b=@checksums.count
                 tests where different computers give different checksums.
-        - if @fail_count.positive?
+        - if @failing.count.positive?
           .card.border-danger
             .card-body.text-danger
               %h3.card-title Failing
               %p.card-text
-                %b=@fail_count
+                %b=@failing.count
                 tests where all computers report failing.
-        - if @pass_count.positive?
+        - if @passing.count.positive?
           .card.border-success
             .card-body.text-success
               %h4.card-title Passing
               %p.card-text
-                %b=@pass_count
+                %b=@passing.count
                 tests where all computers report passing.
   .row
     .col
       %ul.list-group
-        - @version.other.each do |tcv|
+        - @others.each do |tcv|
           %li.list-group-item.list-group-item-action.list-group-item-info
             .d-flex.w-100.justify-content-between
               %span.h4.text-monospace
@@ -91,64 +91,30 @@
               %span.badge.badge-primary.badge-pill=tcv.unique_checksum_count
               %span.badge.badge-danger.badge-pill=tcv.test_instances.where(passed: false).count
 
-        - @version.mixed.each do |tcv|
+        - @mixed.each do |tcv|
           %li.list-group-item.list-group-item-action.list-group-item-warning
             .d-flex.w-100.mb-0.justify-content-between
-              %span.h4.text-monospace
-                =link_to tcv.test_case.name, test_case_version_path(number: @selected, test_case: tcv.test_case.name), class: 'stretched-link text-reset no-hover'
-              %p.text-right
-                %span.badge.badge-secondary.badge-pill
-                  =tcv.computer_count
-                  %span.d-none.d-md-inline
-                    computers
-                %span.badge.badge-success.badge-pill
-                  =tcv.test_instances.where(passed: true).count
-                  %span.d-none.d-md-inline
-                    passes
-                %span.badge.badge-primary.badge-pill
-                  =tcv.unique_checksum_count
-                  %span.d-none.d-md-inline
-                    checksums
-                %span.badge.badge-danger.badge-pill
-                  =tcv.test_instances.where(passed: false).count
-                  %span.d-none.d-md-inline
-                    failures
-                %br
-                %small
-                  %em
-                    As of
-                    =format_time(@last_tested[tcv])
-            %p.mb-0
-              - tcv.failing.each_with_index do |inst, i|
-                %strong= inst.computer_name + ': '
-                %em= TestInstance.failure_types[inst.failure_type] + (i < tcv.failing.length - 1 ? ',' : '')
-        - @version.checksums.each do |tcv|
+              = render partial: "badges", locals: { tcv: tcv }
+            = render partial: "failures", locals: { tcv: tcv }
+        - @checksums.each do |tcv|
           %li.list-group-item.list-group-item-action.list-group-item-primary
-            %span.h4.text-monospace
-              =link_to tcv.test_case.name, test_case_version_path(number: @selected, test_case: tcv.test_case.name), class: 'stretched-link text-reset no-hover'
-            %span.badge.badge-success.badge-pill=tcv.test_instances.where(passed: true).count
-            %span.badge.badge-primary.badge-pill=tcv.unique_checksum_count
-            %span.badge.badge-danger.badge-pill=tcv.test_instances.where(passed: false).count
-        - @version.failing.each do |tcv|
+            .d-flex.w-100.mb-0.justify-content-between
+              = render partial: "badges", locals: { tcv: tcv }
+        - @failing.each do |tcv|
           %li.list-group-item.list-group-item-action.list-group-item-danger
-            %span.h4.text-monospace
-              =link_to tcv.test_case.name, test_case_version_path(number: @selected, test_case: tcv.test_case.name), class: 'stretched-link text-reset no-hover'
-            %span.badge.badge-success.badge-pill=tcv.test_instances.where(passed: true).count
-            %span.badge.badge-primary.badge-pill=tcv.unique_checksum_count
-            %span.badge.badge-danger.badge-pill=tcv.test_instances.where(passed: false).count
-      - if @version.passing.length > 0
+            .d-flex.w-100.mb-0.justify-content-between
+              = render partial: "badges", locals: { tcv: tcv }
+            = render partial: "failures", locals: { tcv: tcv }
+      - if @passing.length > 0
         .text-center.my-4
           %a.btn.btn-lg.btn-success{href: '#', 'data-target'.to_sym => '#passing', 'data-toggle'.to_sym => 'collapse'}
             Show/Hide Passing Test Cases
 
       %ul.list-group.collapse.mb-5#passing
-        - @version.passing.each do |tcv|
+        - @passing.each do |tcv|
           %li.list-group-item.list-group-item-action.list-group-item-success
-            %span.h4.text-monospace
-              =link_to tcv.test_case.name, test_case_version_path(number: @selected, test_case: tcv.test_case.name), class: 'stretched-link text-reset no-hover'
-            %span.badge.badge-success.badge-pill=tcv.test_instances.where(passed: true).count
-            %span.badge.badge-primary.badge-pill=tcv.unique_checksum_count
-            %span.badge.badge-danger.badge-pill=tcv.test_instances.where(passed: false).count
+            .d-flex.w-100.mb-0.justify-content-between
+              = render partial: "badges", locals: { tcv: tcv }
 
 
 -#  .row

@@ -53,7 +53,7 @@ class Version < ApplicationRecord
     @other = []
     # pass_some = some_passing_test_cases
     # fail_some = some_failing_test_cases
-    test_case_versions.uniq.sort do |t1, t2|
+    test_case_versions.includes(:test_instances).uniq.sort do |t1, t2|
       t1.test_case.name <=> t2.test_case.name
     end.each do |tcv|
       case tcv.status
