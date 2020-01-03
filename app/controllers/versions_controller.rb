@@ -74,7 +74,25 @@ class VersionsController < ApplicationController
     @counts = {}
     @failing_instances = {}
     @failure_types = {}
+    @checksum_groups = {}
     @test_case_versions.each do |tcv|
+      unique_checksums = tcv.test_instances.map { |ti| ti.checksum }.uniq
+      unique_checksums.reject! { |checksum| checksum.nil? || checksum.empty? }
+
+      if unique_checksums.count > 1
+        @checksum_groups[tcv] = {}
+        unique_checksums.each do |checksum|
+          # more than one checksum? group computers, sorted by name, as values
+          # in a hash accessed by their matching checksums
+          @checksum_groups[tcv][checksum] = tcv.test_instances.select do |ti|
+            ti.checksum == checksum
+          end.map { |ti| ti.computer }.uniq.sort_by { |comp| comp.name.downcase }
+          puts '########################################'
+          puts "just assigned checksum #{checksum}"
+          puts '########################################'
+        end
+      end
+
       @failing_instances[tcv] = tcv.test_instances.select { |ti| !ti.passed }
       if @failing_instances[tcv].count.positive?
         @failure_types[tcv] = {}

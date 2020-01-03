@@ -87,15 +87,18 @@
             .d-flex.w-100.justify-content-between
               = render partial: "badges", locals: { tcv: tcv }
             = render partial: "failures", locals: { tcv: tcv }
+            = render partial: "checksums", locals: { tcv: tcv }
         - @mixed.each do |tcv|
           %li.list-group-item.list-group-item-action.list-group-item-warning
             .d-flex.w-100.mb-0.justify-content-between
               = render partial: "badges", locals: { tcv: tcv }
             = render partial: "failures", locals: { tcv: tcv }
+            = render partial: "checksums", locals: { tcv: tcv }
         - @checksums.each do |tcv|
           %li.list-group-item.list-group-item-action.list-group-item-primary
             .d-flex.w-100.mb-0.justify-content-between
               = render partial: "badges", locals: { tcv: tcv }
+            = render partial: "checksums", locals: { tcv: tcv }
         - @failing.each do |tcv|
           %li.list-group-item.list-group-item-action.list-group-item-danger
             .d-flex.w-100.mb-0.justify-content-between

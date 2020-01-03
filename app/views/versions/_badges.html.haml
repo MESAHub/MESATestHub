@@ -4,19 +4,19 @@
   %span.badge.badge-secondary.badge-pill
     =@counts[tcv][:computers]
     %span.d-none.d-md-inline
-      computers
+      ='computer'.pluralize(@counts[tcv][:computers])
   %span.badge.badge-success.badge-pill
     =@counts[tcv][:passes]
     %span.d-none.d-md-inline
-      passes
+      ='passes'.pluralize(@counts[tcv][:passes])
   %span.badge.badge-danger.badge-pill
     =@counts[tcv][:failures]
     %span.d-none.d-md-inline
-      failures
+      ='failure'.pluralize(@counts[tcv][:failures])
   %span.badge.badge-primary.badge-pill
     =@counts[tcv][:checksums]
     %span.d-none.d-md-inline
-      checksums
+      ='checksum'.pluralize(@counts[tcv][:checksums])
   %br
   %small
     %em
