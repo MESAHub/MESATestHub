@@ -1,6 +1,7 @@
 class User < ApplicationRecord
   has_many :computers
   has_many :test_instances, through: :computers
+  has_many :submissions, through: :computers
 
   validates_uniqueness_of :email
   validates_presence_of :name

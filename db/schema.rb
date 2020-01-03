@@ -10,10 +10,21 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20190415192153) do
+ActiveRecord::Schema.define(version: 20200103230357) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
+
+  create_table "commits", force: :cascade do |t|
+    t.string "sha", null: false
+    t.string "author", null: false
+    t.string "author_email", null: false
+    t.text "message", null: false
+    t.datetime "commit_time", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["sha"], name: "index_commits_on_sha", unique: true
+  end
 
   create_table "computers", force: :cascade do |t|
     t.string "name", null: false
@@ -25,6 +36,30 @@ ActiveRecord::Schema.define(version: 20190415192153) do
     t.bigint "user_id"
     t.index ["name"], name: "index_computers_on_name", unique: true
     t.index ["user_id"], name: "index_computers_on_user_id"
+  end
+
+  create_table "submissions", force: :cascade do |t|
+    t.boolean "compiled"
+    t.boolean "entire"
+    t.bigint "commit_id"
+    t.bigint "computer_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["commit_id"], name: "index_submissions_on_commit_id"
+    t.index ["computer_id"], name: "index_submissions_on_computer_id"
+  end
+
+  create_table "test_case_commits", force: :cascade do |t|
+    t.integer "status"
+    t.integer "submission_count"
+    t.integer "computer_count"
+    t.datetime "last_tested"
+    t.bigint "commit_id"
+    t.bigint "test_case_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["commit_id"], name: "index_test_case_commits_on_commit_id"
+    t.index ["test_case_id"], name: "index_test_case_commits_on_test_case_id"
   end
 
   create_table "test_case_versions", force: :cascade do |t|
@@ -112,6 +147,8 @@ ActiveRecord::Schema.define(version: 20190415192153) do
     t.integer "re_time"
     t.integer "rn_mem"
     t.integer "re_mem"
+    t.bigint "commit_id"
+    t.index ["commit_id"], name: "index_test_instances_on_commit_id"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
     t.index ["mesa_version"], name: "index_test_instances_on_mesa_version"
     t.index ["test_case_id"], name: "index_test_instances_on_test_case_id"
@@ -142,6 +179,10 @@ ActiveRecord::Schema.define(version: 20190415192153) do
     t.index ["number"], name: "index_versions_on_number", unique: true
   end
 
+  add_foreign_key "submissions", "commits"
+  add_foreign_key "submissions", "computers"
+  add_foreign_key "test_case_commits", "commits"
+  add_foreign_key "test_case_commits", "test_cases"
   add_foreign_key "test_case_versions", "test_cases"
   add_foreign_key "test_case_versions", "versions"
   add_foreign_key "test_cases", "versions"
