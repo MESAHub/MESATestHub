@@ -98,7 +98,7 @@ class VersionsController < ApplicationController
         @failing_instances[tcv].pluck(:failure_type).uniq.each do |failure_type|
           @failure_types[tcv][failure_type] = @failing_instances[tcv].select do |ti|
             ti.failure_type == failure_type
-          end.map { |ti| ti.computer } #.pluck(:computer).uniq.sort { |comp| comp.name }
+          end.map { |ti| ti.computer }.uniq.sort_by { |comp| comp.name }
         end
       end
       @counts[tcv] = {}
