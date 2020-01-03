@@ -87,9 +87,6 @@ class VersionsController < ApplicationController
           @checksum_groups[tcv][checksum] = tcv.test_instances.select do |ti|
             ti.checksum == checksum
           end.map { |ti| ti.computer }.uniq.sort_by { |comp| comp.name.downcase }
-          puts '########################################'
-          puts "just assigned checksum #{checksum}"
-          puts '########################################'
         end
       end
 
