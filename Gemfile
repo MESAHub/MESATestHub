@@ -28,6 +28,7 @@ gem 'mini_racer', :require => nil
 gem 'rubyzip', '~>1.3.0'
 gem 'barista'
 gem 'font-awesome-rails'
+gem 'rugged'
 group :development, :test do
   gem 'byebug', platforms: [:mri, :mingw, :x64_mingw]
   gem 'guard-bundler'
