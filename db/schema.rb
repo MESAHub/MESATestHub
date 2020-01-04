@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20200103230357) do
+ActiveRecord::Schema.define(version: 20200103233154) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -148,9 +148,11 @@ ActiveRecord::Schema.define(version: 20200103230357) do
     t.integer "rn_mem"
     t.integer "re_mem"
     t.bigint "commit_id"
+    t.bigint "test_case_commit_id"
     t.index ["commit_id"], name: "index_test_instances_on_commit_id"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
     t.index ["mesa_version"], name: "index_test_instances_on_mesa_version"
+    t.index ["test_case_commit_id"], name: "index_test_instances_on_test_case_commit_id"
     t.index ["test_case_id"], name: "index_test_instances_on_test_case_id"
     t.index ["test_case_version_id"], name: "index_test_instances_on_test_case_version_id"
     t.index ["version_id"], name: "index_test_instances_on_version_id"
