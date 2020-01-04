@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20200103233154) do
+ActiveRecord::Schema.define(version: 20200104010411) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -50,14 +50,15 @@ ActiveRecord::Schema.define(version: 20200103233154) do
   end
 
   create_table "test_case_commits", force: :cascade do |t|
-    t.integer "status"
-    t.integer "submission_count"
-    t.integer "computer_count"
+    t.integer "status", default: -1
+    t.integer "submission_count", default: 0
+    t.integer "computer_count", default: 0
     t.datetime "last_tested"
-    t.bigint "commit_id"
-    t.bigint "test_case_id"
+    t.bigint "commit_id", null: false
+    t.bigint "test_case_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "checksum_count", default: 0
     t.index ["commit_id"], name: "index_test_case_commits_on_commit_id"
     t.index ["test_case_id"], name: "index_test_case_commits_on_test_case_id"
   end
