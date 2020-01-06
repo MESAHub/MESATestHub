@@ -109,7 +109,8 @@ class MorningMailer < ApplicationMailer
             end
           end
         end
-        if res[:trouble_cases][tcv][:memory]
+
+        if res[:trouble_cases][tcv] && res[:trouble_cases][tcv][:memory]
           res[:trouble_cases][tcv][:memory].each_pair do |run_type, run_type_hash|
             run_type_hash.each_pair do |computer, computer_hash|
               # use search api to create link showing all more efficient test
