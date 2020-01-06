@@ -67,25 +67,45 @@ class MorningMailer < ApplicationMailer
       res[:trouble_cases].keys.each do |tcv|
         test_case_name = tcv.test_case.name
         if res[:trouble_cases][tcv][:runtime]
+          to_delete = []
           res[:trouble_cases][tcv][:runtime].each_pair do |runtime_type, runtime_hash|
             # walk through computers and assign link for each
-            #
-            runtime_hash.each_pair do |computer, computer_hash|
-              # create url that creates the relevant search query and assign it
-              # into the computer_hash
-              current = computer_hash[:instance]
-              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
-                'test_instances/search?'
-              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
-              computer_hash[:url] += {query_text: [
-                "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
-                "computer: #{computer.name}",
-                "threads: #{current.omp_num_threads}",
-                "compiler: #{current.compiler}",
-                "compiler_version: #{current.compiler_version}",
-                "test_case: #{test_case_name}",
-                "passed: true",
-              ].join('; ')}.to_query
+            # remove if there aren't more than 2 computers (hard coded and
+            # kludgy for now); mark them now, delete later to avoid deleting
+            # while in a loop
+            if runtime_hash.length < 2
+              to_delete << runtime_type
+            else
+              runtime_hash.each_pair do |computer, computer_hash|
+                # create url that creates the relevant search query and assign it
+                # into the computer_hash
+                current = computer_hash[:instance]
+                computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+                  'test_instances/search?'
+                computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+                computer_hash[:url] += {query_text: [
+                  "version: #{current.mesa_version-depth}-#{current.mesa_version}",
+                  "computer: #{computer.name}",
+                  "threads: #{current.omp_num_threads}",
+                  "compiler: #{current.compiler}",
+                  "compiler_version: #{current.compiler_version}",
+                  "test_case: #{test_case_name}",
+                  "passed: true",
+                  ].join('; ')}.to_query
+              end
+            end
+            # delete runtime types with not enough computers
+            to_delete.each do |runtime_type|
+              res[:trouble_cases][tcv][:runtime].delete(runtime_type)
+            end
+            # remove from hash if there are no bad runtime types anymore
+            if res[:trouble_cases][tcv][:runtime].empty?
+              res[:trouble_cases][tcv].delete(:runtime)
+              # remove whole test case version if there's no problem at all
+              # anymore, including memory
+              if res[:trouble_cases][tcv][:memory].empty?
+                res[:trouble_cases].delete(tcv)
+              end
             end
           end
         end
