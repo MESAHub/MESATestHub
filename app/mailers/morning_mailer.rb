@@ -103,7 +103,7 @@ class MorningMailer < ApplicationMailer
               res[:trouble_cases][tcv].delete(:runtime)
               # remove whole test case version if there's no problem at all
               # anymore, including memory
-              if res[:trouble_cases][tcv][:memory].empty?
+              if res[:trouble_cases][tcv].empty?
                 res[:trouble_cases].delete(tcv)
               end
             end
