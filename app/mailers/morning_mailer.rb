@@ -120,7 +120,7 @@ class MorningMailer < ApplicationMailer
                 'test_instances/search?'
               computer_hash[:url] += {utf8: '✓'}.to_query + '&'
               computer_hash[:url] += {query_text: [
-                "version: #{current.mesa_version - depth}-#{current.mesa_version - 1}",
+                "version: #{current.mesa_version - depth}-#{current.mesa_version}",
                 "computer: #{computer.name}",
                 "threads: #{current.omp_num_threads}",
                 "compiler: #{current.compiler}",
