@@ -10,6 +10,11 @@ Rails.application.routes.draw do
     resources :test_instances
   end
 
+  # handle push requests from github repo
+  # see handling details in controllers/github_webhooks_controller.rb
+  # see configuration of webhooks being sent out on actual github repo for MESA
+  resource :github_webhooks, only: :create, defaults: { formats: :json }
+
   root to: 'versions#show' #, params: { number: 'latest' }
 
   get '/versions/:number/test_cases/:test_case',

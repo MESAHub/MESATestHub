@@ -4,7 +4,7 @@ git_source(:github) do |repo_name|
   "https://github.com/#{repo_name}.git"
 end
 ruby '~> 2.6.1'
-gem 'bundler', '~> 2.0.1'
+# gem 'bundler', '~> 2.0.1'
 gem 'sinatra', '~> 2.0.2'
 gem 'rack', '~> 2.0.8'
 gem 'rails', '~> 5.1.6.2'
@@ -24,11 +24,15 @@ gem 'rails-html-sanitizer', '~> 1.0.4'
 gem 'rails_12factor', group: :production
 gem 'scout_apm', group: :production
 # gem 'sprockets', '~> 4.0.0.beta4'
+gem 'libv8', '~> 7.3.492.27.1'
 gem 'mini_racer', :require => nil
 gem 'rubyzip', '~>1.3.0'
 gem 'barista'
 gem 'font-awesome-rails'
+# Git stuff
 gem 'rugged'
+gem 'github_webhook', '~> 1.1'
+
 group :development, :test do
   gem 'byebug', platforms: [:mri, :mingw, :x64_mingw]
   gem 'guard-bundler'

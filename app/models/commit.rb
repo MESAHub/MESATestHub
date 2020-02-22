@@ -11,36 +11,13 @@ class Commit < ApplicationRecord
 
   paginates_per 25
 
-  # PROBLEM: Need to keep track of commits being a merge commit (multiple
-  # parents). Right now we don't do this at all. We can always go back to last
-  # merge, but then master will stop at previous merge (same for other
-  # branches, but problem is most obvious with master).
-  # 
-  # Perhaps the best option is to do the suggested combination of sort orders
-  # indicated by rugged's github page:
-  #   walker.sorting(Rugged::SORT_TOPO | Rugged::SORT_DATE)
-  # From the source code for Rugged on SORT_TOPO:
-  # * Sort the repository contents in topological order (parents before
-  # * children); this sorting mode can be combined with time sorting to
-  # * produce git's "time-order".
-  # 
-  # and for SORT_DATE
-  # * Sort the repository contents by commit time;
-  # * this sorting mode can be combined with
-  # * topological sorting.
-  # 
-  # NO ONE WILL TELL ME WHAT THIS MEANS! As far as I can tell , this only
-  # _really_ matters when we go through a branch back in time, which may be
-  # uncommon. On a single branch with no merge points, there is no distinction.
-  # 
-  # [Non-]Conclusion: there's no unambiguous linear ordering of commits, and 
-  # we'll just have to deal with random discontinuities. For now, I'm relying
-  # on the default ordering of Rugged
-  
+  ###########################################
+  # WORKING WITH THE NAVIGATING RUGGED TREE #
+  ###########################################
+
   # I hope this is sorting topologically (parents before children), and then by
-  # date when there's a tie (merge commits), and finally reversing. That might
-  # not make sense
-  DEFAULT_SORTING = Rugged::SORT_TOPO | Rugged::SORT_DATE | Rugged::SORT_REVERSE
+  # date when there's a tie (merge commits). That might not make sense
+  DEFAULT_SORTING = Rugged::SORT_TOPO | Rugged::SORT_DATE
 
   def self.repo
     # handle into Git repo
@@ -50,8 +27,18 @@ class Commit < ApplicationRecord
     @repo
   end
 
+  def self.fetch
+    # update git repo; should be fired every time a push webhook event comes
+    # in to the server
+    
+    credentials = Rugged::Credentials::UserPassword.new(username: 'wmwolf', password: '2f531dbf5a4cedc0991aaa441db385c8972ed585')
+    # strike out my credentials before this goes live!
+    repo.fetch('origin', credentials: credentials)
+  end
+
   def self.branch_names
     # array of names (strings) of branches in repo
+
     names = repo.branches.map { |branch| branch.name }
 
     # force 'master' to be first if it exists
@@ -63,55 +50,190 @@ class Commit < ApplicationRecord
 
   def self.head_commit_shas
     # hash mapping branch names to head commits SHA of respective branch
+
     repo.branches.map { |branch| branch.target.oid }
   end
 
-  def self.create_from_rugged(commit)
-    # take a rugged commit object and create a database entry
-    attributes = {
+  def self.rugged_get_branch(branch_name)
+    # first branch that matches the name. Problematic for repeated names, but
+    # we'll cross that bridge when we get there
+    return nil unless branch_names.include? branch_name
+    repo.branches.select { |branch| branch.name == branch_name }.first
+  end
+
+  def self.rugged_get_head(branch_name)
+    # head commit of a given branch name
+    branch = rugged_get_branch(branch_name)
+    return nil if branch.nil?
+    branch.target
+  end
+
+  ########################################
+  # TRANSLATING BETWEEN RAILS AND RUGGED #
+  ########################################
+
+  def self.hash_from_rugged(commit)
+    # convert a rugged commit instance into a has that is ready to be
+    # inserted into the database
+    # +commit+ a Rugged::Commit instance
+
+    {
       sha: commit.oid,
       author: commit.author[:name],
       author_email: commit.author[:email],
       commit_time: commit.author[:time],
       message: commit.message
     }
-    create(attributes)
   end
 
-  def self.update_commits(head_commit)
-    # starting from a rugged commit object, create necessary commits in 
-    # database to replicate complete history
-    repo.walk(head_commit, DEFAULT_SORTING).each do |commit|
-      break if exists?(sha: commit.oid)
-      create_from_rugged(commit)
-    end
-  end 
+  def self.create_from_rugged(commit)
+    # take a rugged commit object and create a database entry
+    # +commit+ a Rugged::Commit instance
 
-  def self.update_branches
-    # iterate through branches and ensure all paths through graph are already
-    # present in the databse, creating any that are necessary
-    repo.branches.each do |branch|
-      update_commits(branch.target)
+    create(hash_from_rugged(commit))
+  end
+
+  def self.find_from_rugged(commit)
+    # given a rugged commit instance, retrieve the database entry
+    # +commit+ a Rugged::Commit instance
+
+    find_by_sha(commit.oid)
+  end
+
+  def self.sorted_query(shas, includes: nil)
+    # given a list of sorted shas, find the corresponding commits and return
+    # them as a sorted list (in the same order as the shas)
+    # 
+    # +shas+ list of strings corresponding to commit SHAs
+    # +includes+ list of arguments that should go to ActiveRecord query
+    query = if includes
+              where(sha: shas).includes(*includes)
+            else
+              where(sha: shas)
+            end
+    query.sort { |c1, c2| shas.index(c1) <=> shas.index(c2) }
+  end
+
+  ################################################
+  # TRANSLATING BETWEEN RAILS AND GITHUB WEBHOOK #
+  ################################################
+
+  def self.hash_from_github(github_hash)
+    # convert hash from a github webhook payload representing a commit to 
+    # a hash ready to be inserted into the database
+    # +github_hash+ a hash for one commit resulting from a github webhook
+    # push payload
+
+    {
+      sha: github_hash[:sha],
+      author: github_hash[:author][:name],
+      author_email: github_hash[:author][:email],
+      commit_time: github_hash[:timestamp],
+      messsage: github_hash[:message]
+    }
+  end
+
+
+  def self.create_many_from_github_push(payload)
+    # take payload from githubs push webhook, extract commits to
+    # hashes, and then insert them into the database.
+
+    create(payload[:commits].map { |commit| hash_from_github(commit) })
+  end
+
+  def self.batch_create_from_shas(shas)
+    # start with a list of shas (strings) obtained from a github webhook
+    # request, synthesize a list of hashes that describe the corresponding
+    # commits and then write them to the database CURRENTLY NOT USED
+
+    create(shas.map { |sha| hash_from_rugged(repo.lookup(sha)) })
+  end
+
+  def self.batch_create_from_github(commits)
+    # start with a list of hashes obtained from a github webhook
+    # request, synthesize a list of hashes suitable for the database
+    # that describe the corresponding commits and then write them to the
+    # database CURRENTLY NOT USED
+
+    create(shas.map { |sha| hash_from_rugged(repo.lookup(sha)) })
+  end
+
+  #####################################
+  # GENERAL USE AND SEARCHING/SORTING #
+  #####################################
+  
+  def self.head(branch_name: 'master', includes: nil)
+    # get the [Rails] head commit of a particular branch
+    # +branch_name+ branch for which we want the head node
+    # +includes+ argument to be passed on to AcitveRecord#includes (pre-load
+    # associations)
+    rugged_head = rugged_get_head(branch_name)
+    return nil unless rugged_head
+    if includes
+      Commit.where(sha: rugged_head.oid).includes(*includes).first
+    else
+      Commit.where(sha: rugged_head.oid).first
     end
   end
 
-  def self.all_in_branch(branch_name)
+  def self.all_in_branch(branch_name, includes: nil)
     # ActiveRecord query for all commits in a branch
 
     # first get list of SHAs for all such commits, then find them in the
     # database. To do this, walk through repo starting at the head node of the
     # branch desired
     # 
-    # Bail if given a bad branch name
-    return nil unless branch_names.include?(branch_name)
-    # Take first (only) branch with matching name
-    shas = repo.walk(repo.branches.select do |branch|
-      branch.name == branch_name
-    end.first.target, DEFAULT_SORTING).map { |commit| commit.oid }
-    where(sha: shas, order: :commit_time)
+    # +branch_name+ string matching a branch's name. If it isn't found, returns
+    # nil
+    # +includes+ argument to be passed on to AcitveRecord#includes (pre-load
+    # associations)
+
+    # Bail if given a bad branch name (and thus no head commit)
+    head = rugged_get_head(branch_name)
+    return if head.nil?
+    # walk the tree to
+    # completion, scraping shas in topological order
+    shas = repo.walk(head, DEFAULT_SORTING).map { |commit| commit.oid }
+    sorted_query(shas, includes: includes)
   end
 
-  def self.commits_before(anchor, depth, inclusive: true)
+  def self.subset_of_branch(branch_name, size: 25, page: 1, includes: nil)
+    # Retrieve properly sorted collection of commits, but limit the size
+    # 
+    # Meant to simulate pagination, but since we have to do sorting on the
+    # tree, we can't rely on Rails magic. Instead, we get SHAs of the 
+    # relevant commits, find them in the database, and then sort the results
+    # accordingly.
+    # 
+    # +branch_name+ string matching a branch's name. If it isn't found, returns
+    # nil
+    # +size+ integer describing the "chunk size" of commits to be returned.
+    # Defaults to 25
+    # +page+ which chunk to get Essentially we'll start at item (page-1) * size
+    # and then scrape the next "size" amount of commits
+    # +includes+ argument to be passed on to AcitveRecord#includes (pre-load
+    # associations)
+    head = rugged_get_head(branch_name)
+    return if head.nil?
+
+    #
+
+    # define parameters for "pagination"
+    counter = 0
+    start_recording = (page - 1) * size
+    stop_recording = page * size
+    shas = []
+    repo.walk(head, DEFAULT_SORTING).each do |commit|
+      # only start recording when we are deep enough, and stop when we are too
+      # deep
+      shas.append(commit.oid) if counter >= start_recording
+      counter += 1
+      break if counter >= stop_recording
+    end
+    sorted_query(shas, includes: includes)
+  end
+
+  def self.commits_before(anchor, depth, inclusive: true, includes: nil)
     # retrieve all commits before a certain commit in a branch to some depth
     # 
     # +anchor+ specifies the commit to measure back from (the latest commit),
@@ -120,12 +242,13 @@ class Commit < ApplicationRecord
     # anchor commit in the returned list of commits, it does NOT affect the
     # last commit (i.e., setting +depth+ to 100 could produce 100 commits if 
     # +inclusive+ is false, or 101 if it is true)
+    # +includes+ argument to be passed on to AcitveRecord#includes (pre-load
+    # associations)
     
-    # Take first (only) branch with matching name
     counter = 0
     shas = []
     repo.walk(anchor, DEFAULT_SORTING).each do |commit|
-      # stop the walk if we've gotten to the desired epth, otherwise
+      # stop the walk if we've gotten to the desired depth, otherwise
       # add new SHA, increment counter, and keep walking
       break if counter > depth
       shas << commit.oid
@@ -133,22 +256,33 @@ class Commit < ApplicationRecord
     end
     # get rid of first SHA if we don't want to include the anchor commit
     shas = shas[(1..-1)] unless inclusive
-    where(sha: shas, order: :commit_time)
+    sorted_query(shas, includes: includes)
   end
 
-  def self.commits_after(anchor, height, inclusive: true)
+  def self.commits_after(anchor, branch_name, height, inclusive: true,
+    includes: nil)
     # retrieve all commits after a certain commit in a branch to some height
     # 
-    # +anchor+ specifies the commit to measure forward from (the earliest commit),
+    # +anchor+ specifies the [Rails] commit to measure forward from (the earliest commit),
+    # +branch_name+ valid name of a branch on which to search
     # +height+ is number of commits to go forward
     # +inclusive+ is a boolean that determines whether or not to include the
     # anchor commit in the returned list of commits, it does NOT affect the
     # last commit (i.e., setting +depth+ to 100 could produce 100 commits if 
     # +inclusive+ is false, or 101 if it is true)
+    # +includes+ argument to be passed on to AcitveRecord#includes (pre-load
+    # associations)
     # 
     # *NOTE* This is harder to do than commits_before because commits only know
-    # about their parents rather than their children.
+    # about their parents rather than their children. We start at the head
+    # node of the branch and walk back to the anchor, keeping up to +height+
+    # commits
     
+    # need head to start down the correct branch. We'll find everything
+    # down to `anchor` and then only report the last ones we found
+    head = rugged_get_head(branch_name)
+    return nil if head.nil?
+
     # Take first (only) branch with matching name
     shas = []
     repo.walk(anchor, DEFAULT_SORTING).each do |commit|
@@ -156,22 +290,29 @@ class Commit < ApplicationRecord
       shas << commit.oid
       break if commit.oid == anchor.sha
     end
+
+    # trim off later commits, if needed
+    shas = shas[-(height+1)..-1] if shas.length > height + 1
+    
     # optionally trim off anchor commit as well as excess commits if they exist
-    if inclusive
-      # trim excess elements of the beginning if we had to go more than
-      # +height+ down the rabbit hole
-      shas = shas[(shas.length - (height + 1))..-1] if shas.length > height + 1
-    else
-      # exclude anchor (last point)
-      shas = shas[0...-1]
-      # trim to proper length (height) by lopping elements off the beginning
-      shas = shas[(shas.length - height)..-1] if shas.length > height
-    end
-    where(sha: shas, order: :commit_time)
+    shas.pop unless inclusive
+
+    # now have proper shas. Go get 'em!
+    sorted_query(shas, includes: includes)
   end  
 
   def <=>(commit_1, commit_2)
     # sort commits according to their datetimes, with recent commits FIRST
     commit_2.commit_datetime <=> commit_1.commit_datetime
+  end
+
+  def to_s
+    # default string represenation will be the first 7 characters of the SHA
+    sha[0,7]
+  end
+
+  def message_first_line
+    # first 80 characters of the first line of the message
+    message.split("\n").first[0,80]
   end
 end
