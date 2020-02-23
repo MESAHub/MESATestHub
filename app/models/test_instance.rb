@@ -28,6 +28,7 @@ class TestInstance < ApplicationRecord
   # git era
   belongs_to :commit
   belongs_to :test_case_commit
+  belongs_to :submission
 
   has_many :test_data, dependent: :destroy
   validates_presence_of :runtime_seconds, :version_id, :computer_id,
@@ -40,8 +41,8 @@ class TestInstance < ApplicationRecord
   validates_inclusion_of :compiler, in: @@compilers
 
   before_save :update_computer_specification, :update_computer_name
-  after_save :update_test_case_version
-  before_validation :set_test_case_version
+  after_save :update_tcv_or_tcc
+  before_validation :set_tcv_or_tcc
 
   def self.success_types
     @@success_types
@@ -410,19 +411,18 @@ class TestInstance < ApplicationRecord
     super
   end  
 
-  def set_test_case_name(new_test_case_name, mod, version_number=10000)
+  def set_test_case_name(new_test_case_name, mod)
     new_test_case = TestCase.find_by(name: new_test_case_name)
     if new_test_case.nil?
       # no test case found, so just make one up
       # this test case will have NO EXTRA DATA ASSOCIATED WITH IT
       # at time of this edit (November 22, 2017), the data features is not in
       # use, but this may need to be revisited
+      # Update: no one cares (February 22, 2020)
       new_test_case = TestCase.create(
         name: new_test_case_name,
         module: mod,
-        version_added: version_number
       )
-      new_test_case.update_version_created
       # old behavior: scuttle the saving process
       # errors.add :test_case_id,
       #            'Could not find test case with name "' + new_test_case_name +
@@ -448,31 +448,61 @@ class TestInstance < ApplicationRecord
     end
   end
 
-  def set_test_case_version
-    return if test_case_version
-    candidate = TestCaseVersion.find_by(
-      version: version, test_case: test_case
-    )
-    if candidate
-      # found it!
-      self.test_case_version = candidate
-    else
-      # doesn't exist, so make a new one
-      # this one doesn't have status and other values set; this should
-      # happen when `update_test_case_version` is called
-      self.test_case_version = TestCaseVersion.create!(
-        version_id: version.id,
-        test_case_id: test_case.id
+  def set_tcv_or_tcc
+    # do absolutely nothing if this is already set
+    return if test_case_version.id || test_case_commit.id
+
+    # svn era
+    if version
+      candidate = TestCaseVersion.find_by(
+        version: version, test_case: test_case
       )
+      if candidate
+        # found it!
+        self.test_case_version = candidate
+      else
+        # doesn't exist, so make a new one
+        # this one doesn't have status and other values set; this should
+        # happen when `update_tcv_or_tcc` is called
+        self.test_case_version = TestCaseVersion.create!(
+          version_id: version.id,
+          test_case_id: test_case.id
+        )
+      end
+    # github era
+    else
+      candidate = TestCaseCommit.find_by(
+        commit: commit, test_case: test_case
+      )
+      if candidate
+        # found it!
+        self.test_case_commit = candidate
+      else
+        # doesn't exist, so make a new one
+        # this one doesn't have status and other values set; this should
+        # happen when `update_tcv_or_tcc` is called
+        self.test_case_commit = TestCaseCommit.create!(
+          commit_id: version.id,
+          test_case_id: test_case.id
+        )
+      end        
     end
   end
 
-  def update_test_case_version
-    # make sure we have a test_case version
-    set_test_case_version unless self.test_case_version_id
+  def update_tcv_or_tcc
+    # make sure we have a test_case_version or test_case_commit
+    set_tcv_or_tcc unless self.test_case_version_id || self.test_case_commit_id
 
-    # tell the test_case_version to update itself
-    test_case_version.update_and_save_scalars
+    # svn era
+    if version
+      # tell the test_case_version to update itself
+      test_case_version.update_and_save_scalars
+    # github era
+    else
+      # tell the test_case_version to update itself
+      test_case_commit.update_and_save_scalars
+    end
+
   end
 
   # overridden to get user names, computer names, and other details

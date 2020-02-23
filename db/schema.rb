@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20200104010411) do
+ActiveRecord::Schema.define(version: 20200223014307) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -45,6 +45,7 @@ ActiveRecord::Schema.define(version: 20200104010411) do
     t.bigint "computer_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.boolean "empty", default: false
     t.index ["commit_id"], name: "index_submissions_on_commit_id"
     t.index ["computer_id"], name: "index_submissions_on_computer_id"
   end
@@ -150,9 +151,11 @@ ActiveRecord::Schema.define(version: 20200104010411) do
     t.integer "re_mem"
     t.bigint "commit_id"
     t.bigint "test_case_commit_id"
+    t.bigint "submission_id"
     t.index ["commit_id"], name: "index_test_instances_on_commit_id"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
     t.index ["mesa_version"], name: "index_test_instances_on_mesa_version"
+    t.index ["submission_id"], name: "index_test_instances_on_submission_id"
     t.index ["test_case_commit_id"], name: "index_test_instances_on_test_case_commit_id"
     t.index ["test_case_id"], name: "index_test_instances_on_test_case_id"
     t.index ["test_case_version_id"], name: "index_test_instances_on_test_case_version_id"

@@ -176,7 +176,7 @@ class Commit < ApplicationRecord
     end
   end
 
-  def self.all_in_branch(branch_name, includes: nil)
+  def self.all_in_branch(branch_name: 'master', includes: nil)
     # ActiveRecord query for all commits in a branch
 
     # first get list of SHAs for all such commits, then find them in the
@@ -197,7 +197,8 @@ class Commit < ApplicationRecord
     sorted_query(shas, includes: includes)
   end
 
-  def self.subset_of_branch(branch_name, size: 25, page: 1, includes: nil)
+  def self.subset_of_branch(branch_name: 'master', size: 25, page: 1,
+    includes: nil)
     # Retrieve properly sorted collection of commits, but limit the size
     # 
     # Meant to simulate pagination, but since we have to do sorting on the
@@ -215,8 +216,6 @@ class Commit < ApplicationRecord
     # associations)
     head = rugged_get_head(branch_name)
     return if head.nil?
-
-    #
 
     # define parameters for "pagination"
     counter = 0

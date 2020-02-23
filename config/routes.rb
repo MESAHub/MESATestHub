@@ -15,6 +15,9 @@ Rails.application.routes.draw do
   # see configuration of webhooks being sent out on actual github repo for MESA
   resource :github_webhooks, only: :create, defaults: { formats: :json }
 
+  # for accepting new submissions (of any kind) from mesa_test
+  resource :submissions, only: :create, defaults: { formats: :json }
+
   root to: 'versions#show' #, params: { number: 'latest' }
 
   get '/versions/:number/test_cases/:test_case',

@@ -115,9 +115,9 @@ class TestCaseCommit < ApplicationRecord
     # is shared among several methods. Probably good enough for now, though.
     
     return @relevant_instances if @relevant_instances && !force
+    commits = Commit.subset_of_branch(branch: branch, depth: depth)
     query = test_case.test_instances.where(computer: computers,
-      mesa_version: (version.number-depth)...version.number, passed: true).
-      includes(:computer)
+      commit: commits, passed: true).includes(:computer)
     @relevant_instances = query.to_a
     return @relevant_instances
   end
