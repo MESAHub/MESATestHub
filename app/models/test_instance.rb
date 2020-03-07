@@ -11,7 +11,7 @@ class TestInstance < ApplicationRecord
     'run_checksum' => 'Run Checksum',
     'run_diff' => 'Run Diff',
     'photo_file' => 'Missing Photo',
-    'photo_checksum' => 'Photo Checkusm',
+    'photo_checksum' => 'Photo Checksum',
     'photo_diff' => 'Photo Diff',
     'compilation' => 'Compilation'
   }
