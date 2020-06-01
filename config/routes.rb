@@ -17,6 +17,7 @@ Rails.application.routes.draw do
 
   # for accepting new submissions (of any kind) from mesa_test
   resource :submissions, only: :create, defaults: { formats: :json }
+  post 'submissions/create.json', to: 'submissions#create'
 
   root to: 'versions#show' #, params: { number: 'latest' }
 

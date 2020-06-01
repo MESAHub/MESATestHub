@@ -5,6 +5,6 @@
 	ignorecase = true
 	precomposeunicode = true
 [remote "origin"]
-	url = https://www.github.com/MESAHub/mesa-sandbox-lfs
+	url = https://github.com/MESAHub/mesa-sandbox-lfs
 	fetch = +refs/*:refs/*
 	mirror = true

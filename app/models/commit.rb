@@ -31,7 +31,8 @@ class Commit < ApplicationRecord
     # update git repo; should be fired every time a push webhook event comes
     # in to the server
     
-    credentials = Rugged::Credentials::UserPassword.new(username: 'wmwolf', password: '2f531dbf5a4cedc0991aaa441db385c8972ed585')
+    credentials = Rugged::Credentials::UserPassword.new(username: 'wmwolf',
+      password: ENV['GIT_TOKEN'])
     # strike out my credentials before this goes live!
     repo.fetch('origin', credentials: credentials)
   end
@@ -125,11 +126,11 @@ class Commit < ApplicationRecord
     # push payload
 
     {
-      sha: github_hash[:sha],
+      sha: github_hash[:id],
       author: github_hash[:author][:name],
       author_email: github_hash[:author][:email],
       commit_time: github_hash[:timestamp],
-      messsage: github_hash[:message]
+      message: github_hash[:message]
     }
   end
 
@@ -137,7 +138,6 @@ class Commit < ApplicationRecord
   def self.create_many_from_github_push(payload)
     # take payload from githubs push webhook, extract commits to
     # hashes, and then insert them into the database.
-
     create(payload[:commits].map { |commit| hash_from_github(commit) })
   end
 

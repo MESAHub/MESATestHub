@@ -75,6 +75,25 @@ class TestInstance < ApplicationRecord
     end
   end
 
+  # version of +new+ that is more useful for 
+  def self.submission_new(instance_params, submission)
+    # create instance from "good" parameters
+    instance = new(instance_params.reject { |key| ['test_case', 'mod'].include? key })
+    test_case = TestCase.find_by(name: instance_params[:test_case],
+                                 module: instance_params[:mod])
+    # bail if parameters were crummy for some reason
+    return nil if test_case.nil?
+
+    # populate other quantities from known things
+    instance.test_case = test_case
+    instance.submission = submission
+    instance.commit = submission.commit
+    instance.computer = submission.computer
+
+    # test case commit automatically set by +#set_tcv_or_tcc+ at validation
+    instance
+  end
+
   # list of version numbers with test instances that have failed since a
   # particular date
   def self.failing_versions_since(date)
@@ -412,7 +431,7 @@ class TestInstance < ApplicationRecord
   end  
 
   def set_test_case_name(new_test_case_name, mod)
-    new_test_case = TestCase.find_by(name: new_test_case_name)
+    new_test_case = TestCase.find_by(name: new_test_case_name, module: mod)
     if new_test_case.nil?
       # no test case found, so just make one up
       # this test case will have NO EXTRA DATA ASSOCIATED WITH IT
@@ -423,10 +442,6 @@ class TestInstance < ApplicationRecord
         name: new_test_case_name,
         module: mod,
       )
-      # old behavior: scuttle the saving process
-      # errors.add :test_case_id,
-      #            'Could not find test case with name "' + new_test_case_name +
-      #            '".'
     end
     self.test_case = new_test_case
   end
@@ -450,7 +465,7 @@ class TestInstance < ApplicationRecord
 
   def set_tcv_or_tcc
     # do absolutely nothing if this is already set
-    return if test_case_version.id || test_case_commit.id
+    return if test_case_version or test_case_commit
 
     # svn era
     if version
@@ -482,7 +497,7 @@ class TestInstance < ApplicationRecord
         # this one doesn't have status and other values set; this should
         # happen when `update_tcv_or_tcc` is called
         self.test_case_commit = TestCaseCommit.create!(
-          commit_id: version.id,
+          commit_id: commit.id,
           test_case_id: test_case.id
         )
       end        

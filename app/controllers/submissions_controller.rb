@@ -1,13 +1,15 @@
 class SubmissionsController < ApplicationController
 
+  skip_before_action :verify_authenticity_token, only: [:create]
+
   def create
-    # this set up @user, @computer, and @commit, and will fail the thing
+    # this sets up @user, @computer, and @commit, and will fail the thing
     # if something is wrong in data
     return unless authenticate_submission
 
     @submission = Submission.new
-    @submission.computer = computer
-    @submission.commit = commit
+    @submission.computer = @computer
+    @submission.commit = @commit
     @submission.entire = commit_params[:entire]
     @submission.empty = commit_params[:empty]
 
@@ -22,8 +24,8 @@ class SubmissionsController < ApplicationController
       @submission.compiled = commit_params[:compiled]
     end
 
-    # at this point, we want to save the submission. If it goes haywire later,
-    # we'll want a record of it
+    # at this point, we want to save the submission to the database. If it goes
+    # haywire later, we'll want a record of it
     @submission.save
 
     # we're done if it's empty
@@ -47,19 +49,12 @@ class SubmissionsController < ApplicationController
       @test_case_hash[test_case.name] = test_case
     end
 
-    # handle test instances. Creation of new test cases or test case commits
-    # will happen in here
-    if @submission.entire?
-      create_instances
-    else
-      pair = test_instance_pairs.first
-      # clunky and stupid array so later code works for entire or single-case
-      # submissions (need to check failure array... so need a failure array)
-      @failures = [
-        create_one_instance(instance_params(pair), extra_params(pair))
-      ]
-      @failurs.reject(&:nil?)
-    end
+    # handle test instances. +create_instances+ returns a list of instances
+    # that failed upon saving to database.
+    # 
+    # Note, this works regardless of the number of test instances (one or many)
+    # since in either case instances are submitted as a JSON listexit
+    @failures = create_instances
 
     # if something went wrong in creating the instances, report back a failure
     submission_fail_instances and return unless @failures.empty?
@@ -76,32 +71,15 @@ class SubmissionsController < ApplicationController
 
     # if there are bad test cases, errors are stored in @failures, which
     # will cause a failed submission in `create`
-    @failures = test_instance_pairs.map do |instance_pair|
-      create_one_instance(instance_params(instance_pair),
-                          extra_params(instance_pair))
+    @failures = instances_params.map do |single_instance_params|
+      create_one_instance(single_instance_params)
     end.reject { |elt| elt.nil? }
   end
 
-  def create_one_instance(ti_params, extra_params)
+  def create_one_instance(single_instance_params)
     # set up basic test instance
-    test_instance = TestInstance.new(ti_params)
-    test_instance.commit = @submission.commit
-    test_instance.submission = @submission
-
-    # set up associations
-    test_instance.set_computer(@user, @computer)
-
-    # if test case already exists, should have been loaded into @test_case_hash
-    if @test_case_hash.include? extra_params[:test_case]
-      test_instance.test_case = @test_case_hash[extra_params[:test_case]]
-    else
-      # if not, set_test_case_name will create the test case for us
-      # note, test instance takes care of setting or making its own
-      # test_case_commit on the fly (handled at save and validation)
-      # we just need to worry about test cases here (much rarer)
-      test_instance.set_test_case_name(extra_params[:test_case],
-        extra_params[:mod])
-    end
+    test_instance = TestInstance.submission_new(single_instance_params.permit!,
+                                                @submission)
 
     # return nil if we successfully save, otherwise the failed test_instance
     # these can then be queried for their errors and reported back to the
@@ -119,14 +97,24 @@ class SubmissionsController < ApplicationController
   end
 
   def authenticate_submission
+    # first make sure we're authenticated to even do a submission
     submission_fail_authenticate and return nil unless submission_authenticated?
-    @computer = @user.computers.find_by(name: submitter_params[:computer])
+
+    # make sure submission is from valid computer
+    @computer = @user.computers.includes(:user).find_by(
+      name: submitter_params[:computer])
     if @computer.nil?
       submission_fail_computer(user, submitter_params[:computer])
       return nil
     end
+
+    # commit should already exist in database if git webhooks are working 
+    # properly. No need to auto-populate
     @commit = Commit.find_by_sha(commit_params[:sha])
-    submission_fail_commit(commit_parmas[:sha]) and return nil unless @commit
+
+    # bail out if there was no proper commit found (this would be bad!)
+    submission_fail_commit(commit_params[:sha]) and return nil unless @commit
+
     # we got this far, so return true to indicate everything is fine
     true
   end
@@ -175,30 +163,19 @@ class SubmissionsController < ApplicationController
     params.require(:submitter).permit(:email, :password, :computer)
   end
 
-  def version_params
-    params.require(:commit).permit(:sha, :compiled, :entire)
-  end
-
-  def test_instance_pairs
-    params.require(:instances)
+  def commit_params
+    params.require(:commit).permit(:sha, :compiled, :entire, :empty)
   end
 
   # these can be immediately shoved into the database. Easy! Only add things
   # when you add columns to the TestInstances table (and make sure you do do
   # that!)
-  def instance_params(instance_pair)
-    instance_pair.require(:test_instance).permit(
-      :runtime_seconds, :omp_num_threads, :compiler,
-      :compiler_version, :platform_version, :passed, :failure_type,
-      :success_type, :steps, :retries, :backups, :summary_text, :diff,
-      :checksum, :total_runtime_seconds, :re_time, :rn_mem, :re_mem)
+  def instances_params
+    params.require(:instances)
+    # instance.require(:instances).permit(
+    #   :test_case, :mod, :runtime_seconds, :omp_num_threads, :compiler,
+    #   :compiler_version, :platform_version, :passed, :failure_type,
+    #   :success_type, :steps, :retries, :backups, :summary_text,
+    #   :checksum, :total_runtime_seconds, :re_time, :rn_mem, :re_mem)
   end
-
-  # these are separate because they don't immediately constitute a test instance
-  def extra_params(instance_pair)
-    instance_pair.require(:extra).permit(:test_case, :mod)
-  end
-
-
-
 end
