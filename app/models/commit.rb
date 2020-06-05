@@ -134,28 +134,11 @@ class Commit < ApplicationRecord
     }
   end
 
-
   def self.create_many_from_github_push(payload)
     # take payload from githubs push webhook, extract commits to
     # hashes, and then insert them into the database.
-    create(payload[:commits].map { |commit| hash_from_github(commit) })
-  end
-
-  def self.batch_create_from_shas(shas)
-    # start with a list of shas (strings) obtained from a github webhook
-    # request, synthesize a list of hashes that describe the corresponding
-    # commits and then write them to the database CURRENTLY NOT USED
-
-    create(shas.map { |sha| hash_from_rugged(repo.lookup(sha)) })
-  end
-
-  def self.batch_create_from_github(commits)
-    # start with a list of hashes obtained from a github webhook
-    # request, synthesize a list of hashes suitable for the database
-    # that describe the corresponding commits and then write them to the
-    # database CURRENTLY NOT USED
-
-    create(shas.map { |sha| hash_from_rugged(repo.lookup(sha)) })
+    commits = create(payload[:commits].map { |commit| hash_from_github(commit) })
+    TestCaseCommit.create_from_commits(commits)
   end
 
   #####################################
@@ -298,7 +281,25 @@ class Commit < ApplicationRecord
 
     # now have proper shas. Go get 'em!
     sorted_query(shas, includes: includes)
-  end  
+  end
+
+  # array of test case names being tested in a particular module
+  def test_case_names(mod)
+    test_suite_dir = File.join(mod, 'test_suite')
+    Commit.repo.checkout(sha, options={paths: 
+      [File.join(test_suite_dir, 'do1_test_source'),
+       File.join(test_suite_dir, 'list_tests')]
+    })
+    current_dir = Dir.pwd
+    full_test_suite_dir = File.join(Commit.repo.path, '..', test_suite_dir)
+    return [] unless Dir.exist? full_test_suite_dir
+    Dir.chdir(full_test_suite_dir)
+    res = `./list_tests`.split("\n").map do |line|
+      /^\d+\s+(.+)$/.match(line)[1]
+    end
+    Dir.chdir(current_dir)
+    res
+  end
 
   def <=>(commit_1, commit_2)
     # sort commits according to their datetimes, with recent commits FIRST

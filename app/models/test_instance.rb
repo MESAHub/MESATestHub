@@ -21,18 +21,16 @@ class TestInstance < ApplicationRecord
   belongs_to :computer
   belongs_to :test_case
 
-  # svn era
-  belongs_to :version
-  belongs_to :test_case_version
-
   # git era
   belongs_to :commit
   belongs_to :test_case_commit
   belongs_to :submission
 
   has_many :test_data, dependent: :destroy
-  validates_presence_of :runtime_seconds, :version_id, :computer_id,
-                        :test_case_id, :compiler
+
+
+  validates_presence_of :runtime_seconds, :computer_id, :test_case_id,
+                        :compiler
   # validates_inclusion_of :passed, in: [true, false]
   validates_inclusion_of :success_type, in: @@success_types.keys,
                                         allow_blank: true
@@ -40,9 +38,9 @@ class TestInstance < ApplicationRecord
                                         allow_blank: true
   validates_inclusion_of :compiler, in: @@compilers
 
+  before_validation :set_tcc
   before_save :update_computer_specification, :update_computer_name
-  after_save :update_tcv_or_tcc
-  before_validation :set_tcv_or_tcc
+  after_save :update_tcc
 
   def self.success_types
     @@success_types
@@ -75,7 +73,7 @@ class TestInstance < ApplicationRecord
     end
   end
 
-  # version of +new+ that is more useful for 
+  # version of +new+ that is more useful for submissions
   def self.submission_new(instance_params, submission)
     # create instance from "good" parameters
     instance = new(instance_params.reject { |key| ['test_case', 'mod'].include? key })
@@ -463,68 +461,45 @@ class TestInstance < ApplicationRecord
     end
   end
 
-  def set_tcv_or_tcc
+  def set_tcc
     # do absolutely nothing if this is already set
-    return if test_case_version or test_case_commit
+    return test_case_commit if test_case_commit
 
-    # svn era
-    if version
-      candidate = TestCaseVersion.find_by(
-        version: version, test_case: test_case
-      )
-      if candidate
-        # found it!
-        self.test_case_version = candidate
-      else
-        # doesn't exist, so make a new one
-        # this one doesn't have status and other values set; this should
-        # happen when `update_tcv_or_tcc` is called
-        self.test_case_version = TestCaseVersion.create!(
-          version_id: version.id,
-          test_case_id: test_case.id
-        )
-      end
-    # github era
+    candidate = TestCaseCommit.find_by(
+      commit: commit, test_case: test_case
+    )
+    if candidate
+      # found it!
+      self.test_case_commit = candidate
+      puts "successfully set test case commit to"
+      puts test_case_commit
     else
-      candidate = TestCaseCommit.find_by(
-        commit: commit, test_case: test_case
+      # doesn't exist, so make a new one
+      # this one doesn't have status and other values set; this should
+      # happen when `update_tcv_or_tcc` is called
+      # 
+      # frankly, this should never happen, as test case commits should be
+      # created after each push event
+      self.test_case_commit = TestCaseCommit.create!(
+        commit_id: commit.id,
+        test_case_id: test_case.id
       )
-      if candidate
-        # found it!
-        self.test_case_commit = candidate
-      else
-        # doesn't exist, so make a new one
-        # this one doesn't have status and other values set; this should
-        # happen when `update_tcv_or_tcc` is called
-        self.test_case_commit = TestCaseCommit.create!(
-          commit_id: commit.id,
-          test_case_id: test_case.id
-        )
-      end        
     end
   end
 
-  def update_tcv_or_tcc
-    # make sure we have a test_case_version or test_case_commit
-    set_tcv_or_tcc unless self.test_case_version_id || self.test_case_commit_id
+  def update_tcc
+    # make sure we have a test_case_commit
+    set_tcc unless self.test_case_commit_id
 
-    # svn era
-    if version
-      # tell the test_case_version to update itself
-      test_case_version.update_and_save_scalars
-    # github era
-    else
-      # tell the test_case_version to update itself
-      test_case_commit.update_and_save_scalars
-    end
-
+    # tell the test case commit to update itself
+    test_case_commit.update_and_save_scalars
   end
 
   # overridden to get user names, computer names, and other details
   def as_json(options)
     {
       test_case: test_case.name,
-      version: mesa_version,
+      commit: commit.to_json,
       passed: passed,
       success_type: success_type,
       failure_type: failure_type,

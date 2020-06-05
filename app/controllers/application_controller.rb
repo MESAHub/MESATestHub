@@ -64,8 +64,8 @@ class ApplicationController < ActionController::Base
   # than having hard-coded modules...
   # TODO: rely on TestCase.modules
   def set_all_test_cases
-    @all_test_cases ||=
-      TestCase.where(module: :star).order(name: :asc) +
-      TestCase.where(module: :binary).order(name: :asc)
+    @all_test_cases ||= TestCase.modules.inject([]) do |res, mod|
+      res + TestCase.where(module: mod).order(name: :asc)
+    end
   end
 end

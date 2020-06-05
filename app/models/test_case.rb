@@ -1,13 +1,12 @@
 class TestCase < ApplicationRecord
   has_many :test_instances, dependent: :destroy
   has_many :test_case_versions, dependent: :destroy
+  has_many :test_case_commits, dependent: :destroy
   has_many :computers, through: :test_instances
   has_many :versions, through: :test_instances
   has_many :users, through: :computers
-  belongs_to :version_created, class_name: 'Version', foreign_key: :version_id
 
   validates_presence_of :name
-  validates_uniqueness_of :name
 
   validates_inclusion_of :datum_1_type, in: %w[integer float string boolean],
                                         allow_blank: true
@@ -31,7 +30,7 @@ class TestCase < ApplicationRecord
                                          allow_blank: true
 
   def self.modules
-    %w[star binary]
+    %w[star binary astero]
   end
 
   validates_inclusion_of :module, in: TestCase.modules, allow_blank: true

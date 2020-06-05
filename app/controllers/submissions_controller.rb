@@ -31,23 +31,6 @@ class SubmissionsController < ApplicationController
     # we're done if it's empty
     succeed and return if @submission.empty?
     
-    # rest handles test instances
-    # 
-    # first grab exising test_cases and test_case_commits in case we have them
-    # handy. If we don't, we'll create an array of hashes to do a batch insert
-    test_cases = TestCase.all
-    test_case_commits = TestCaseCommit.where(commit: @submission.commit).
-      includes(:test_case).to_a
-
-    # make these suckers easier to get at when we're searching for them later
-    @tcc_hash = {}
-    test_case_commits.each do |tcc|
-      @tcc_hash[tcc.test_case.name] = tcc
-    end
-    @test_case_hash = {}
-    test_cases.each do |test_case|
-      @test_case_hash[test_case.name] = test_case
-    end
 
     # handle test instances. +create_instances+ returns a list of instances
     # that failed upon saving to database.
@@ -87,13 +70,15 @@ class SubmissionsController < ApplicationController
     if test_instance.save
       nil
     else
+      puts "this failed to save:"
+      puts test_instance
       test_instance
     end
   end
 
 
   def succeed
-    render :show, status: :created, location: submission_path(self)
+    render :show, status: :created, location: submission_path(@submission)
   end
 
   def authenticate_submission
@@ -154,8 +139,8 @@ class SubmissionsController < ApplicationController
     # only called if @failures has been set
     # should probably figure out a way to tell user that the submission was
     # still saved, though, even if some test cases
-
     errors = @failures.map { |ti| ti.errors }
+    puts errors.to_json
     render json: errors.to_json, status: :unprocessable_entity
   end
 

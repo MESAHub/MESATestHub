@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20200223014307) do
+ActiveRecord::Schema.define(version: 20200603003327) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -105,8 +105,7 @@ ActiveRecord::Schema.define(version: 20200223014307) do
     t.datetime "updated_at", null: false
     t.string "module"
     t.bigint "version_id"
-    t.index ["name"], name: "index_test_cases_on_name", unique: true
-    t.index ["version_id"], name: "index_test_cases_on_version_id"
+    t.index ["name", "module"], name: "index_test_cases_on_name_and_module"
   end
 
   create_table "test_data", force: :cascade do |t|
@@ -158,8 +157,6 @@ ActiveRecord::Schema.define(version: 20200223014307) do
     t.index ["submission_id"], name: "index_test_instances_on_submission_id"
     t.index ["test_case_commit_id"], name: "index_test_instances_on_test_case_commit_id"
     t.index ["test_case_id"], name: "index_test_instances_on_test_case_id"
-    t.index ["test_case_version_id"], name: "index_test_instances_on_test_case_version_id"
-    t.index ["version_id"], name: "index_test_instances_on_version_id"
   end
 
   create_table "users", force: :cascade do |t|

@@ -42,12 +42,6 @@
             %span{class: 'text-success'} One unique checksum
           - else
             %span{class: 'text-primary'} Multiple unique checksums
-      -# %tr
-      -#   %th{scope: 'row'} Values Tracked
-      -#   %td= @test_case.data_names.join(", ")
-      %tr
-        %th{scope: 'row'} Version Added
-        %td= link_to(@test_case.version_created.number, version_path(@test_case.version_created.number))
     .text-center
       .btn-group{style: 'margin-bottom: 20px'}
         - if admin?
