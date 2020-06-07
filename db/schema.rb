@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20200603003327) do
+ActiveRecord::Schema.define(version: 20200607004229) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -38,6 +38,29 @@ ActiveRecord::Schema.define(version: 20200603003327) do
     t.index ["user_id"], name: "index_computers_on_user_id"
   end
 
+  create_table "inlist_data", force: :cascade do |t|
+    t.string "name"
+    t.float "val"
+    t.bigint "instance_inlist_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["instance_inlist_id"], name: "index_inlist_data_on_instance_inlist_id"
+  end
+
+  create_table "instance_inlists", force: :cascade do |t|
+    t.string "inlist"
+    t.float "runtime_minutes"
+    t.integer "retries"
+    t.integer "steps"
+    t.string "newton_retries"
+    t.string "integer"
+    t.integer "newton_iters"
+    t.bigint "test_instance_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["test_instance_id"], name: "index_instance_inlists_on_test_instance_id"
+  end
+
   create_table "submissions", force: :cascade do |t|
     t.boolean "compiled"
     t.boolean "entire"
@@ -46,6 +69,10 @@ ActiveRecord::Schema.define(version: 20200603003327) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.boolean "empty", default: false
+    t.string "compiler"
+    t.string "compiler_version"
+    t.string "sdk_version"
+    t.string "math_backend"
     t.index ["commit_id"], name: "index_submissions_on_commit_id"
     t.index ["computer_id"], name: "index_submissions_on_computer_id"
   end
@@ -81,43 +108,11 @@ ActiveRecord::Schema.define(version: 20200603003327) do
     t.string "name", null: false
     t.integer "version_added"
     t.text "description"
-    t.string "datum_1_name"
-    t.string "datum_1_type"
-    t.string "datum_2_name"
-    t.string "datum_2_type"
-    t.string "datum_3_name"
-    t.string "datum_3_type"
-    t.string "datum_4_name"
-    t.string "datum_4_type"
-    t.string "datum_5_name"
-    t.string "datum_5_type"
-    t.string "datum_6_name"
-    t.string "datum_6_type"
-    t.string "datum_7_name"
-    t.string "datum_7_type"
-    t.string "datum_8_name"
-    t.string "datum_8_type"
-    t.string "datum_9_name"
-    t.string "datum_9_type"
-    t.string "datum_10_name"
-    t.string "datum_10_type"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "module"
     t.bigint "version_id"
     t.index ["name", "module"], name: "index_test_cases_on_name_and_module"
-  end
-
-  create_table "test_data", force: :cascade do |t|
-    t.string "name", null: false
-    t.string "string_val"
-    t.float "float_val"
-    t.integer "integer_val"
-    t.boolean "boolean_val"
-    t.bigint "test_instance_id", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["test_instance_id"], name: "index_test_data_on_test_instance_id"
   end
 
   create_table "test_instances", force: :cascade do |t|
@@ -146,11 +141,14 @@ ActiveRecord::Schema.define(version: 20200603003327) do
     t.string "computer_specification"
     t.integer "total_runtime_seconds"
     t.integer "re_time"
-    t.integer "rn_mem"
-    t.integer "re_mem"
+    t.integer "mem_rn"
+    t.integer "mem_re"
     t.bigint "commit_id"
     t.bigint "test_case_commit_id"
     t.bigint "submission_id"
+    t.string "sdk_version"
+    t.string "math_backend"
+    t.float "runtime_minutes"
     t.index ["commit_id"], name: "index_test_instances_on_commit_id"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
     t.index ["mesa_version"], name: "index_test_instances_on_mesa_version"
@@ -182,6 +180,8 @@ ActiveRecord::Schema.define(version: 20200603003327) do
     t.index ["number"], name: "index_versions_on_number", unique: true
   end
 
+  add_foreign_key "inlist_data", "instance_inlists"
+  add_foreign_key "instance_inlists", "test_instances"
   add_foreign_key "submissions", "commits"
   add_foreign_key "submissions", "computers"
   add_foreign_key "test_case_commits", "commits"
@@ -189,7 +189,6 @@ ActiveRecord::Schema.define(version: 20200603003327) do
   add_foreign_key "test_case_versions", "test_cases"
   add_foreign_key "test_case_versions", "versions"
   add_foreign_key "test_cases", "versions"
-  add_foreign_key "test_data", "test_instances"
   add_foreign_key "test_instances", "computers"
   add_foreign_key "test_instances", "test_case_versions"
   add_foreign_key "test_instances", "test_cases"

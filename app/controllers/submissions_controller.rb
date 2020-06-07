@@ -12,6 +12,10 @@ class SubmissionsController < ApplicationController
     @submission.commit = @commit
     @submission.entire = commit_params[:entire]
     @submission.empty = commit_params[:empty]
+    @submission.compiler = commit_params[:compiler]
+    @submission.compiler_version = commit_params[:compiler_version]
+    @submission.sdk_version = commit_params[:sdk_version]
+    @submission.math_backend = commit_params[:math_backend]
 
     # only report compilation status once per go-round
     # that is, if we're reporting results test-by-test, compilation information
@@ -63,6 +67,9 @@ class SubmissionsController < ApplicationController
     # set up basic test instance
     test_instance = TestInstance.submission_new(single_instance_params.permit!,
                                                 @submission)
+    puts '################################'
+    p test_instance
+    puts '################################'
 
     # return nil if we successfully save, otherwise the failed test_instance
     # these can then be queried for their errors and reported back to the
@@ -149,18 +156,18 @@ class SubmissionsController < ApplicationController
   end
 
   def commit_params
-    params.require(:commit).permit(:sha, :compiled, :entire, :empty)
+    params.require(:commit).permit(:sha, :compiled, :entire, :empty, :compiler,
+                                   :compiler_version, :sdk_version,
+                                   :math_backend)
   end
 
   # these can be immediately shoved into the database. Easy! Only add things
   # when you add columns to the TestInstances table (and make sure you do do
   # that!)
   def instances_params
-    params.require(:instances)
-    # instance.require(:instances).permit(
-    #   :test_case, :mod, :runtime_seconds, :omp_num_threads, :compiler,
-    #   :compiler_version, :platform_version, :passed, :failure_type,
-    #   :success_type, :steps, :retries, :backups, :summary_text,
-    #   :checksum, :total_runtime_seconds, :re_time, :rn_mem, :re_mem)
+    params.require(:instances) #.permit(:test_case, :module, :omp_num_threads,
+                                      # :inlists, :mem_rn, :success_type,
+                                      # :mem_re, :success_type, :checksum,
+                                      # :outcome)
   end
 end

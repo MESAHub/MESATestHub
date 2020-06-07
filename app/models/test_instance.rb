@@ -26,12 +26,11 @@ class TestInstance < ApplicationRecord
   belongs_to :test_case_commit
   belongs_to :submission
 
-  has_many :test_data, dependent: :destroy
+  has_many :instance_inlists, dependent: :destroy
+  has_many :test_data, through: :instance_inlist
 
 
-  validates_presence_of :runtime_seconds, :computer_id, :test_case_id,
-                        :compiler
-  # validates_inclusion_of :passed, in: [true, false]
+  validates_presence_of :computer_id, :test_case_id, :compiler
   validates_inclusion_of :success_type, in: @@success_types.keys,
                                         allow_blank: true
   validates_inclusion_of :failure_type, in: @@failure_types.keys,
@@ -75,18 +74,52 @@ class TestInstance < ApplicationRecord
 
   # version of +new+ that is more useful for submissions
   def self.submission_new(instance_params, submission)
-    # create instance from "good" parameters
-    instance = new(instance_params.reject { |key| ['test_case', 'mod'].include? key })
+    # first get a hold of the test case itself
     test_case = TestCase.find_by(name: instance_params[:test_case],
-                                 module: instance_params[:mod])
+                                 module: instance_params[:module])
     # bail if parameters were crummy for some reason
     return nil if test_case.nil?
 
-    # populate other quantities from known things
+    # create instance from "good" parameters
+    # slick way to start things off assuming the params passed to the
+    # submission API match the name and type of those in the db. May need to be
+    # updated as more junk is added to the test output, and attributes may need
+    # to be set manually if naming conventions between testhub and mesa diverge
+    instance = new(instance_params.reject do |key|
+      ['test_case', 'module', 'inlists', 'outcome'].include? key 
+    end)
+
+    # other important details that we can't get directly from the params
     instance.test_case = test_case
     instance.submission = submission
     instance.commit = submission.commit
     instance.computer = submission.computer
+    instance.passed = instance_params['outcome'] =~ /pass/ ? true : false
+
+    # these are from +testhub.yml+ of installation (in base MESA_DIR after
+    # installation), but are forwarded from the submission
+    instance.compiler = submission.compiler
+    instance.compiler_version = submission.compiler_version
+    instance.sdk_version = submission.sdk_version
+    instance.math_backend = submission.math_backend
+
+    # now we need to go through the individual inlists, create them, and
+    # associate them with the test instance
+    instance_params[:inlists].each do |inlist_params|
+      new_inlist = instance.instance_inlists.build(
+        inlist_params.reject do |key|
+          ['extra_testhub_names', 'extra_testhub_vals'].include? key
+        end
+      )
+      # optionally build on extra data to the inlist
+      if inlist_params['extra_testhub_names'] &&
+         inlist_params['extra_testhub_vals']
+        inlist_params['extra_testhub_names'].zip(
+          inlist_params['extra_testhub_vals']).each do |datum_name, datum_val|
+          new_inlist.build_inlist_datum(name: datum_name, val: datum_val)
+        end
+      end
+    end
 
     # test case commit automatically set by +#set_tcv_or_tcc+ at validation
     instance
@@ -577,18 +610,5 @@ class TestInstance < ApplicationRecord
     recent_passing_with_similar_specs(depth: depth).where(
       memory_query => 1e-2..max_old_mem
     ).order(memory_query)
-  end
-
-  # make test_data easier to access as if they were attributes
-  def method_missing(method_name, *args, &block)
-    if test_case.data_names.include? method_name.to_s
-      data(method_name.to_s)
-    elsif (test_case.data_names.include? method_name.to_s.chomp('=') &&
-           args.length > 0)
-      set_data(method_name.to_s.chomp('='), args[0])
-    else
-      super(method_name, *args, &block)
-    end
-  end
-    
+  end    
 end
