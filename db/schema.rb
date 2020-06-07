@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20200607004229) do
+ActiveRecord::Schema.define(version: 20200607055701) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -52,12 +52,11 @@ ActiveRecord::Schema.define(version: 20200607004229) do
     t.float "runtime_minutes"
     t.integer "retries"
     t.integer "steps"
-    t.string "newton_retries"
-    t.string "integer"
-    t.integer "newton_iters"
     t.bigint "test_instance_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "newton_retries"
+    t.integer "newton_iters"
     t.index ["test_instance_id"], name: "index_instance_inlists_on_test_instance_id"
   end
 
@@ -73,6 +72,7 @@ ActiveRecord::Schema.define(version: 20200607004229) do
     t.string "compiler_version"
     t.string "sdk_version"
     t.string "math_backend"
+    t.string "platform_version"
     t.index ["commit_id"], name: "index_submissions_on_commit_id"
     t.index ["computer_id"], name: "index_submissions_on_computer_id"
   end
@@ -116,7 +116,7 @@ ActiveRecord::Schema.define(version: 20200607004229) do
   end
 
   create_table "test_instances", force: :cascade do |t|
-    t.integer "runtime_seconds", null: false
+    t.integer "runtime_seconds"
     t.integer "mesa_version"
     t.integer "omp_num_threads"
     t.string "compiler"
@@ -149,6 +149,8 @@ ActiveRecord::Schema.define(version: 20200607004229) do
     t.string "sdk_version"
     t.string "math_backend"
     t.float "runtime_minutes"
+    t.integer "newton_iters"
+    t.integer "newton_retries"
     t.index ["commit_id"], name: "index_test_instances_on_commit_id"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
     t.index ["mesa_version"], name: "index_test_instances_on_mesa_version"
@@ -159,11 +161,11 @@ ActiveRecord::Schema.define(version: 20200607004229) do
 
   create_table "users", force: :cascade do |t|
     t.string "email"
-    t.string "name"
     t.string "password_digest"
     t.boolean "admin"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "name"
     t.string "time_zone", default: "Pacific Time (US & Canada)"
     t.index ["email"], name: "index_users_on_email", unique: true
   end

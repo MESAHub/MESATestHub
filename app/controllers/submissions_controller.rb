@@ -10,6 +10,7 @@ class SubmissionsController < ApplicationController
     @submission = Submission.new
     @submission.computer = @computer
     @submission.commit = @commit
+    @submission.platform_version = submitter_params[:platform_version]
     @submission.entire = commit_params[:entire]
     @submission.empty = commit_params[:empty]
     @submission.compiler = commit_params[:compiler]
@@ -152,7 +153,8 @@ class SubmissionsController < ApplicationController
   end
 
   def submitter_params
-    params.require(:submitter).permit(:email, :password, :computer)
+    params.require(:submitter).permit(:email, :password, :computer,
+                                      :platform_version)
   end
 
   def commit_params

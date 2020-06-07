@@ -75,6 +75,7 @@ class TestInstance < ApplicationRecord
   # version of +new+ that is more useful for submissions
   def self.submission_new(instance_params, submission)
     # first get a hold of the test case itself
+    puts "finding test case using name: #{instance_params[:test_case]} and module #{instance_params[:module]}"
     test_case = TestCase.find_by(name: instance_params[:test_case],
                                  module: instance_params[:module])
     # bail if parameters were crummy for some reason
@@ -94,6 +95,7 @@ class TestInstance < ApplicationRecord
     instance.submission = submission
     instance.commit = submission.commit
     instance.computer = submission.computer
+    instance.platform_version = submission.platform_version
     instance.passed = instance_params['outcome'] =~ /pass/ ? true : false
 
     # these are from +testhub.yml+ of installation (in base MESA_DIR after
@@ -119,6 +121,21 @@ class TestInstance < ApplicationRecord
           new_inlist.build_inlist_datum(name: datum_name, val: datum_val)
         end
       end
+    end
+
+    # calculate summed values from all inlists
+    instance.runtime_minutes = 0
+    instance.steps = 0
+    instance.retries = 0
+    instance.newton_iters = 0
+    instance.newton_retries = 0
+
+    instance.instance_inlists.each do |inlist|
+      instance.runtime_minutes += inlist.runtime_minutes
+      instance.steps += inlist.steps
+      instance.retries += inlist.retries
+      instance.newton_iters += inlist.newton_iters
+      instance.newton_retries += inlist.newton_retries
     end
 
     # test case commit automatically set by +#set_tcv_or_tcc+ at validation
