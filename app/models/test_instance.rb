@@ -118,7 +118,7 @@ class TestInstance < ApplicationRecord
          inlist_params['extra_testhub_vals']
         inlist_params['extra_testhub_names'].zip(
           inlist_params['extra_testhub_vals']).each do |datum_name, datum_val|
-          new_inlist.build_inlist_datum(name: datum_name, val: datum_val)
+          new_inlist.inlist_data.build(name: datum_name, val: datum_val)
         end
       end
     end

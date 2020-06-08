@@ -36,6 +36,7 @@ class ApplicationController < ActionController::Base
   end
 
   def parse_sha
+    puts "calling parse_sha on #{params[:sha]}"
     Commit.parse_sha(params[:sha])
   end
 
@@ -45,7 +46,7 @@ class ApplicationController < ActionController::Base
   helper_method :admin?
   helper_method :self?
   helper_method :self_or_admin?
-  helper_method :parse_commit
+  helper_method :parse_sha
 
   # filters for accessing resources reserved for users or admins
   def authorize_user

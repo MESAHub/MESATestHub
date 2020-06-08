@@ -316,6 +316,73 @@ class Commit < ApplicationRecord
     res
   end
 
+  def computer_specs
+    # special call that collects a version's test instances and groups them
+    # by unique combinations of computer and computer specificaiton, and
+    # ONLY gathers that information
+    tis = TestInstance.where(commit_id: id)
+                      .select('computer_id, computer_specification')
+                      .group('computer_id, computer_specification')
+    # now build up a dictionary that maps one specificaiton to a list of
+    # computers (multiple computers may have the same spec, though in practice,
+    # it's rare)
+    specs = {}
+    tis.each do |ti|
+      specs[ti.computer_specification] = 
+        (specs[ti.computer_specification] || []) + [ti.computer_id]
+    end
+    # convert to Computer objects instead of ids
+    specs.keys.each do |spec|
+      specs[spec] = Computer.find(specs[spec])
+    end
+    specs
+  end
+
+  def status(test_case: nil)
+    # get status for whole revision
+    statuses = self.test_case_commits.pluck(:status).uniq
+    if statuses.count.zero?
+      # if there are no resulsts, return -1, meaning not tested/error
+      -1
+    elsif statuses.min < 0
+      # if there's a single error test case, return it as the whole status
+      statuses.min
+    else
+      # return the max (mixed most important, then mixed checksums, then
+      # then failures, then all successes)
+      statuses.max
+    end
+  end
+
+  # 
+  # Guide: nil = untested (or unreported)
+  #          -1 = no compilation status provided
+  #          0  = compiles on all systems so far
+  #          1  = fails compilation on all systems so far
+  #          2  = mixed results
+  # this method just keeps this scheme logically consistent when a new report
+  # rolls in, but it DOES NOT save the result to the database.
+  def compilation_status
+    compile_stati = submissions.pluck(:compiled).reject(&:nil?)
+    if compile_stati.empty?
+      # no submissions
+      return -1
+    else
+      if compile.stati.uniq.count > 1
+        # multiple values; mixed results
+        return 2
+      else
+        if compile_stati[0]
+          # first one (and thus all) is true, all passing!
+          return 0
+        else
+          return 1
+        end
+      end
+    end
+  end
+
+
   def <=>(commit_1, commit_2)
     # sort commits according to their datetimes, with recent commits FIRST
     commit_2.commit_datetime <=> commit_1.commit_datetime

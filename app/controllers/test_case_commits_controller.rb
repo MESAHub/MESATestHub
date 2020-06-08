@@ -43,11 +43,7 @@ class TestCaseCommitsController < ApplicationController
   # Use callbacks to share common setup or constraints between actions.
 
   def set_test_case_commit
-    @commit = if params[:sha].downcase == 'head'
-                 Commit.head
-               else
-                 Commit.find_by(sha: params[:sha])
-               end
+    @commit = parse_sha
     @test_case = TestCase.find_by(name: params[:test_case], module: params[:module])
     @test_case_commit = TestCaseCommit.find_by(
       commit: @commit, test_case: @test_case

@@ -259,7 +259,7 @@ class TestInstancesController < ApplicationController
 
   # Use callbacks to share common setup or constraints between actions.
   def set_test_instance
-    @test_instance = @test_case.test_instances.includes(:test_case_version).find(params[:id])
+    @test_instance = @test_case.test_instances.includes(:test_case_commit).find(params[:id])
   end
 
   def set_test_case

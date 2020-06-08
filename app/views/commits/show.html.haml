@@ -1,2 +1,159 @@
-%h1 Commits#show
-%p=@commit
+.row.text-center
+  .col
+    %h1= @header_text
+    %h3{class: @compilation_class}= @compilation_text
+    %h3{class: @status_class}= @status_text
+.row
+  .col-lg-5.col-md-8.col-xs-12
+    %h4 Computers Tested:
+    %ul
+      - @specs.each do |spec, comps|
+        %li
+          ="#{spec}: "
+          -comps.each do |comp|
+            =link_to(comp.name, user_computer_path(comp.user, comp))
+            (
+            %a{href: user_path(comp.user)}><
+              =comp.user.name
+            )
+  -# .col-lg-3.col-md-4.col-xs-12
+  -#   %h4 MESA commit
+  -#   %form{action: '/show_commit', class: 'form-inline'}
+  -#     -# .col-auto.col-form-label.align-middle
+  -#     -#   =label_tag "number", 'MESA commit: ', class: 'control-label form-control-lg'
+  -#     .col-auto.align-middle
+  -#       =select_tag "number", options_for_select(@mesa_commits, @selected), class: 'custom-select form-control form-control-lg', id: 'commit_select'
+  -#     %noscript
+  -#       .col-auto.align-middle
+  -#         =submit_tag 'Go', class: 'btn btn-primary text-light form-control', name: nil, id: 'commit_select_go'
+  -if @commit.author
+    .col-lg-4.col-xs-12
+      %h4 SVN Commit Data
+      %ul 
+        %li
+          %b Author:
+          =@commit.author
+        %li
+          %b Commit Message:
+          =@commit.message
+
+- if @test_case_commits.count == 0
+  %h4.text-danger.text-center.my-5
+    No Test Cases to Show
+- else
+  .row#index-desc
+    .col
+      .card-deck
+        - if @others.count.positive?
+          .card.border-info
+            .card-body.text-info                    
+              %h3.card-title Untested
+              %p.card-text
+                %b=@others.count
+                tests with no submission data.
+        - if @mixed.count.positive?
+          .card.border-warning
+            .card-body.text-warning
+              %h3.card-title Mixed
+              %p.card-text
+                %b=@mixed.count
+                tests where some computers report passing and others report failing.
+        - if @checksums.count.positive?
+          .card.border-primary
+            .card-body.text-primary
+              %h3.card-title Checksums
+              %p.card-text
+                %b=@checksums.count
+                tests where different computers give different checksums.
+        - if @failing.count.positive?
+          .card.border-danger
+            .card-body.text-danger
+              %h3.card-title Failing
+              %p.card-text
+                %b=@failing.count
+                tests where all computers report failing.
+        - if @passing.count.positive?
+          .card.border-success
+            .card-body.text-success
+              %h4.card-title Passing
+              %p.card-text
+                %b=@passing.count
+                tests where all computers report passing.
+  .row
+    .col
+      %ul.list-group
+        - @mixed.each do |tcc|
+          %li.list-group-item.list-group-item-action.list-group-item-warning
+            .d-flex.w-100.mb-0.justify-content-between
+              = render partial: "badges", locals: { tcc: tcc }
+            = render partial: "failures", locals: { tcc: tcc }
+            = render partial: "checksums", locals: { tcc: tcc }
+        - @checksums.each do |tcc|
+          %li.list-group-item.list-group-item-action.list-group-item-primary
+            .d-flex.w-100.mb-0.justify-content-between
+              = render partial: "badges", locals: { tcc: tcc }
+            = render partial: "checksums", locals: { tcc: tcc }
+        - @failing.each do |tcc|
+          %li.list-group-item.list-group-item-action.list-group-item-danger
+            .d-flex.w-100.mb-0.justify-content-between
+              = render partial: "badges", locals: { tcc: tcc }
+            = render partial: "failures", locals: { tcc: tcc }
+      - if @others.length > 0
+        .text-center.my-4
+          %a.btn.btn-lg.btn-info{href: '#', 'data-target'.to_sym => '#missing', 'data-toggle'.to_sym => 'collapse'}
+            Show/Hide 
+            =@others.count
+            Untested Test Cases
+      %ul.list-group.collapse.mb-5#missing
+        - @others.each do |tcc|
+          %li.list-group-item.list-group-item-action.list-group-item-info
+            .d-flex.w-100.justify-content-between
+            %span.h5.text-monospace
+              =link_to tcc.test_case.name, test_case_commit_path(sha: params[:sha], test_case: tcc.test_case.name, module: tcc.test_case.module), class: 'stretched-link text-reset no-hover'
+              %span.small.muted="(#{tcc.test_case.module})"
+      - if @passing.length > 0
+        .text-center.my-4
+          %a.btn.btn-lg.btn-success{href: '#', 'data-target'.to_sym => '#passing', 'data-toggle'.to_sym => 'collapse'}
+            Show/Hide 
+            =@passing.count
+            Passing Test Cases
+      %ul.list-group.collapse.mb-5#passing
+        - @passing.each do |tcc|
+          %li.list-group-item.list-group-item-action.list-group-item-success
+            .d-flex.w-100.mb-0.justify-content-between
+              = render partial: "badges", locals: { tcc: tcc }
+
+
+-#  .row
+-#    .col
+-#      .table-responsive
+-#        %table.table.table-hover#test_summary
+-#          %thead.thead-default
+-#            %tr
+-#              %th Name
+-#              %th Computers Tested
+-#              %th Last Tested Date
+-#              -# %th Diff?
+-#
+-#          %tbody
+-#            - @test_case_commits.each do |tcc|
+-#              %tr{class: @row_classes[tcc] + ' clickable-row', "data-href":-#test_case_commit_path(number: @selected, test_case: tcc.-#test_case.name), id: tcc.test_case.name + '-row'}
+-#                %td
+-#                  %samp= tcc.test_case.name
+-#                - if @selected == 'all'
+-#                  %td= @last_commits[tcc]
+-#                - else
+-#                  %td= tcc.computer_count
+-#                  %td= format_time(@last_tested[tcc]) #.localtime.strftime("%F %H:%M %Z")
+                -# %td
+                -#   - case @diffs[test_case]
+                -#   - when 0
+                -#     &#x2717
+                -#   - when 1
+                -#     &#x2713
+                -#   - else
+                -#     &#x3f
+  -# .row
+  -#   .col.text-center
+  -#     - if admin?
+  -#       =link_to "Create Test Case", new_test_case_path, class: 'btn btn-lg btn-primary text-light'
