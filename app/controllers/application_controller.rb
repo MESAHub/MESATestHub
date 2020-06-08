@@ -35,12 +35,17 @@ class ApplicationController < ActionController::Base
     admin? || self?
   end
 
+  def parse_sha
+    Commit.parse_sha(params[:sha])
+  end
+
   helper_method :current_user
   helper_method :time_zone
   helper_method :format_time
   helper_method :admin?
   helper_method :self?
   helper_method :self_or_admin?
+  helper_method :parse_commit
 
   # filters for accessing resources reserved for users or admins
   def authorize_user

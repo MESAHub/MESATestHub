@@ -4,6 +4,7 @@ class TestCase < ApplicationRecord
   has_many :test_case_commits, dependent: :destroy
   has_many :computers, through: :test_instances
   has_many :versions, through: :test_instances
+  has_many :commits, through: :test_instances
   has_many :users, through: :computers
 
   validates_presence_of :name

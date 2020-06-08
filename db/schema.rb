@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20200607055701) do
+ActiveRecord::Schema.define(version: 20200608001644) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -23,6 +23,8 @@ ActiveRecord::Schema.define(version: 20200607055701) do
     t.datetime "commit_time", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "short_sha"
+    t.string "github_url"
     t.index ["sha"], name: "index_commits_on_sha", unique: true
   end
 
@@ -161,11 +163,11 @@ ActiveRecord::Schema.define(version: 20200607055701) do
 
   create_table "users", force: :cascade do |t|
     t.string "email"
+    t.string "name"
     t.string "password_digest"
     t.boolean "admin"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.string "name"
     t.string "time_zone", default: "Pacific Time (US & Canada)"
     t.index ["email"], name: "index_users_on_email", unique: true
   end

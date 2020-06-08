@@ -1,4 +1,8 @@
 Rails.application.routes.draw do
+  get 'commits/show'
+
+  get 'commits/index'
+
   get 'sessions/new'
 
   resources :users do
@@ -10,7 +14,6 @@ Rails.application.routes.draw do
     resources :test_instances
   end
 
-  resources :commits, only: :show
 
   # handle push requests from github repo
   # see handling details in controllers/github_webhooks_controller.rb
@@ -20,6 +23,14 @@ Rails.application.routes.draw do
   # for accepting new submissions (of any kind) from mesa_test
   resources :submissions, only: [:create, :show], defaults: { formats: :json }
   post 'submissions/create.json', to: 'submissions#create'
+
+  # for viewing data for one test case and one commit
+  get '/commits/:sha/test_cases/:module/:test_case',
+    to: 'test_case_commits#show', as:'test_case_commit', test_case: /[^\/]+/
+
+  # put this after the test case commit matcher since this is more general
+  resources :commits, only: :index
+  get '/commits/:sha', to: 'commits#show', as: 'commit'
 
   root to: 'versions#show' #, params: { number: 'latest' }
 

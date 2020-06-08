@@ -33,7 +33,6 @@ class TestCaseCommit < ApplicationRecord
         existing_cases = TestCase.where(name: test_case_names, module: mod).to_a
         existing_names = existing_cases.pluck(:name)
         to_create = test_case_names - existing_names
-        puts "Creating the following test cases:"
         to_create.each { |tc_name| puts tc_name }
         TestCase.transaction do
           to_create.each do |new_name|

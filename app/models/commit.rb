@@ -1,13 +1,14 @@
 class Commit < ApplicationRecord
-  has_many :test_case_commits
-  has_many :submissions
-  has_many :test_case_instances
-
+  has_many :test_case_commits, dependent: :destroy
+  has_many :submissions, dependent: :destroy
+  
   has_many :test_cases, through: :test_case_commits
+  has_many :test_instances, through: :test_case_commits
   has_many :computers, through: :submissions
 
-  validates_uniqueness_of :sha
-  validates_presence_of :author, :author_email, :message, :commit_time
+  validates_uniqueness_of :sha, :short_sha
+  validates_presence_of :sha, :short_sha, :author, :author_email, :message,
+    :commit_time
 
   paginates_per 25
 
@@ -80,6 +81,7 @@ class Commit < ApplicationRecord
 
     {
       sha: commit.oid,
+      short_sha: commit.oid[(0..7)],
       author: commit.author[:name],
       author_email: commit.author[:email],
       commit_time: commit.author[:time],
@@ -127,10 +129,12 @@ class Commit < ApplicationRecord
 
     {
       sha: github_hash[:id],
+      short_sha: github_hash[:id][(0..7)],
       author: github_hash[:author][:name],
       author_email: github_hash[:author][:email],
       commit_time: github_hash[:timestamp],
-      message: github_hash[:message]
+      message: github_hash[:message],
+      github_url: github_hash[:url]
     }
   end
 
@@ -145,6 +149,17 @@ class Commit < ApplicationRecord
   # GENERAL USE AND SEARCHING/SORTING #
   #####################################
   
+  def self.parse_sha(sha)
+    if sha.downcase == 'head'
+      Commit.head
+    elsif sha.length == 7
+      Commit.find_by(short_sha: sha)
+    else
+      Commit.find_by(sha: sha)
+    end
+  end
+
+
   def self.head(branch_name: 'master', includes: nil)
     # get the [Rails] head commit of a particular branch
     # +branch_name+ branch for which we want the head node
@@ -308,7 +323,7 @@ class Commit < ApplicationRecord
 
   def to_s
     # default string represenation will be the first 7 characters of the SHA
-    sha[0,7]
+    short_sha
   end
 
   def message_first_line

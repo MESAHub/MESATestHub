@@ -65,8 +65,8 @@ class TestInstance < ApplicationRecord
 
   def self.memory_query(run_type)
     case run_type
-    when :rn then :rn_mem
-    when :re then :re_mem
+    when :rn then :mem_rn
+    when :re then :mem_re
     else
       return nil      
     end
@@ -307,10 +307,10 @@ class TestInstance < ApplicationRecord
       SearchOption.new('platform_version', self, :platform_version),
       # give memory usage in GB, convert to float, and then to kB (how it is in
       # the database)
-      SearchOption.new('rn_RAM', self, :rn_mem) do |mem_GB|
+      SearchOption.new('rn_RAM', self, :mem_rn) do |mem_GB|
         mem_GB.to_f * (1024**2)
       end,
-      SearchOption.new('re_RAM', self, :re_mem) do |mem_GB|
+      SearchOption.new('re_RAM', self, :mem_re) do |mem_GB|
         mem_GB.to_f * (1024**2)
       end,
       # runtimes in seconds. Note that runtime_seconds is also aliased to
@@ -388,8 +388,13 @@ class TestInstance < ApplicationRecord
     spec = ''
     spec += computer.platform + ' ' if computer.platform
     spec += platform_version + ' ' if platform_version
-    spec += compiler + ' ' if compiler
-    spec += compiler_version if compiler_version
+    if sdk_version
+      spec += "SDK #{sdk_version} "
+      spec += "#{math_backend} " if math_backend
+    else
+      spec += compiler + ' ' if compiler
+      spec += compiler_version if compiler_version
+    end
     spec = 'no specificaiton' if spec.empty?
     spec.strip
   end
@@ -428,11 +433,11 @@ class TestInstance < ApplicationRecord
   end
 
   def rn_mem_GB
-    kB_to_GB(rn_mem)
+    kB_to_GB(mem_rn)
   end
 
   def re_mem_GB
-    kB_to_GB(re_mem)
+    kB_to_GB(mem_re)
   end
 
   def set_computer_name(user, new_computer_name)
@@ -561,8 +566,8 @@ class TestInstance < ApplicationRecord
       rn_runtime: rn_time,
       re_runtime: re_time,
       runtime: total_runtime_seconds,
-      rn_mem: rn_mem_GB,
-      re_mem: re_mem_GB,
+      mem_rn: rn_mem_GB,
+      mem_re: re_mem_GB,
       threads: omp_num_threads,
       compiler: compiler,
       compiler_version: compiler_version,
