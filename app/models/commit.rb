@@ -316,25 +316,34 @@ class Commit < ApplicationRecord
     res
   end
 
-  def computer_specs
+  def computer_info
     # special call that collects a version's test instances and groups them
     # by unique combinations of computer and computer specificaiton, and
     # ONLY gathers that information
     tis = TestInstance.where(commit_id: id)
                       .select('computer_id, computer_specification')
                       .group('computer_id, computer_specification')
-    # now build up a dictionary that maps one specificaiton to a list of
-    # computers (multiple computers may have the same spec, though in practice,
-    # it's rare)
-    specs = {}
+    # now build an array where each element a hash containing the computer,
+    # the specificaion string, and the fraction of test cases from this commit
+    # that have been completed with that computer on that specification
+    specs = []
     tis.each do |ti|
-      specs[ti.computer_specification] = 
-        (specs[ti.computer_specification] || []) + [ti.computer_id]
+      new_entry = {}
+      new_entry[:computer] = Computer.includes(:user).find(ti.computer_id)
+      new_entry[:spec] = ti.computer_specification
+      new_entry[:frac] = TestInstance.where(
+        computer_id: ti.computer_id,
+        computer_specification: ti.computer_specification
+      ).pluck(:test_case_id).uniq.count.to_f / test_cases.count.to_f
+      specs << new_entry
     end
-    # convert to Computer objects instead of ids
-    specs.keys.each do |spec|
-      specs[spec] = Computer.find(specs[spec])
-    end
+    #   specs[ti.computer_specification] = 
+    #     (specs[ti.computer_specification] || []) + [ti.computer_id]
+    # end
+    # # convert to Computer objects instead of ids
+    # specs.keys.each do |spec|
+    #   specs[spec] = Computer.find(specs[spec])
+    # end
     specs
   end
 

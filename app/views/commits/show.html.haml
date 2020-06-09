@@ -4,18 +4,35 @@
     %h3{class: @compilation_class}= @compilation_text
     %h3{class: @status_class}= @status_text
 .row
-  .col-lg-5.col-md-8.col-xs-12
+  .col-lg-8.col-xs-12
     %h4 Computers Tested:
-    %ul
-      - @specs.each do |spec, comps|
-        %li
-          ="#{spec}: "
-          -comps.each do |comp|
-            =link_to(comp.name, user_computer_path(comp.user, comp))
-            (
-            %a{href: user_path(comp.user)}><
-              =comp.user.name
-            )
+    %dl.row
+      - @specs.each do |entry|
+        %dt.col-md-4
+          -case entry[:frac] * 16
+          -when 0.0
+            =render partial: 'none_tested'
+          -when (0..3)
+            =render partial: 'one_eighth'
+          -when (3..5)
+            =render partial: 'one_quarter'
+          -when (5..7)
+            =render partial: 'three_eighths'
+          -when (7..9)
+            =render partial: 'one_half'
+          -when (9..11)
+            =render partial: 'five_eighths'
+          -when (11..13)
+            =render partial: 'three_quarters'
+          -when (13...16)
+            =render partial: 'seven_eighths'
+          -else
+            =render partial: 'complete'
+          =link_to(entry[:computer].name, user_computer_path(entry[:computer].user, entry[:computer]))
+          = surround '(', ')' do
+            %a{href: user_path(entry[:computer].user)}=entry[:computer].user.name
+
+        %dd.col-md-8=entry[:spec]
   -# .col-lg-3.col-md-4.col-xs-12
   -#   %h4 MESA commit
   -#   %form{action: '/show_commit', class: 'form-inline'}
@@ -108,9 +125,11 @@
         - @others.each do |tcc|
           %li.list-group-item.list-group-item-action.list-group-item-info
             .d-flex.w-100.justify-content-between
-            %span.h5.text-monospace
-              =link_to tcc.test_case.name, test_case_commit_path(sha: params[:sha], test_case: tcc.test_case.name, module: tcc.test_case.module), class: 'stretched-link text-reset no-hover'
-              %span.small.muted="(#{tcc.test_case.module})"
+              %h5
+                %span.text-monospace=link_to tcc.test_case.name, test_case_commit_path(sha: params[:sha], test_case: tcc.test_case.name, module: tcc.test_case.module), class: 'stretched-link text-reset no-hover'
+                %span.small.muted
+                  =surround '(', ')' do
+                    %span.text-monospace=tcc.test_case.module
       - if @passing.length > 0
         .text-center.my-4
           %a.btn.btn-lg.btn-success{href: '#', 'data-target'.to_sym => '#passing', 'data-toggle'.to_sym => 'collapse'}

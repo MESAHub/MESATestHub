@@ -16,7 +16,7 @@ class CommitsController < ApplicationController
     @test_case_commits = [@others, @mixed, @checksums, @failing, @passing].flatten
 
     @header_text = "Test Cases Tested on commit #{@commit}"
-    @specs = @commit.computer_specs
+    @specs = @commit.computer_info
     @statistics = {
       passing: @test_case_commits.select { |tcc| tcc.status.zero? }.count,
       mixed: @test_case_commits.select { |tcc| tcc.status == 3 }.count,
