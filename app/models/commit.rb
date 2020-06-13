@@ -50,6 +50,66 @@ class Commit < ApplicationRecord
     names
   end
 
+  def self.merged_branches(branch=nil)
+    if branch.nil?
+      branch_names - unmerged_branches
+    else
+      check_branch(branch)
+      # shell out to get list of branches that are "merged into" the desired
+      # branch
+      res = `git -C #{repo.path} branch --merged #{branch}`.split("\n")
+
+      # get rid of bogus branch and clear out whitespace
+      res.reject! { |branch| branch.include? '(no branch)' }
+      res.map!(&:strip)
+
+      # remove branch we are checking against... only want to find OTHER branches
+      # that have been merged into this branch
+      res.delete(branch)
+      res
+    end
+  end
+
+  # get full SHAs for all commits in a branch by walking through the tree and
+  # scooping up commits
+  def self.branch_shas(branch = 'master')
+    head = rugged_get_head(branch)
+
+  end
+
+
+  def self.unmerged_branches(branch=nil)
+    if branch.nil?
+      all = branch_names
+      all_merged = all.inject([]) do |res, branch|
+        res + merged_branches(branch)
+      end.uniq
+      all - all_merged
+    else
+      check_branch(branch)
+      # shell out to get list of branches that are "merged into" the desired
+      # branch
+      res = `git -C #{repo.path} branch --no-merged #{branch}`.split("\n")
+
+      # get rid of bogus branch and clear out whitespace
+      res.reject! { |branch| branch.include? '(no branch)' }
+      res.map!(&:strip)
+
+      # remove branch we are checking against... only want to find OTHER branches
+      # that have been merged into this branch
+      res.delete(branch)
+      res
+    end
+  end
+
+  def self.check_branch(branch)
+    unless branch_names.include? branch
+      raise GitError.new(
+        "Invalid branch: {#branch}. Must be one of #{branch_names.join(', ')}."
+        )
+    end
+  end
+
   def self.head_commit_shas
     # hash mapping branch names to head commits SHA of respective branch
 
@@ -103,18 +163,18 @@ class Commit < ApplicationRecord
     find_by_sha(commit.oid)
   end
 
-  def self.sorted_query(shas, includes: nil)
+  def self.sorted_query(shas, includes: nil, page: nil)
     # given a list of sorted shas, find the corresponding commits and return
     # them as a sorted list (in the same order as the shas)
     # 
     # +shas+ list of strings corresponding to commit SHAs
     # +includes+ list of arguments that should go to ActiveRecord query
     query = if includes
-              where(sha: shas).includes(*includes)
+              where(sha: shas).order(commit_time: :desc).includes(*includes)
             else
-              where(sha: shas)
+              where(sha: shas).order(commit_time: :desc)
             end
-    query.sort { |c1, c2| shas.index(c1) <=> shas.index(c2) }
+    query.page(page || 1)
   end
 
   ################################################
@@ -160,11 +220,12 @@ class Commit < ApplicationRecord
   end
 
 
+  # get the [Rails] head commit of a particular branch
+  # Params:
+  # +branch_name+:: branch for which we want the head node
+  # +includes+:: argument to be passed on to AcitveRecord#includes (pre-load
+  #              associations)
   def self.head(branch_name: 'master', includes: nil)
-    # get the [Rails] head commit of a particular branch
-    # +branch_name+ branch for which we want the head node
-    # +includes+ argument to be passed on to AcitveRecord#includes (pre-load
-    # associations)
     rugged_head = rugged_get_head(branch_name)
     return nil unless rugged_head
     if includes
@@ -174,25 +235,25 @@ class Commit < ApplicationRecord
     end
   end
 
-  def self.all_in_branch(branch_name: 'master', includes: nil)
-    # ActiveRecord query for all commits in a branch
-
-    # first get list of SHAs for all such commits, then find them in the
-    # database. To do this, walk through repo starting at the head node of the
-    # branch desired
-    # 
-    # +branch_name+ string matching a branch's name. If it isn't found, returns
-    # nil
-    # +includes+ argument to be passed on to AcitveRecord#includes (pre-load
-    # associations)
+  # ActiveRecord query for all commits in a branch
+  #
+  # first get list of SHAs for all such commits, then find them in the
+  # database. To do this, walk through repo starting at the head node of the
+  # branch desired
+  # 
+  # +branch_name+ string matching a branch's name. If it isn't found, returns
+  # nil
+  # +includes+ argument to be passed on to AcitveRecord#includes (pre-load
+  # associations)
+  def self.all_in_branch(branch_name: 'master', includes: nil, page: nil)
 
     # Bail if given a bad branch name (and thus no head commit)
     head = rugged_get_head(branch_name)
     return if head.nil?
     # walk the tree to
     # completion, scraping shas in topological order
-    shas = repo.walk(head, DEFAULT_SORTING).map { |commit| commit.oid }
-    sorted_query(shas, includes: includes)
+    shas = repo.walk(head.oid, DEFAULT_SORTING).map { |commit| commit.oid }
+    sorted_query(shas, includes: includes, page: nil)
   end
 
   def self.subset_of_branch(branch_name: 'master', size: 25, page: 1,
@@ -377,7 +438,7 @@ class Commit < ApplicationRecord
       # no submissions
       return -1
     else
-      if compile.stati.uniq.count > 1
+      if compile_stati.uniq.count > 1
         # multiple values; mixed results
         return 2
       else
@@ -391,19 +452,46 @@ class Commit < ApplicationRecord
     end
   end
 
-
-  def <=>(commit_1, commit_2)
-    # sort commits according to their datetimes, with recent commits FIRST
-    commit_2.commit_datetime <=> commit_1.commit_datetime
+  def compile_success_count
+    submissions.pluck(:compiled).count(true)
   end
 
+  def compile_fail_count
+    submissions.pluck(:compiled).count(false)
+  end
+
+  # sort commits according to their datetimes, with recent commits FIRST
+  def <=>(commit_1, commit_2)
+    commit_2.commit_time <=> commit_1.commit_time
+  end
+
+  # default string represenation will be the first 7 characters of the SHA
   def to_s
-    # default string represenation will be the first 7 characters of the SHA
     short_sha
   end
 
+  # first 80 characters of the first line of the message
+  # if first line exceeds 80 characters, chop off last word and add an ellipsis
+  # remainder will be accessible via +message_rest+
   def message_first_line
-    # first 80 characters of the first line of the message
-    message.split("\n").first[0,80]
+    first_line = message.split("\n").first
+    return first_line if first_line.length < 80
+    first_line.split(' ')[(0...-1)].join(' ')
+  end
+
+  # the latter part of the message not captured by +message_first+
+  def message_rest
+    # if its a short message in one line, we shouldn't have anything left over
+    return nil if message_first_line == message
+
+    # determine where rest starts by looking at length of first line, but
+    # dropping any ellipsis
+    start = message_first_line.chomp('...').length
+    res = message[(start..-1)].strip
+    return nil if res.empty?
+    
+    '...' + res.strip
   end
 end
+
+class GitError < Exception; end

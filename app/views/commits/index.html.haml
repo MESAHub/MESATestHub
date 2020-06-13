@@ -1,2 +1,41 @@
-%h1 Commits#index
-%p Find me in app/views/commits/index.html.haml
+.row
+  .col
+    %h1 Search Commits
+.row.mb-2
+  .col
+    .btn-group
+      %button.btn.btn-secondary.btn-lg.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
+        %h45
+          %span.small.text-muted Branch:
+          %samp= @branch
+      .dropdown-menu
+        - @unmerged_branches.each do |branch|
+          =link_to branch, commits_path(branch: branch), class: "dropdown-item"
+.row
+  %ul.list-group
+    - @commits.each do |commit|
+      %li{class: "list-group-item list-group-item-action #{@row_classes[commit]}"}
+        .d-flex.w-100.justify-content-between
+          %h5.font-weight-bold
+            = commit.message_first_line
+            -if commit.message_rest
+              %a.badge.badge-secondary{'data-toggle'.to_sym => 'collapse', href: "\#msg_#{commit.short_sha}", role: 'button', 'aria-expanded'.to_sym => 'false', 'aria-controls'.to_sym => "\#msg_#{commit.short_sha}"} &nbsp;&#8230;&nbsp;
+          .btn-group
+            %a.mr-1{href: commit_path(commit.short_sha)}
+              %button.btn.btn-outline-primary.text-monospace= commit.short_sha
+            %a{href: commit.github_url}
+              %button.btn.btn-outline-primary.text-monospace
+                %i.fa.fa-code
+        .d-flex.w-100
+          %p.mb-0
+            %span.font-weight-bold= commit.author
+            %span
+              commited on 
+              =commit.commit_time.strftime('%B %d %Y')
+        .d-flex.w-100
+          %p.mb-0.mt-2{class: 'collapse', id: "msg_#{commit.short_sha}"}= commit.message_rest
+
+.row
+  .col
+    = paginate @commits
+

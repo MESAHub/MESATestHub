@@ -57,7 +57,7 @@ class CommitsController < ApplicationController
         @failing_instances[tcc].pluck(:failure_type).uniq.each do |failure_type|
           @failure_types[tcc][failure_type] = @failing_instances[tcc].select do |ti|
             ti.failure_type == failure_type
-          end.map { |ti| ti.computer } #.pluck(:computer).uniq.sort { |comp| comp.name }
+          end.map { |ti| ti.computer }
         end
       end
       @counts[tcc] = {}
@@ -82,7 +82,8 @@ class CommitsController < ApplicationController
                    when :mixed
                      'Some tests fail on some computers and pass on others.'
                    when :failing then 'Some tests fail with all computers.'
-                   when :checksum then 'Some tests pass with different checksums on different computers.'
+                   when :checksum then 'Some tests pass with different ' \
+                     'checksums on different computers.'
                    when :other then 'At least some test cases not tested.'
                    else
                      'No tests have been run for this commit.'
@@ -136,6 +137,36 @@ class CommitsController < ApplicationController
   end
 
   def index
+    @unmerged_branches = Commit.unmerged_branches
+    @merged_branches = Commit.merged_branches
+    @branch = params[:branch] || 'master'
+    @commits = Commit.all_in_branch(
+      branch_name: @branch,
+      includes: :test_case_commits,
+      page: params[:page]
+    )
+
+    @mixed_count = {}
+    @checksum_count = {}
+    @fail_count = {}
+    @pass_count = {}
+    @row_classes = {}
+    @commits.each do |commit|
+      @pass_count[commit] = commit.test_case_commits.where(status: 0).count
+      @fail_count[commit] = commit.test_case_commits.where(status: 1).count
+      @checksum_count[commit] = commit.test_case_commits.where.not(
+        checksum_count: 0..1).count
+      @mixed_count[commit] = commit.test_case_commits.where(status: 3).count
+      if @mixed_count[commit] > 0
+        @row_classes[commit] = 'table-warning'
+      elsif @checksum_count[commit] > 0
+        @row_classes[commit] = 'table-primary'
+      elsif @fail_count[commit] > 0
+        @row_classes[commit] = 'table-danger'
+      elsif @pass_count[commit] == commit.test_case_commits.count
+        @row_classes[commit] = ''
+      end
+    end
   end
 
   private
