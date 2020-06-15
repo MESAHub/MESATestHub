@@ -38,7 +38,7 @@ class Commit < ApplicationRecord
     repo.fetch('origin', credentials: credentials)
   end
 
-  def self.branch_names
+  def self.branches
     # array of names (strings) of branches in repo
 
     names = repo.branches.map { |branch| branch.name }
@@ -52,7 +52,7 @@ class Commit < ApplicationRecord
 
   def self.merged_branches(branch=nil)
     if branch.nil?
-      branch_names - unmerged_branches
+      branches - unmerged_branches
     else
       check_branch(branch)
       # shell out to get list of branches that are "merged into" the desired
@@ -74,13 +74,12 @@ class Commit < ApplicationRecord
   # scooping up commits
   def self.branch_shas(branch = 'master')
     head = rugged_get_head(branch)
-
   end
 
 
   def self.unmerged_branches(branch=nil)
     if branch.nil?
-      all = branch_names
+      all = branches
       all_merged = all.inject([]) do |res, branch|
         res + merged_branches(branch)
       end.uniq
@@ -103,9 +102,9 @@ class Commit < ApplicationRecord
   end
 
   def self.check_branch(branch)
-    unless branch_names.include? branch
+    unless branches.include? branch
       raise GitError.new(
-        "Invalid branch: {#branch}. Must be one of #{branch_names.join(', ')}."
+        "Invalid branch: {#branch}. Must be one of #{branches.join(', ')}."
         )
     end
   end
@@ -119,7 +118,7 @@ class Commit < ApplicationRecord
   def self.rugged_get_branch(branch_name)
     # first branch that matches the name. Problematic for repeated names, but
     # we'll cross that bridge when we get there
-    return nil unless branch_names.include? branch_name
+    return nil unless branches.include? branch_name
     repo.branches.select { |branch| branch.name == branch_name }.first
   end
 
@@ -222,11 +221,11 @@ class Commit < ApplicationRecord
 
   # get the [Rails] head commit of a particular branch
   # Params:
-  # +branch_name+:: branch for which we want the head node
+  # +branch+:: branch for which we want the head node
   # +includes+:: argument to be passed on to AcitveRecord#includes (pre-load
   #              associations)
-  def self.head(branch_name: 'master', includes: nil)
-    rugged_head = rugged_get_head(branch_name)
+  def self.head(branch: 'master', includes: nil)
+    rugged_head = rugged_get_head(branch)
     return nil unless rugged_head
     if includes
       Commit.where(sha: rugged_head.oid).includes(*includes).first
@@ -235,28 +234,32 @@ class Commit < ApplicationRecord
     end
   end
 
+  # get all shas from a particular branch. No guarantee on their order
+  # No database queries are done, this just comes from the repo
+  def self.shas_in_branch(branch: 'master')
+    # Bail if given a bad branch name (and thus no head commit)
+    head = rugged_get_head(branch)
+    return if head.nil?
+    # walk the tree to
+    # completion, scraping shas in topological order
+    repo.walk(head.oid, DEFAULT_SORTING).map { |commit| commit.oid }
+  end
+
   # ActiveRecord query for all commits in a branch
   #
   # first get list of SHAs for all such commits, then find them in the
   # database. To do this, walk through repo starting at the head node of the
   # branch desired
   # 
-  # +branch_name+ string matching a branch's name. If it isn't found, returns
+  # +branch+ string matching a branch's name. If it isn't found, returns
   # nil
   # +includes+ argument to be passed on to AcitveRecord#includes (pre-load
   # associations)
-  def self.all_in_branch(branch_name: 'master', includes: nil, page: nil)
-
-    # Bail if given a bad branch name (and thus no head commit)
-    head = rugged_get_head(branch_name)
-    return if head.nil?
-    # walk the tree to
-    # completion, scraping shas in topological order
-    shas = repo.walk(head.oid, DEFAULT_SORTING).map { |commit| commit.oid }
-    sorted_query(shas, includes: includes, page: nil)
+  def self.all_in_branch(branch: 'master', includes: nil, page: nil)
+    sorted_query(shas_in_branch(branch: branch), includes: includes, page: nil)
   end
 
-  def self.subset_of_branch(branch_name: 'master', size: 25, page: 1,
+  def self.subset_of_branch(branch: 'master', size: 25, page: 1,
     includes: nil)
     # Retrieve properly sorted collection of commits, but limit the size
     # 
@@ -265,7 +268,7 @@ class Commit < ApplicationRecord
     # relevant commits, find them in the database, and then sort the results
     # accordingly.
     # 
-    # +branch_name+ string matching a branch's name. If it isn't found, returns
+    # +branch+ string matching a branch's name. If it isn't found, returns
     # nil
     # +size+ integer describing the "chunk size" of commits to be returned.
     # Defaults to 25
@@ -273,7 +276,7 @@ class Commit < ApplicationRecord
     # and then scrape the next "size" amount of commits
     # +includes+ argument to be passed on to AcitveRecord#includes (pre-load
     # associations)
-    head = rugged_get_head(branch_name)
+    head = rugged_get_head(branch)
     return if head.nil?
 
     # define parameters for "pagination"
@@ -317,12 +320,12 @@ class Commit < ApplicationRecord
     sorted_query(shas, includes: includes)
   end
 
-  def self.commits_after(anchor, branch_name, height, inclusive: true,
+  def self.commits_after(anchor, branch, height, inclusive: true,
     includes: nil)
     # retrieve all commits after a certain commit in a branch to some height
     # 
     # +anchor+ specifies the [Rails] commit to measure forward from (the earliest commit),
-    # +branch_name+ valid name of a branch on which to search
+    # +branch+ valid name of a branch on which to search
     # +height+ is number of commits to go forward
     # +inclusive+ is a boolean that determines whether or not to include the
     # anchor commit in the returned list of commits, it does NOT affect the
@@ -338,7 +341,7 @@ class Commit < ApplicationRecord
     
     # need head to start down the correct branch. We'll find everything
     # down to `anchor` and then only report the last ones we found
-    head = rugged_get_head(branch_name)
+    head = rugged_get_head(branch)
     return nil if head.nil?
 
     # Take first (only) branch with matching name
@@ -374,6 +377,51 @@ class Commit < ApplicationRecord
       /^\d+\s+(.+)$/.match(line)[1]
     end
     Dir.chdir(current_dir)
+    res
+  end
+
+  # list of branch names that contain this commit
+  def branches
+    res = `git -C #{Commit.repo.path} branch --contains #{sha}`.split("\n")
+    res.reject { |line| line =~ /\(no branch\)/}.map(&:strip)
+  end
+
+  # get list of commits that are near in +commit_time+ to this commit. If
+  # possible, get +limit+ commits, with equal numbers before and after this
+  # commit
+  def nearby_commits(branch: 'master', limit: 11)
+    shas = Commit.shas_in_branch(branch: branch)
+    earliest = Commit.where(sha: shas).order(commit_time: :asc).first.commit_time
+    before = Commit.where(
+      sha: shas,
+      commit_time: earliest...commit_time
+    ).order(commit_time: :desc).limit(limit).reverse.to_a
+    after = Commit.where(
+      sha: shas,
+      commit_time: commit_time..Time.now
+    ).where.not(id: id).order(commit_time: :asc).limit(limit).to_a
+
+    # create list of all commits, including this commit
+    all_commits = [before, self, after].flatten
+
+    # if its smaller than the limit, we're done
+    return all_commits if all_commits.length <= limit
+
+    # find where +self+ is so we can build an array of the right length
+    self_index = all_commits.index(self)
+    size = all_commits.length
+    res = [self]
+
+    i = 0
+    while res.length < limit
+      one_before = self_index - i - 1
+      one_after = self_index + i + 1
+
+      # try to add elements to the front and back of the array, one by one,
+      # stopping if we hit an edge
+      res.prepend(all_commits[one_before]) if one_before > 0
+      res.append(all_commits[one_after]) if one_after < size
+    end
     res
   end
 

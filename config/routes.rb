@@ -25,14 +25,23 @@ Rails.application.routes.draw do
   post 'submissions/create.json', to: 'submissions#create'
 
   # for viewing data for one test case and one commit
-  get '/commits/:sha/test_cases/:module/:test_case',
+  get '/:branch/commits/:sha/test_cases/:module/:test_case',
     to: 'test_case_commits#show', as:'test_case_commit', test_case: /[^\/]+/
 
   # put this after the test case commit matcher since this is more general
-  resources :commits, only: :index
-  get '/commits/:sha', to: 'commits#show', as: 'commit'
+  get '/:branch/commits/:sha', to: 'commits#show', as: 'commit'
+  get '/:branch/commits', to: 'commits#index', as: 'commits'
 
-  root to: 'versions#show' #, params: { number: 'latest' }
+  root to: 'commits#show', sha: 'head', branch: 'master'
+
+
+
+
+
+
+
+
+
 
   get '/versions/:number/test_cases/:test_case',
     to: 'test_case_versions#show', as:'test_case_version', test_case: /[^\/]+/

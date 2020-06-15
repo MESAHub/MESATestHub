@@ -9,7 +9,7 @@
       is 
       %span{class: "#{@commit_class} font-weight-bold"}=@commit_status.downcase
       in 
-      %samp=link_to(@commit, commit_path(params[:sha]))
+      %samp=link_to(@commit, commit_path(branch: params[:branch], sha: params[:sha]))
       with
       - case @checksum_count
       - when 0

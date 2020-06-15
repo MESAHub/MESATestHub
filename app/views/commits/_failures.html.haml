@@ -1,0 +1,5 @@
+- unless @failure_types[tcc].nil? || @failure_types[tcc].empty?
+  %dl{class: @checksum_groups[tcc] ? 'row' : 'row mb-0'}
+    - @failure_types[tcc].keys.each do |failure_type|
+      %dt.col-6.col-sm-3.mb-0.text-right.text-truncate= TestInstance.failure_types[failure_type] + ' Failure: '
+      %dd.col-6.col-sm-9.mb-0= @failure_types[tcc][failure_type].map { |comp| comp.name }.sort_by { |comp_name| comp_name.downcase }.join(', ')

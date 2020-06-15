@@ -1,0 +1,5 @@
+- unless @checksum_groups[tcc].nil? || @checksum_groups[tcc].empty?
+  %dl.row.mb-0
+    - @checksum_groups[tcc].keys.each do |checksum|
+      %dt.col-3.mb-0.text-right.text-monospace= '✔︎' + checksum[-7,7] + ': '
+      %dd.col-9.mb-0= @checksum_groups[tcc][checksum].map { |comp| comp.name }.sort_by { |comp_name| comp_name.downcase }.join(', ')

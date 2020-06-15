@@ -4,6 +4,27 @@
     %h3{class: @compilation_class}= @compilation_text
     %h3{class: @status_class}= @status_text
 .row
+  .col-1
+    back button
+  .col-3
+    .btn-group
+      %button.btn.btn-outline-primary.btn-lg.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
+        %span.text-muted Branch:
+        %samp#selected-branch= @selected_branch
+      .dropdown-menu
+        - @branches.each do |branch|
+          %button.dropdown-item.branch-option{type: 'button'}=branch
+  .col-7
+    .dropdown
+      %button.btn.btn-outline-primary.btn-block.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
+        %h5=@commit.message_first_line
+      .dropdown-menu
+        - @branches.each do |branch|
+          =link_to branch, commits_path(branch: branch), class: "dropdown-item"
+
+  .col-1
+    forward button
+.row
   .col-lg-8.col-xs-12
     %h4 Computers Tested:
     %dl.row
@@ -126,7 +147,7 @@
           %li.list-group-item.list-group-item-action.list-group-item-info
             .d-flex.w-100.justify-content-between
               %h5
-                %span.text-monospace=link_to tcc.test_case.name, test_case_commit_path(sha: params[:sha], test_case: tcc.test_case.name, module: tcc.test_case.module), class: 'stretched-link text-reset no-hover'
+                %span.text-monospace=link_to tcc.test_case.name, test_case_commit_path(branch: params[:branch], sha: params[:sha], test_case: tcc.test_case.name, module: tcc.test_case.module), class: 'stretched-link text-reset no-hover'
                 %span.small.muted
                   =surround '(', ')' do
                     %span.text-monospace=tcc.test_case.module

@@ -8,6 +8,24 @@ class CommitsController < ApplicationController
       tcc.test_case.name
     end
 
+    # populate branch/commit selection menus
+    # get all branches that contain this commit, this will be first dropdown
+    @selected_branch = params[:branch]
+    @other_branches = @commit.branches.reject do |branch|
+      branch == @selected_branch
+    end
+    @branches = [@selected_branch, @other_branches].flatten
+
+    # get hash that relates branch names to commit objects. Depending on the
+    # selected branch. For now, get no more than ten commits, ideally centered
+    # at current commit in time in the branch. That is, if this is the head
+    # commit, get ten last commits. If this is the first commit of a branch,
+    # get the next ten. If it is in the middle, get five on either side.
+    @nearby_commits = {}
+    @branches.flatten.each do |branch|
+      @nearby_commits[branch] = @commit.nearby_commits(branch: branch, limit: 11)
+    end
+
     @others = @test_case_commits.select { |tcc| !(0..3).include? tcc.status }
     @mixed = @test_case_commits.select { |tcc| tcc.status == 3 }
     @checksums = @test_case_commits.select { |tcc| tcc.status == 2 }
@@ -141,7 +159,7 @@ class CommitsController < ApplicationController
     @merged_branches = Commit.merged_branches
     @branch = params[:branch] || 'master'
     @commits = Commit.all_in_branch(
-      branch_name: @branch,
+      branch: @branch,
       includes: :test_case_commits,
       page: params[:page]
     )
@@ -162,8 +180,8 @@ class CommitsController < ApplicationController
       elsif @checksum_count[commit] > 0
         @row_classes[commit] = 'table-primary'
       elsif @fail_count[commit] > 0
-        @row_classes[commit] = 'table-danger'
       elsif @pass_count[commit] == commit.test_case_commits.count
+        @row_classes[commit] = 'table-danger'
         @row_classes[commit] = ''
       end
     end
