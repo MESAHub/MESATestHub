@@ -2,6 +2,7 @@ class SubmissionsController < ApplicationController
 
   skip_before_action :verify_authenticity_token, only: [:create]
 
+
   def create
     # this sets up @user, @computer, and @commit, and will fail the thing
     # if something is wrong in data
@@ -29,28 +30,71 @@ class SubmissionsController < ApplicationController
       @submission.compiled = commit_params[:compiled]
     end
 
-    # at this point, we want to save the submission to the database. If it goes
-    # haywire later, we'll want a record of it
-    @submission.save
-
     # we're done if it's empty
-    succeed and return if @submission.empty?
+    if @submission.empty?
+      (@submission.save && succeed and return)
+    end
     
+    # might need to deal with silly scoping, so initiate @failures to a 
+    # non-empty array. It should get overwritten with an empty array later if
+    # things go well, otherwise the submission should fail when it detects
+    # a non-empty @failures array
+    @failures = [1]
 
-    # handle test instances. +create_instances+ returns a list of instances
-    # that failed upon saving to database.
-    # 
-    # Note, this works regardless of the number of test instances (one or many)
-    # since in either case instances are submitted as a JSON listexit
-    @failures = create_instances
+    # submission only gets saved if instances work
+    Submission.transaction do
+      # handle test instances. +create_instances+ returns a list of instances
+      # that failed upon saving to database.
+      # 
+      # Note, this works regardless of the number of test instances (one or many)
+      # since in either case instances are submitted as a JSON listexit
+      @failures = create_instances
 
-    # if something went wrong in creating the instances, report back a failure
+      unless @failures.empty?
+        raise ActiveRecord::Rollback.new('Failure when saving test instances.')
+      end
+
+      # if something went wrong in creating the instances, report back a failure
+      @submission.save
+
+    end
+    # @failures should be empty if all went well. Otherwise tell the user which
+    # test cases failed to submit
     submission_fail_instances and return unless @failures.empty?
 
     # we've gotten this far, so submission is good and test instances were
     # saved
-    @submission.save and succeed
+    succeed
   end
+
+  def show
+    @submission = Submission.includes(
+      {test_instances: [{instance_inlists: :inlist_data}, :test_case]},
+       :user, :computer).find(params[:id])
+    @computer = @submission.computer
+    if params[:computer] && params[:computer] != @computer.name
+      flash[:danger] = "That submission doesn't belong to computer "\
+        "#{params[:computer]}."
+      redirect_to :back
+    end
+    @test_instances = @submission.test_instances
+    
+    # picky about ordering; make all failing instances first, then passing
+    # instances. Within those categories, order by module according to 
+    # +TestInstance.modules+, and then within _that_, order alphabetically by
+    # test case name
+    res = []
+    [false, true].each do |passage_status|
+      TestCase.modules.each do |mod|
+        res += @test_instances.select do |ti|
+          ti.test_case.module == mod && (passage_status ? ti.passed : !ti.passed)
+        end.sort { |t1, t2| t1.test_case.name <=> t2.test_case.name }
+      end
+    end
+    @test_instances = res
+
+  end 
+  
 
   private
 
@@ -60,6 +104,7 @@ class SubmissionsController < ApplicationController
     # if there are bad test cases, errors are stored in @failures, which
     # will cause a failed submission in `create`
     @failures = instances_params.map do |single_instance_params|
+      puts single_instance_params
       create_one_instance(single_instance_params)
     end.reject { |elt| elt.nil? }
   end
@@ -68,9 +113,6 @@ class SubmissionsController < ApplicationController
     # set up basic test instance
     test_instance = TestInstance.submission_new(single_instance_params.permit!,
                                                 @submission)
-    puts '################################'
-    p test_instance
-    puts '################################'
 
     # return nil if we successfully save, otherwise the failed test_instance
     # these can then be queried for their errors and reported back to the
@@ -78,15 +120,12 @@ class SubmissionsController < ApplicationController
     if test_instance.save
       nil
     else
-      puts "this failed to save:"
-      puts test_instance
       test_instance
     end
   end
 
-
   def succeed
-    render :show, status: :created, location: submission_path(@submission)
+    render :show, status: :created, location: submission_path(@submission), format: :json
   end
 
   def authenticate_submission

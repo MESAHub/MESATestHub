@@ -35,8 +35,7 @@ class ApplicationController < ActionController::Base
     admin? || self?
   end
 
-  def parse_sha
-    puts "calling parse_sha on #{params[:sha]}"
+  def parse_sha(includes: nil)
     Commit.parse_sha(params[:sha])
   end
 

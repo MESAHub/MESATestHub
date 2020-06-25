@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20200608001644) do
+ActiveRecord::Schema.define(version: 20200620021103) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -25,7 +25,17 @@ ActiveRecord::Schema.define(version: 20200608001644) do
     t.datetime "updated_at", null: false
     t.string "short_sha"
     t.string "github_url"
+    t.integer "test_case_count", default: 0
+    t.integer "passed_count", default: 0
+    t.integer "failed_count", default: 0
+    t.integer "mixed_count", default: 0
+    t.integer "untested_count", default: 0
+    t.integer "checksum_count", default: 0
+    t.integer "complete_computer_count", default: 0
+    t.integer "computer_count", default: 0
+    t.integer "status", default: 0
     t.index ["sha"], name: "index_commits_on_sha", unique: true
+    t.index ["short_sha"], name: "index_commits_on_short_sha", unique: true
   end
 
   create_table "computers", force: :cascade do |t|
@@ -57,8 +67,11 @@ ActiveRecord::Schema.define(version: 20200608001644) do
     t.bigint "test_instance_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.integer "newton_retries"
-    t.integer "newton_iters"
+    t.integer "solver_calls_failed"
+    t.integer "solver_iterations"
+    t.integer "solver_calls_made"
+    t.integer "redos"
+    t.float "log_rel_run_E_err"
     t.index ["test_instance_id"], name: "index_instance_inlists_on_test_instance_id"
   end
 
@@ -151,8 +164,11 @@ ActiveRecord::Schema.define(version: 20200608001644) do
     t.string "sdk_version"
     t.string "math_backend"
     t.float "runtime_minutes"
-    t.integer "newton_iters"
-    t.integer "newton_retries"
+    t.integer "solver_iterations"
+    t.integer "solver_calls_failed"
+    t.integer "solver_calls_made"
+    t.integer "redos"
+    t.float "log_rel_run_E_err"
     t.index ["commit_id"], name: "index_test_instances_on_commit_id"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
     t.index ["mesa_version"], name: "index_test_instances_on_mesa_version"

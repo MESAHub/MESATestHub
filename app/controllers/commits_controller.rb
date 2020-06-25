@@ -16,15 +16,23 @@ class CommitsController < ApplicationController
     end
     @branches = [@selected_branch, @other_branches].flatten
 
-    # get hash that relates branch names to commit objects. Depending on the
-    # selected branch. For now, get no more than ten commits, ideally centered
+    # Get array of commits made in the same branch around the same time of this
+    # commit. For now, get no more than seven commits, ideally centered
     # at current commit in time in the branch. That is, if this is the head
     # commit, get ten last commits. If this is the first commit of a branch,
     # get the next ten. If it is in the middle, get five on either side.
-    @nearby_commits = {}
-    @branches.flatten.each do |branch|
-      @nearby_commits[branch] = @commit.nearby_commits(branch: branch, limit: 11)
+    @nearby_commits = @commit.nearby_commits(branch: @selected_branch, limit: 7).reverse
+    @next_commit, @previous_commit = nil, nil
+    loc = @nearby_commits.pluck(:id).index(@commit.id)
+    # we've reversed nearby commits, so the "next" one is later in time, and 
+    # thus EARLIER in the array. Clunky, but I think it works in practice
+    if loc > 0
+      @next_commit = @nearby_commits[loc - 1]
     end
+    if loc < @nearby_commits.length - 1
+      @previous_commit = @nearby_commits[loc + 1]
+    end
+
 
     @others = @test_case_commits.select { |tcc| !(0..3).include? tcc.status }
     @mixed = @test_case_commits.select { |tcc| tcc.status == 3 }
@@ -33,7 +41,6 @@ class CommitsController < ApplicationController
     @passing = @test_case_commits.select { |tcc| tcc.status == 0 }
     @test_case_commits = [@others, @mixed, @checksums, @failing, @passing].flatten
 
-    @header_text = "Test Cases Tested on commit #{@commit}"
     @specs = @commit.computer_info
     @statistics = {
       passing: @test_case_commits.select { |tcc| tcc.status.zero? }.count,
@@ -126,7 +133,7 @@ class CommitsController < ApplicationController
                                     'failing to compile on ' \
                                     "#{@commit.compile_fail_count} machines."
                         else
-                          ''
+                          'No compilation information'
                         end
 
     @compilation_class = case @commit.compilation_status
@@ -134,7 +141,7 @@ class CommitsController < ApplicationController
                          when 1 then  'text-danger'
                          when 2 then 'text-warning'
                          else
-                           0
+                           'text-info'
                          end
 
     # set up colored table rows depending on passage status
@@ -164,25 +171,15 @@ class CommitsController < ApplicationController
       page: params[:page]
     )
 
-    @mixed_count = {}
-    @checksum_count = {}
-    @fail_count = {}
-    @pass_count = {}
     @row_classes = {}
     @commits.each do |commit|
-      @pass_count[commit] = commit.test_case_commits.where(status: 0).count
-      @fail_count[commit] = commit.test_case_commits.where(status: 1).count
-      @checksum_count[commit] = commit.test_case_commits.where.not(
-        checksum_count: 0..1).count
-      @mixed_count[commit] = commit.test_case_commits.where(status: 3).count
-      if @mixed_count[commit] > 0
-        @row_classes[commit] = 'table-warning'
-      elsif @checksum_count[commit] > 0
-        @row_classes[commit] = 'table-primary'
-      elsif @fail_count[commit] > 0
-      elsif @pass_count[commit] == commit.test_case_commits.count
-        @row_classes[commit] = 'table-danger'
-        @row_classes[commit] = ''
+      @row_classes[commit] = case commit.status
+      when 3 then 'text-warning'
+      when 2 then 'text-primary'
+      when 1 then 'text-danger'
+      when 0 then 'text-success'
+      else
+        'text-info'
       end
     end
   end

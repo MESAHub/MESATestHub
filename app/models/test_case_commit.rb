@@ -2,6 +2,8 @@ class TestCaseCommit < ApplicationRecord
   belongs_to :commit
   belongs_to :test_case
   has_many :test_instances
+  has_many :instance_inlists, through: :test_instances
+  has_many :inlist_data, through: :instance_inlists
   has_many :submissions, through: :test_instances
   has_many :computers, through: :test_instances
 

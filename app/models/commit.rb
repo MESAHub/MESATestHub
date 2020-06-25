@@ -151,8 +151,10 @@ class Commit < ApplicationRecord
   def self.create_from_rugged(commit)
     # take a rugged commit object and create a database entry
     # +commit+ a Rugged::Commit instance
-
-    create(hash_from_rugged(commit))
+    new_commit = create(hash_from_rugged(commit))
+    TestCaseCommit.create_from_commits([new_commit])
+    new_commit.update_scalars
+    new_commit.save
   end
 
   def self.find_from_rugged(commit)
@@ -188,7 +190,7 @@ class Commit < ApplicationRecord
 
     {
       sha: github_hash[:id],
-      short_sha: github_hash[:id][(0..7)],
+      short_sha: github_hash[:id][(0...7)],
       author: github_hash[:author][:name],
       author_email: github_hash[:author][:email],
       commit_time: github_hash[:timestamp],
@@ -202,19 +204,28 @@ class Commit < ApplicationRecord
     # hashes, and then insert them into the database.
     commits = create(payload[:commits].map { |commit| hash_from_github(commit) })
     TestCaseCommit.create_from_commits(commits)
+    commits.each { |c| c.update_scalars; c.save }
   end
 
   #####################################
   # GENERAL USE AND SEARCHING/SORTING #
   #####################################
   
-  def self.parse_sha(sha)
+  def self.parse_sha(sha, includes: nil)
     if sha.downcase == 'head'
-      Commit.head
+      Commit.head(includes: includes)
     elsif sha.length == 7
-      Commit.find_by(short_sha: sha)
+      if includes
+        Commit.includes(includes).find_by(short_sha: sha)
+      else
+        Commit.find_by(short_sha: sha)
+      end
     else
-      Commit.find_by(sha: sha)
+      if includes
+        Commit.includes(includes).find_by(sha: sha)
+      else
+        Commit.find_by(sha: sha)
+      end
     end
   end
 
@@ -402,7 +413,14 @@ class Commit < ApplicationRecord
     ).where.not(id: id).order(commit_time: :asc).limit(limit).to_a
 
     # create list of all commits, including this commit
-    all_commits = [before, self, after].flatten
+    all_commits = [before, self, after].flatten.sort do |a, b|
+      [a.commit_time, a.message] <=> [b.commit_time, b.message]
+    end
+
+    # make sure head commit is at the right location
+    if all_commits.include? Commit.head(branch: branch)
+      all_commits << all_commits.delete(Commit.head(branch: branch))
+    end
 
     # if its smaller than the limit, we're done
     return all_commits if all_commits.length <= limit
@@ -416,10 +434,11 @@ class Commit < ApplicationRecord
     while res.length < limit
       one_before = self_index - i - 1
       one_after = self_index + i + 1
+      i += 1
 
       # try to add elements to the front and back of the array, one by one,
       # stopping if we hit an edge
-      res.prepend(all_commits[one_before]) if one_before > 0
+      res.prepend(all_commits[one_before]) if one_before >= 0
       res.append(all_commits[one_after]) if one_after < size
     end
     res
@@ -429,23 +448,62 @@ class Commit < ApplicationRecord
     # special call that collects a version's test instances and groups them
     # by unique combinations of computer and computer specificaiton, and
     # ONLY gathers that information
-    tis = TestInstance.where(commit_id: id)
-                      .select('computer_id, computer_specification')
-                      .group('computer_id, computer_specification')
-    # now build an array where each element a hash containing the computer,
-    # the specificaion string, and the fraction of test cases from this commit
-    # that have been completed with that computer on that specification
+    subs = submissions.select('computer_id, platform_version, sdk_version, '\
+      'math_backend, compiler, compiler_version').group(
+      'computer_id, platform_version, sdk_version, math_backend, compiler, '\
+      'compiler_version')
     specs = []
-    tis.each do |ti|
+    subs.each do |sub|
       new_entry = {}
-      new_entry[:computer] = Computer.includes(:user).find(ti.computer_id)
-      new_entry[:spec] = ti.computer_specification
-      new_entry[:frac] = TestInstance.where(
-        computer_id: ti.computer_id,
-        computer_specification: ti.computer_specification
+      new_entry[:computer] = Computer.includes(:user).find(sub.computer_id)
+      new_entry[:spec] = sub.computer_specification
+      new_entry[:frac] = test_instances.where(
+        computer_id: sub.computer_id,
+        computer_specification: sub.computer_specification
       ).pluck(:test_case_id).uniq.count.to_f / test_cases.count.to_f
+      compilation_stati = submissions.where(
+        computer: new_entry[:computer]
+      ).pluck(:compiled).uniq.reject(&:nil?)
+      new_entry[:compilation] = case compilation_stati.count
+                                when 0
+                                  :unknown
+                                when 1
+                                  compilation_stati[0] ? :success : :failure
+                                else
+                                  :mixed
+                                end
       specs << new_entry
+
     end
+    # tis = TestInstance.where(commit_id: id)
+    #                   .select('computer_id, computer_specification')
+    #                   .group('computer_id, computer_specification')
+    # # now build an array where each element a hash containing the computer,
+    # # the specificaion string, the fraction of test cases from this commit
+    # # that have been completed with that computer on that specification,
+    # # and whether or not compilation was successful
+    # specs = []
+    # subs.each do |sub|
+    #   new_entry = {}
+    #   new_entry[:computer] = Computer.includes(:user).find(ti.computer_id)
+    #   new_entry[:spec] = ti.computer_specification
+    #   new_entry[:frac] = TestInstance.where(
+    #     computer_id: ti.computer_id,
+    #     computer_specification: ti.computer_specification
+    #   ).pluck(:test_case_id).uniq.count.to_f / test_cases.count.to_f
+    #   compilation_stati = submissions.where(
+    #     computer: new_entry[:computer]
+    #   ).pluck(:compiled).uniq.reject(&:nil?)
+    #   new_entry[:compilation] = case compilation_stati.count
+    #                             when 0
+    #                               :unknown
+    #                             when 1
+    #                               compilation_stati[0] ? :success : :failure
+    #                             else
+    #                               :mixed
+    #                             end
+    #   specs << new_entry
+    # end
     #   specs[ti.computer_specification] = 
     #     (specs[ti.computer_specification] || []) + [ti.computer_id]
     # end
@@ -456,20 +514,31 @@ class Commit < ApplicationRecord
     specs
   end
 
-  def status(test_case: nil)
-    # get status for whole revision
-    statuses = self.test_case_commits.pluck(:status).uniq
-    if statuses.count.zero?
-      # if there are no resulsts, return -1, meaning not tested/error
-      -1
-    elsif statuses.min < 0
-      # if there's a single error test case, return it as the whole status
-      statuses.min
-    else
-      # return the max (mixed most important, then mixed checksums, then
-      # then failures, then all successes)
-      statuses.max
-    end
+  # make this stuff searchable directly on the database without having
+  # to summon all the test case commits. This should be called whenever
+  # a submission is made and whenever a change is made to a test case commit
+  def update_scalars
+    self.test_case_count = test_case_commits.count
+    self.passed_count = test_case_commits.where(status: [0, 2]).count
+    self.failed_count = test_case_commits.where(status: 1).count
+    self.mixed_count = test_case_commits.where(status: 3).count
+    self.checksum_count = test_case_commits.where.not(checksum_count: [0, 1]).count
+    self.untested_count = test_case_commits.where(status: -1).count
+    self.computer_count = computer_info.count
+    self.complete_computer_count = computer_info.select do |spec|
+      spec[:frac] == 1.0
+    end.count
+    self.status = if mixed_count > 0
+                    3
+                  elsif failed_count > 0
+                    1
+                  elsif checksum_count > 0
+                    2
+                  elsif passed_count == test_case_count && test_case_count > 0
+                    0
+                  else
+                    -1
+                  end
   end
 
   # 

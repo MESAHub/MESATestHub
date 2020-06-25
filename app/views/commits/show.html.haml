@@ -1,168 +1,208 @@
-.row.text-center
-  .col
-    %h1= @header_text
-    %h3{class: @compilation_class}= @compilation_text
-    %h3{class: @status_class}= @status_text
 .row
-  .col-1
-    back button
-  .col-3
-    .btn-group
-      %button.btn.btn-outline-primary.btn-lg.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
+  .col-sm-1.d-none.d-md-block
+    -if @previous_commit
+      %a.btn.btn-outline-primary.btn-lg.btn-block{href: commit_path(branch: @selected_branch, sha: @previous_commit.short_sha)}
+        %i.fa.fa-step-backward.text-reset
+  .col-6.col-md-5.text-right
+    .dropdown
+      %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
         %span.text-muted Branch:
         %samp#selected-branch= @selected_branch
       .dropdown-menu
         - @branches.each do |branch|
-          %button.dropdown-item.branch-option{type: 'button'}=branch
-  .col-7
+          =link_to branch, commit_path(branch: branch, sha: @commit.short_sha), class: "text-monospace dropdown-item"  
+  .col-6.col-md-5
     .dropdown
-      %button.btn.btn-outline-primary.btn-block.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
-        %h5=@commit.message_first_line
-      .dropdown-menu
-        - @branches.each do |branch|
-          =link_to branch, commits_path(branch: branch), class: "dropdown-item"
+      %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle#commit-selector{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
+        %span.h5.text-muted Commit:
+        %span.h5.text-monospace=@commit
+      .dropdown-menu.dropdown-menu-right.py-0.my-0{'aria-labelledby': 'commit-selector'}
+        %ul.list-group.list-group-flush
+          -@nearby_commits.each do |commit|
+            %li.list-group-item.list-group-item-action.dropdown-item{class: commit == @commit ? 'active' : ''}
+              .d-flex.w-100.justify-content-between
+                
+                %h5.font-weight-bold.d-none.d-md-inline
+                  -if commit.message_first_line.length > 50
+                    -short_msg = commit.message_first_line
+                    -while short_msg.length > 50
+                      -short_msg = short_msg.split(' ')[(0...-1)].join(' ')
+                    =(short_msg + '&#8230;').html_safe
+                  -else
+                    =commit.message_first_line
+                %a.stretched-link.text-reset{href: commit_path(branch: @selected_branch, sha: commit.short_sha)}
+                  %span.h5.text-monospace.text-primary=commit.short_sha
+              .d-flex.w-100
+                %p.mb-0
+                  %span.font-weight-bold= commit.author
+                  %span
+                    commited on 
+                    =commit.commit_time.strftime('%B %d %Y')
 
-  .col-1
-    forward button
+  .col-1.d-none.d-md-block
+    -if @next_commit
+      %a.btn.btn-outline-primary.btn-lg.btn-block{href: commit_path(branch: @selected_branch, sha: @next_commit.short_sha)}
+        %i.fa.fa-step-forward.text-reset
+.row.mt-5.mb-0
+  .col
+    %h4 
+      Commit Data for
+      %span.text-monospace.text-primary= @commit
+.row.mt-0
+  .col-lg-6.col-md-7
+    %ul.list-group.list-group-flush.mb-1
+      %li.list-group-item
+        %b Author:
+        =@commit.author
+      %li.list-group-item
+        %b Full SHA:
+        %span.text-monospace=@commit.sha
+      %li.list-group-item
+        %b Commit Time:
+        =format_time(@commit.commit_time)
+  .col-lg-6.col-md-5
+    %b Commit Message
+    %blockquote.blockquote= @commit.message
+.row.mb-0.mt-0
+  .col
+    - if @commit.github_url
+      %a.btn.btn-outline-primary.btn-lg.btn-block{href: @commit.github_url, target: '_blank'}
+        %span.text-reset View on GitHub
+.row.mt-5
+  .col
+    .card.border-dark
+      .card-body.text-dark
+        %h3.card-title Computers and Compilation
+        - if @specs.empty?
+          %h4.text-info.font-weight-bold No submissions for this commit.
+        %dl.row
+          - @specs.each do |entry|
+            %dt.col-md-4
+              -case entry[:frac] * 16
+              -when 0.0
+                =render partial: 'none_tested'
+              -when (0..3)
+                =render partial: 'one_eighth'
+              -when (3..5)
+                =render partial: 'one_quarter'
+              -when (5..7)
+                =render partial: 'three_eighths'
+              -when (7..9)
+                =render partial: 'one_half'
+              -when (9..11)
+                =render partial: 'five_eighths'
+              -when (11..13)
+                =render partial: 'three_quarters'
+              -when (13...16)
+                =render partial: 'seven_eighths'
+              -else
+                =render partial: 'complete'
+              =link_to(entry[:computer].name, user_computer_path(entry[:computer].user, entry[:computer]), class: 'text-primary')
+              = surround '(', ')' do
+                %a{href: user_path(entry[:computer].user), class: 'text-primary'}=entry[:computer].user.name
+
+            %dd.col-md-5.offset-md-0.offset-1=entry[:spec]
+            %dd.col-md-3.offset-md-0.offset-1
+              Compilation: 
+              - case entry[:compilation]
+              - when :unknown
+                %span.font-weight-bold.text-info Unknown
+              - when :success
+                %span.font-weight-bold.text-success Succeeded
+              - when :failed
+                %span.font-weight-bold.text-danger Failed
+              - when :mixed
+                %span.font-weight-bold.text-warning Mixed
+              - else
+                %span.h5.font-weight-bold.text-primary Testhub Error
+
+.row.row-cols-1.row-cols-sm-2.row-cols-md-3.row-cols-lg-4.row-cols-xl-5#index-desc
+  - if @others.count.positive?
+    .col.mb-4
+      .card.border-info.h-100
+        .card-body.text-info                    
+          %h3.card-title Untested
+          %p.card-text
+            %b=@others.count
+            tests with no submission data.
+  - if @mixed.count.positive?
+    .col.mb-4
+      .card.border-warning.h-100
+        .card-body.text-warning
+          %h3.card-title Mixed
+          %p.card-text
+            %b=@mixed.count
+            tests where some computers report passing and others report failing.
+  - if @checksums.count.positive?
+    .col.mb-4
+      .card.border-primary.h-100
+        .card-body.text-primary
+          %h3.card-title Checksums
+          %p.card-text
+            %b=@checksums.count
+            tests where different computers give different checksums.
+  - if @failing.count.positive?
+    .col.mb-4
+      .card.border-danger.h-100
+        .card-body.text-danger
+          %h3.card-title Failing
+          %p.card-text
+            %b=@failing.count
+            tests where all computers report failing.
+  - if @passing.count.positive?
+    .col.mb-4
+      .card.border-success.h-100
+        .card-body.text-success
+          %h4.card-title Passing
+          %p.card-text
+            %b=@passing.count
+            tests where all computers report passing.
 .row
-  .col-lg-8.col-xs-12
-    %h4 Computers Tested:
-    %dl.row
-      - @specs.each do |entry|
-        %dt.col-md-4
-          -case entry[:frac] * 16
-          -when 0.0
-            =render partial: 'none_tested'
-          -when (0..3)
-            =render partial: 'one_eighth'
-          -when (3..5)
-            =render partial: 'one_quarter'
-          -when (5..7)
-            =render partial: 'three_eighths'
-          -when (7..9)
-            =render partial: 'one_half'
-          -when (9..11)
-            =render partial: 'five_eighths'
-          -when (11..13)
-            =render partial: 'three_quarters'
-          -when (13...16)
-            =render partial: 'seven_eighths'
-          -else
-            =render partial: 'complete'
-          =link_to(entry[:computer].name, user_computer_path(entry[:computer].user, entry[:computer]))
-          = surround '(', ')' do
-            %a{href: user_path(entry[:computer].user)}=entry[:computer].user.name
-
-        %dd.col-md-8=entry[:spec]
-  -# .col-lg-3.col-md-4.col-xs-12
-  -#   %h4 MESA commit
-  -#   %form{action: '/show_commit', class: 'form-inline'}
-  -#     -# .col-auto.col-form-label.align-middle
-  -#     -#   =label_tag "number", 'MESA commit: ', class: 'control-label form-control-lg'
-  -#     .col-auto.align-middle
-  -#       =select_tag "number", options_for_select(@mesa_commits, @selected), class: 'custom-select form-control form-control-lg', id: 'commit_select'
-  -#     %noscript
-  -#       .col-auto.align-middle
-  -#         =submit_tag 'Go', class: 'btn btn-primary text-light form-control', name: nil, id: 'commit_select_go'
-  -if @commit.author
-    .col-lg-4.col-xs-12
-      %h4 SVN Commit Data
-      %ul 
-        %li
-          %b Author:
-          =@commit.author
-        %li
-          %b Commit Message:
-          =@commit.message
-
-- if @test_case_commits.count == 0
-  %h4.text-danger.text-center.my-5
-    No Test Cases to Show
-- else
-  .row#index-desc
-    .col
-      .card-deck
-        - if @others.count.positive?
-          .card.border-info
-            .card-body.text-info                    
-              %h3.card-title Untested
-              %p.card-text
-                %b=@others.count
-                tests with no submission data.
-        - if @mixed.count.positive?
-          .card.border-warning
-            .card-body.text-warning
-              %h3.card-title Mixed
-              %p.card-text
-                %b=@mixed.count
-                tests where some computers report passing and others report failing.
-        - if @checksums.count.positive?
-          .card.border-primary
-            .card-body.text-primary
-              %h3.card-title Checksums
-              %p.card-text
-                %b=@checksums.count
-                tests where different computers give different checksums.
-        - if @failing.count.positive?
-          .card.border-danger
-            .card-body.text-danger
-              %h3.card-title Failing
-              %p.card-text
-                %b=@failing.count
-                tests where all computers report failing.
-        - if @passing.count.positive?
-          .card.border-success
-            .card-body.text-success
-              %h4.card-title Passing
-              %p.card-text
-                %b=@passing.count
-                tests where all computers report passing.
-  .row
-    .col
-      %ul.list-group
-        - @mixed.each do |tcc|
-          %li.list-group-item.list-group-item-action.list-group-item-warning
-            .d-flex.w-100.mb-0.justify-content-between
-              = render partial: "badges", locals: { tcc: tcc }
-            = render partial: "failures", locals: { tcc: tcc }
-            = render partial: "checksums", locals: { tcc: tcc }
-        - @checksums.each do |tcc|
-          %li.list-group-item.list-group-item-action.list-group-item-primary
-            .d-flex.w-100.mb-0.justify-content-between
-              = render partial: "badges", locals: { tcc: tcc }
-            = render partial: "checksums", locals: { tcc: tcc }
-        - @failing.each do |tcc|
-          %li.list-group-item.list-group-item-action.list-group-item-danger
-            .d-flex.w-100.mb-0.justify-content-between
-              = render partial: "badges", locals: { tcc: tcc }
-            = render partial: "failures", locals: { tcc: tcc }
-      - if @others.length > 0
-        .text-center.my-4
-          %a.btn.btn-lg.btn-info{href: '#', 'data-target'.to_sym => '#missing', 'data-toggle'.to_sym => 'collapse'}
+  .col
+    %ul.list-group
+      - @mixed.each do |tcc|
+        %li.list-group-item.list-group-item-action.list-group-item-warning
+          .d-flex.w-100.mb-0.justify-content-between
+            = render partial: "badges", locals: { tcc: tcc }
+          = render partial: "failures", locals: { tcc: tcc }
+          = render partial: "checksums", locals: { tcc: tcc }
+      - @checksums.each do |tcc|
+        %li.list-group-item.list-group-item-action.list-group-item-primary
+          .d-flex.w-100.mb-0.justify-content-between
+            = render partial: "badges", locals: { tcc: tcc }
+          = render partial: "checksums", locals: { tcc: tcc }
+      - @failing.each do |tcc|
+        %li.list-group-item.list-group-item-action.list-group-item-danger
+          .d-flex.w-100.mb-0.justify-content-between
+            = render partial: "badges", locals: { tcc: tcc }
+          = render partial: "failures", locals: { tcc: tcc }
+    - if @others.length > 0 || @passing.length > 0
+      .text-center.my-4
+        - if @others.length > 0
+          %button.btn.btn-lg.btn-info{'data-target'.to_sym => '#missing', 'data-toggle'.to_sym => 'collapse', role: :button}
             Show/Hide 
             =@others.count
             Untested Test Cases
-      %ul.list-group.collapse.mb-5#missing
-        - @others.each do |tcc|
-          %li.list-group-item.list-group-item-action.list-group-item-info
-            .d-flex.w-100.justify-content-between
-              %h5
-                %span.text-monospace=link_to tcc.test_case.name, test_case_commit_path(branch: params[:branch], sha: params[:sha], test_case: tcc.test_case.name, module: tcc.test_case.module), class: 'stretched-link text-reset no-hover'
-                %span.small.muted
-                  =surround '(', ')' do
-                    %span.text-monospace=tcc.test_case.module
-      - if @passing.length > 0
-        .text-center.my-4
-          %a.btn.btn-lg.btn-success{href: '#', 'data-target'.to_sym => '#passing', 'data-toggle'.to_sym => 'collapse'}
+        - if @passing.length > 0
+          %button.btn.btn-lg.btn-success{'data-target'.to_sym => '#passing', 'data-toggle'.to_sym => 'collapse', role: :button}
             Show/Hide 
             =@passing.count
             Passing Test Cases
-      %ul.list-group.collapse.mb-5#passing
-        - @passing.each do |tcc|
-          %li.list-group-item.list-group-item-action.list-group-item-success
-            .d-flex.w-100.mb-0.justify-content-between
-              = render partial: "badges", locals: { tcc: tcc }
 
+    %ul.list-group.collapse.mb-5#missing
+      - @others.each do |tcc|
+        %li.list-group-item.list-group-item-action.list-group-item-info
+          .d-flex.w-100.justify-content-between
+            %h5
+              %span.text-monospace=link_to tcc.test_case.name, test_case_commit_path(branch: params[:branch], sha: params[:sha], test_case: tcc.test_case.name, module: tcc.test_case.module), class: 'stretched-link text-reset no-hover'
+              %span.small.muted
+                =surround '(', ')' do
+                  %span.text-monospace=tcc.test_case.module
+    %ul.list-group.collapse.mb-5#passing
+      - @passing.each do |tcc|
+        %li.list-group-item.list-group-item-action.list-group-item-success
+          .d-flex.w-100.mb-0.justify-content-between.mb-0
+            = render partial: "badges", locals: { tcc: tcc }
 
 -#  .row
 -#    .col

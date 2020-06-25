@@ -2,17 +2,68 @@ class TestCaseCommitsController < ApplicationController
   before_action :set_test_case_commit, only: %i[show]
 
   def show
-    # big daddy query, hopefully optimized
-    @mesa_commits = @test_case.commits.order(commit_time: :desc).uniq
-    @selected = @commit
-    @test_case_commits = @commit.test_case_commits.includes(:test_case).to_a
-    @test_case_commits.sort_by! { |tcc| [-tcc.status, tcc.test_case.name] }
-    @tc_options = @test_case_commits.map do |tcc|
-      [tcc.test_case.name, tcc.test_case.module]
+    # set up branch/commit selector
+    @selected_branch = params[:branch]
+    @other_branches = @commit.branches.reject do |branch|
+      branch == @selected_branch
+    end
+    @branches = [@selected_branch, @other_branches].flatten
+
+    # Get array of commits made in the same branch around the same time of this
+    # commit. For now, get no more than seven commits, ideally centered
+    # at current commit in time in the branch. That is, if this is the head
+    # commit, get ten last commits. If this is the first commit of a branch,
+    # get the next ten. If it is in the middle, get five on either side.
+    @nearby_tccs = TestCaseCommit.includes(:commit).where(
+      commit: @commit.nearby_commits(branch: @selected_branch, limit: 7),
+      test_case: @test_case_commit.test_case
+    ).order(created_at: :desc)
+    @nearby_commits = @nearby_tccs.map(&:commit)
+    @next_commit, @previous_commit = nil, nil
+    loc = @nearby_commits.pluck(:id).index(@commit.id)
+
+    # we've reversed nearby commits, so the "next" one is later in time, and 
+    # thus EARLIER in the array. Clunky, but I think it works in practice
+    if loc > 0
+      @next_commit = @nearby_commits[loc - 1]
+    end
+    if loc < @nearby_commits.length - 1
+      @previous_commit = @nearby_commits[loc + 1]
     end
 
+    # used for shading commit selector options according to passage status of
+    # THIS test
+    @commit_classes = {}
+    @nearby_tccs.each do |tcc|
+      @commit_classes[tcc.commit] = case tcc.status
+      when 0 then 'list-group-item-success'
+      when 1 then 'list-group-item-danger'
+      when 2 then 'list-group-item-primary'
+      when 3 then 'list-group-item-warning'
+      else
+        'list-group-item-info'
+      end
+    end
+
+    # other test case commits for this commit
+    unsorted = @test_case_commit.commit.test_case_commits.each
+    @commit_tccs = []
+
+    # set up picky ordering for test case commits: mixed, then checksums, then
+    # failing, then passing, then untested. Within each of those, order
+    # according to order of modules in TestCase.modules. Within that subset,
+    # arrange alphabetically
+    [3, 2, 1, 0, -1].each do |status|
+      TestCase.modules.each do |mod|
+        @commit_tccs += unsorted.select do |tcc|
+          (tcc.status == status) && (tcc.test_case.module == mod)
+        end.sort { |tcc1, tcc2| tcc1.test_case.name <=> tcc2.test_case.name }
+      end
+    end
+    
+
     # all test instances, sorted by upload date
-    @instance_limit = 25
+    @instance_limit = 100
     @test_instance_classes = {}
 
     # @test_case_version isn't getting set properly. Need to investigate...
@@ -31,6 +82,34 @@ class TestCaseCommitsController < ApplicationController
     # text and class for last commit test status
     @commit_status, @commit_class = passing_status_and_class
 
+    # names of default columns in the table of instances, can be toggled on
+    # and off
+    @default_columns = {
+      'status' => true,
+      'computer' => true,
+      'date' => false,
+      'runtime' => true,
+      'ram' => false,
+      'checksum' => true,
+      'threads' => false,
+      'spec' => false,
+      'steps' => true,
+      'retries' => true,
+      'redos' => false,
+      'solver_iterations' => false,
+      'solver_calls_made' => false,
+      'solver_calls_failed' => false,
+      'log_rel_run_E_err' => false
+    }
+
+    @specific_columns = {}
+    data_names = @test_case_commit.inlist_data.pluck(:name).uniq
+
+    # only show special data by default if we only have one or two. Otherwise
+    # rely on users to click the checkboxes they want to use
+    data_names.each do |data_name|
+      @specific_columns[data_name] = data_names.length < 3
+    end
   end
 
   def show_test_case_commit
@@ -43,11 +122,11 @@ class TestCaseCommitsController < ApplicationController
   # Use callbacks to share common setup or constraints between actions.
 
   def set_test_case_commit
-    @commit = parse_sha
+    @commit = parse_sha(includes: {test_case_commits: :test_case})
     @test_case = TestCase.find_by(name: params[:test_case], module: params[:module])
-    @test_case_commit = TestCaseCommit.find_by(
-      commit: @commit, test_case: @test_case
-    )
+    @test_case_commit = TestCaseCommit.includes(
+      test_instances: {instance_inlists: :inlist_data}
+      ).find_by(commit: @commit, test_case: @test_case)
   end
 
   # get a bootstrap text class and an appropriate string to convert integer 

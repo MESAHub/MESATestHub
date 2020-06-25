@@ -36,18 +36,24 @@ class ComputersController < ApplicationController
   # GET /computers/1
   # GET /computers/1.json
   def show
-    @test_instances = @computer.test_instances.order(
-      mesa_version: :desc, created_at: :desc
-    ).limit(20)
-    @test_instance_classes = {}
-    @test_instances.each do |instance|
-      @test_instance_classes[instance] =
-        if instance.passed
-          'table-success'
-        else
-          'table-danger'
-        end
+    @submissions = @computer.submissions.includes(:commit, test_instances: :test_case).
+      order(created_at: :desc).page(params[:page])
+    @counts = {}
+    @submissions.each do |submission|
+      @counts[submission] = submission.test_instances.length
     end
+    # @test_instances = @computer.test_instances.order(
+    #   mesa_version: :desc, created_at: :desc
+    # ).limit(20)
+    # @test_instance_classes = {}
+    # @test_instances.each do |instance|
+    #   @test_instance_classes[instance] =
+    #     if instance.passed
+    #       'table-success'
+    #     else
+    #       'table-danger'
+    #     end
+    # end
   end
 
   # GET /computers/new

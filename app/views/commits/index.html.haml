@@ -9,32 +9,55 @@
         %samp= @branch
       .dropdown-menu
         - @unmerged_branches.each do |branch|
-          =link_to branch, commits_path(branch: branch), class: "dropdown-item"
-.row
-  %ul.list-group
-    - @commits.each do |commit|
-      %li{class: "list-group-item list-group-item-action #{@row_classes[commit]}"}
-        .d-flex.w-100.justify-content-between
-          %h5.font-weight-bold
-            = commit.message_first_line
-            -if commit.message_rest
-              %a.badge.badge-secondary{'data-toggle'.to_sym => 'collapse', href: "\#msg_#{commit.short_sha}", role: 'button', 'aria-expanded'.to_sym => 'false', 'aria-controls'.to_sym => "\#msg_#{commit.short_sha}"} &nbsp;&#8230;&nbsp;
-          .btn-group
-            %a.mr-1{href: commit_path(@branch, commit.short_sha)}
-              %button.btn.btn-outline-primary.text-monospace= commit.short_sha
-            %a{href: commit.github_url}
-              %button.btn.btn-outline-primary.text-monospace
-                %i.fa.fa-code
-        .d-flex.w-100
-          %p.mb-0
-            %span.font-weight-bold= commit.author
-            %span
-              commited on 
-              =commit.commit_time.strftime('%B %d %Y')
-        .d-flex.w-100
-          %p.mb-0.mt-2{class: 'collapse', id: "msg_#{commit.short_sha}"}= commit.message_rest
-
+          =link_to branch, commits_path(branch: branch), class: "dropdown-item text-monospace"
+  .col
+    %p.text-right.mb-1
+      %span.badge.badge-light Test Cases
+      %span.badge.badge-success Passing
+      %span.badge.badge-warning Mixed
+      %span.badge.badge-danger Failing
+      %span.badge.badge-info Untested
+    %p.text-right
+      %span.badge.badge-primary Mult. Checksums
+      %span.badge.badge-secondary Computers
+      %span.badge.badge-dark Completed Computers
+.row.mb-5
+  .col
+    %p
+      %i= page_entries_info @commits
+    %ul.list-group.list-group-flush
+      - @commits.each do |commit|
+        %li.list-group-item.list-group-item-action{class: @row_classes[commit], href: commit_path(branch: @branch, sha: commit.short_sha)}
+          .d-flex.w-100.justify-content-between.mb-2
+            %h5.font-weight-bold
+              = commit.message_first_line
+              -if commit.message_rest
+                %a.badge.badge-secondary{'data-toggle'.to_sym => 'collapse', href: "\#msg_#{commit.short_sha}", role: 'button', 'aria-expanded'.to_sym => 'false', 'aria-controls'.to_sym => "\#msg_#{commit.short_sha}"} &nbsp;&#8230;&nbsp;
+            .btn-group.my-0
+              %a.mr-1.my-0{href: commit_path(@branch, commit.short_sha)}
+                %button.btn.btn-outline-primary.text-monospace= commit.short_sha
+              %a.my-0{href: commit.github_url, target: '_blank'}
+                %button.my-0.btn.btn-outline-primary.text-monospace
+                  %i.fa.fa-code
+          .d-flex.w-100.justify-content-between
+            %p.mb-0
+              %span.font-weight-bold= commit.author
+              %span
+                commited on 
+                =commit.commit_time.strftime('%B %d %Y')
+            .mb-0
+              %p.text-right.mb-1
+                %span.badge.badge-light= commit.test_case_count
+                %span.badge.badge-success= commit.passed_count
+                %span.badge.badge-warning= commit.mixed_count
+                %span.badge.badge-danger= commit.failed_count
+                %span.badge.badge-info= commit.untested_count
+              %p.text-right.mb-0
+                %span.badge.badge-primary= commit.checksum_count
+                %span.badge.badge-secondary= commit.computer_count
+                %span.badge.badge-dark= commit.complete_computer_count
+          .d-flex.w-100
+            %p.mb-0.mt-2{class: 'collapse', id: "msg_#{commit.short_sha}"}= commit.message_rest
 .row
   .col
     = paginate @commits
-

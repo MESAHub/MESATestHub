@@ -1,0 +1,67 @@
+.row
+  .col
+    %h3="Submission from #{format_time(@submission.created_at)} details"
+.row.mb-0
+  .col-sm-6.mb-0
+    %table.table.mb-0
+      %tr
+        %th{scope: 'row'} User
+        %td= link_to @submission.user.name, user_path(@submission.user)
+      %tr
+        %th{scope: 'row'} Computer
+        %td= link_to @computer.name, user_computer_path(@submission.user, @computer)
+      %tr
+        %th{scope: 'row'} Platform
+        %td=@computer.platform
+      %tr
+        %th{scope: 'row'} Processor
+        %td=@computer.processor
+      %tr
+        %th{scope: 'row'} RAM
+        %td=@computer.ram_gb.to_s + ' GB'
+  .col-sm-6
+    %table.table.mb-0
+      %tr
+        %th Commit
+        %td= link_to(@submission.commit, commit_path(branch: @submission.commit.branches[0], sha: @submission.commit.short_sha))
+      %tr
+        %th Compilation
+        %td
+          -if @submission.compiled.nil?
+            %span.font-italic Not Reported
+          -elsif @submission.compiled
+            %span.text-success.font-weight-bold Succeeded
+          -else
+            %span.text-dange.font-weight-bold Failed
+      %tr
+        %th Computer Spec.
+        %td= @submission.computer_specification
+.row.my-3
+  .col
+    - if not @submission.test_instances.empty?
+      %h3 Test Instances for this Submission
+      .table-responsive
+        %table.table.table-hover.table-sm.text-center#test-detail
+          %thead.thead-default
+            %tr
+              %th.text-left Test Case
+              %th Status
+              %th Date Uploaded
+              %th Runtime
+              %th RAM Usage
+              %th Checksum
+              %th Threads
+          %tbody
+            -@submission.test_instances.each do |instance|
+              -# %tr{class: @test_instance_classes[instance] + " clickable-row", "data-href": test_case_test_instance_path(@test_case, instance)}
+              %tr
+                %td.text-monospace.text-left= instance.test_case.name
+                %td{class: instance.passed ? 'text-success' : 'text-danger'}=instance.passage_status
+                %td=format_time(instance.created_at)
+                %td=instance.runtime_minutes.to_s + ' m'
+                %td=format("%.2f", instance.rn_mem_GB) + ' GB'
+                %td.text-monospace=instance.checksum[(-7..-1)] if instance.checksum
+                %td=instance.omp_num_threads
+    - else
+      .alert.alert-warning
+        %h4 No test results included in this submission.

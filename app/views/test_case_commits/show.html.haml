@@ -1,36 +1,107 @@
 %p#notice= notice
+.row.mb-3
+  .col-sm-1.d-none.d-md-block
+    -if @previous_commit
+      %a.btn.btn-outline-primary.btn-lg.btn-block{href: test_case_commit_path(sha: @previous_commit.short_sha, branch: params[:branch], test_case: params[:test_case], module: params[:module])}
+        %i.fa.fa-step-backward.text-reset
+  .col-6.col-md-5.text-right
+    .dropdown
+      %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
+        %span.text-muted Branch:
+        %samp#selected-branch= @selected_branch
+      .dropdown-menu
+        - @branches.each do |branch|
+          =link_to branch, test_case_commit_path(branch: branch, sha: params[:sha], test_case: params[:test_case], module: params[:module]), class: "text-monospace dropdown-item"  
+  .col-6.col-md-5
+    .dropdown
+      %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle#commit-selector{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
+        %span.h5.text-muted Commit:
+        %span.h5.text-monospace=@commit
+      .dropdown-menu.dropdown-menu-right.py-0.my-0{'aria-labelledby': 'commit-selector'}
+        %ul.list-group.list-group-flush
+          -@nearby_commits.each do |commit|
+            %li.list-group-item.list-group-item-action.dropdown-item{class: @commit_classes[commit] + (commit == @commit ? 'active' : '')}
+              .d-flex.w-100.justify-content-between
+                
+                %h5.font-weight-bold.d-none.d-md-inline
+                  -if commit.message_first_line.length > 50
+                    -short_msg = commit.message_first_line
+                    -while short_msg.length > 50
+                      -short_msg = short_msg.split(' ')[(0...-1)].join(' ')
+                    =(short_msg + '&#8230;').html_safe
+                  -else
+                    =commit.message_first_line
+                %a.stretched-link.text-reset{href: test_case_commit_path(branch: params[:branch], sha: commit.short_sha, test_case: params[:test_case], module: params[:module])}
+                  %span.h5.text-monospace.text-primary=commit.short_sha
+              .d-flex.w-100
+                %p.mb-0
+                  %span.font-weight-bold= commit.author
+                  %span
+                    commited on 
+                    =commit.commit_time.strftime('%B %d %Y')
 
-.row
+  .col-1.d-none.d-md-block
+    -if @next_commit
+      %a.btn.btn-outline-primary.btn-lg.btn-block{href: test_case_commit_path(sha: @next_commit.short_sha, branch: params[:branch], test_case: params[:test_case], module: params[:module])}
+        %i.fa.fa-step-forward.text-reset
+
+.row.my-5
   .col
-    %h3
-      %samp=@test_case.name
-      in
-      %samp=@test_case.module
-      is 
-      %span{class: "#{@commit_class} font-weight-bold"}=@commit_status.downcase
-      in 
-      %samp=link_to(@commit, commit_path(branch: params[:branch], sha: params[:sha]))
-      with
-      - case @checksum_count
-      - when 0
-        %span{class: 'text-info font-weight-bold'} no checksums.
-      - when 1
-        %span{class: 'text-success font-weight-bold'} one unique checksum.
-      - else
-        %span{class: 'text-primary font-weight-bold'} multiple unique checksums.
-    -# %form{action: '/commits/select_test_case_commit/', method: 'get'}
-    -#   .form-group.row
-    -#     =label_tag "SHA", 'MESA commit: ', class: 'col-form-label col-xs-4 control-label form-control-lg'
-    -#     .col-xs-8
-    -#       =select_tag "SHA", options_for_select(@mesa_commits, @selected), class: 'custom-select form-control form-control-lg', id: 'commit_select'
-    -#   .form-group.row
-    -#     =label_tag "test_case", 'Test Case: ', class: 'control-label form-control-lg col-xs-4 col-form-label'
-    -#     .col-xs-8
-    -#       =select_tag "test_case", options_for_select(@tc_options, @test_case.name), class: 'custom-select form-control form-control-lg', id: 'test_case_select'  
-    -#   %noscript
-    -#     .form-group.row
-    -#       .col-auto.align-middle
-    -#         =submit_tag 'Go', class: 'btn btn-primary text-light form-control', name: nil, id: 'commit_select_go'
+    .card.border-dark.h-100
+      .card-body
+        %h3.card-title.my-0
+          .dropdown
+            %button.btn.btn-outline-primary.btn-lg.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
+              %span.text-monospace#selected-test-case= @test_case.name
+              %small.text-muted
+                =surround '(', ')' do
+                  %span.text-monospace=@test_case.module
+            .dropdown-menu
+              - @commit_tccs.each do |tcc|
+                =link_to((tcc.test_case.name + "<small class='text-muted'>(#{tcc.test_case.module})</small>").html_safe, test_case_commit_path(branch: params[:branch], sha: params[:sha], test_case: tcc.test_case.name, module: params[:module]), class: "text-monospace dropdown-item")
+            is 
+            %span{class: "#{@commit_class} font-weight-bold"}=@commit_status.downcase
+            in 
+            %span.text-monospace= @commit
+            -if [0, 2, 3].include? @test_case_commit.status
+              with
+              - case @checksum_count
+              - when 0
+                %span{class: 'text-info font-weight-bold'} no checksums.
+              - when 1
+                %span{class: 'text-success font-weight-bold'} one unique checksum.
+              - else
+                %span{class: 'text-primary font-weight-bold'} multiple unique checksums.
+.row.mt-5.mb-0
+  .col
+    %h4 
+      Commit Data for
+      %span.text-monospace.text-primary= @commit
+.row.mt-0
+  .col-lg-6.col-md-7
+    %ul.list-group.list-group-flush.mb-1
+      %li.list-group-item
+        %b Author:
+        =@commit.author
+      %li.list-group-item
+        %b Full SHA:
+        %span.text-monospace=@commit.sha
+      %li.list-group-item
+        %b Commit Time:
+        =format_time(@commit.commit_time)
+  .col-lg-6.col-md-5
+    %b Commit Message
+    %blockquote.blockquote= @commit.message
+.row.mb-0.mt-0
+  - if @commit.github_url
+    .col
+      %a.btn.btn-outline-primary.btn-lg.btn-block{href: @commit.github_url, target: '_blank'}
+        %span.text-reset View Commit on GitHub
+  .col
+    %a.btn.btn-outline-primary.btn-lg.btn-block{href: commit_path(branch: params[:branch], sha: params[:sha])}
+      %span.text-reset View Commit on TestHub
+
+
 .row.mt-5
   .col
     %h3
@@ -40,31 +111,77 @@
       - else
         ="Last #{@instance_limit} instances for commit"
         %samp=@commit
-    - if not @test_case_commit.test_instances.empty?
-      .table-responsive
+- if not @test_case_commit.test_instances.empty?
+  .form-check.mt-3
+    .row
+      .col-sm-6.mb-3
+        %h5
+          Default Columns
+          %small.text-muted Check/uncheck to show/hide
+        .row
+          -@default_columns.each_slice(5) do |columns|
+            .col
+              -columns.each do |klass, checked|
+                .mr-5
+                %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: klass, id: klass.sub('column-', 'check-'), checked: checked}
+                %label.form-check-label{for: klass.sub('column-', 'check-')}= klass.sub('column-', '').titleize
+      -unless @specific_columns.empty?
+        .col-sm-6
+          %h5
+            Test Case-Specific Columns
+            %small.text-muted Check/uncheck to show/hide
+          -@specific_columns.each do |klass, checked|
+            %div.mr-5
+              %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: klass, id: klass.sub('column-', 'check-'), checked: checked}
+              %label.form-check-label{for: klass.sub('column-', 'check-')} 
+                = klass.sub('column-', '').titleize
+  .row
+    .col
+      .table-responsive.mt-2
         %table.table.table-hover.table-sm.text-center#test-detail
           %thead.thead-default
             %tr
-              %th Status
-              %th Computer
-              %th Date Uploaded
-              %th Runtime
-              %th RAM Usage
-              %th Checksum
-              %th Threads
-              %th Computer Specification
+              %th.column-status Status
+              %th.column-computer Computer
+              %th.column-date.d-none Date Uploaded
+              %th.column-runtime Runtime
+              %th.column-ram.d-none RAM Usage
+              %th.column-checksum Checksum
+              %th.column-threads.d-none Threads
+              %th.column-spec.d-none Computer Specification
+              %th.column-steps Steps
+              %th.column-retries Retries
+              %th.column-redos.d-none Redos
+              %th.column-solver_iterations.d-none Iterations
+              %th.column-solver_calls_made.d-none Calls Made
+              %th.column-solver_calls_failed.d-none Calls Failed
+              %th.column-log_rel_run_E_err.d-none Log Rel. E Err.
+              - @specific_columns.each do |specific_col, visible|
+                %th.text-monospace{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}= specific_col
+
           %tbody
             -@test_case_commit.test_instances.each do |instance|
               -# %tr{class: @test_instance_classes[instance] + " clickable-row", "data-href": test_case_test_instance_path(@test_case, instance)}
               %tr
-                %td=link_to(instance.passage_status, test_case_test_instance_path(@test_case, instance), class:'text-success')
-                %td=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
-                %td=format_time(instance.created_at)
-                %td=instance.runtime_minutes.to_s + ' m'
-                %td=format("%.2f", instance.rn_mem_GB) + ' GB'
-                %td=instance.checksum[(-7..-1)]
-                %td=instance.omp_num_threads
-                %td=instance.computer_specification
-    - else
-      .alert.alert-warning
-        %h4 No tests have been run yet.
+                %td.column-status{class: instance.passed ? 'text-success' : 'text-danger'}=instance.passage_status
+                %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
+                %td.column-date.d-none=format_time(instance.created_at)
+                %td.column-runtime=instance.runtime_minutes.to_s + ' m'
+                %td.column-ram.d-none=format("%.2f", instance.rn_mem_GB) + ' GB'
+                %td.column-checksum=instance.checksum[(-7..-1)] if instance.checksum
+                %td.column-threads.d-none=instance.omp_num_threads
+                %td.column-spec.d-none=instance.computer_specification
+                %td.column-steps=instance.steps
+                %td.column-retries=instance.retries
+                %td.column-redos.d-none= instance.redos
+                %td.column-solver_iterations.d-none= instance.solver_iterations
+                %td.column-solver_calls_made.d-none= instance.solver_calls_made
+                %td.column-solver_calls_failed.d-none= instance.solver_calls_failed
+                %td.column-log_rel_run_E_err.d-none= instance.log_rel_run_E_err
+
+                - @specific_columns.each do |specific_col, visible|
+                  %td{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}= format('%0.3g', instance.get_data(specific_col))
+
+- else
+  .alert.alert-warning
+    %h4 No tests have been run yet.

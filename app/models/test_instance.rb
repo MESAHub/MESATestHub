@@ -2,7 +2,8 @@ class TestInstance < ApplicationRecord
   @@success_types =  {
     'run_test_string' => 'Test String',
     'run_checksum' => 'Run Checksum',
-    'photo_checksum' => 'Photo Checksum'
+    'photo_checksum' => 'Photo Checksum',
+    'skip' => 'Skipped'
   }
 
   @@failure_types = {
@@ -27,7 +28,7 @@ class TestInstance < ApplicationRecord
   belongs_to :submission
 
   has_many :instance_inlists, dependent: :destroy
-  has_many :test_data, through: :instance_inlist
+  has_many :inlist_data, through: :instance_inlists
 
 
   validates_presence_of :computer_id, :test_case_id, :compiler
@@ -75,7 +76,6 @@ class TestInstance < ApplicationRecord
   # version of +new+ that is more useful for submissions
   def self.submission_new(instance_params, submission)
     # first get a hold of the test case itself
-    puts "finding test case using name: #{instance_params[:test_case]} and module #{instance_params[:module]}"
     test_case = TestCase.find_by(name: instance_params[:test_case],
                                  module: instance_params[:module])
     # bail if parameters were crummy for some reason
@@ -98,6 +98,9 @@ class TestInstance < ApplicationRecord
     instance.platform_version = submission.platform_version
     instance.passed = instance_params['outcome'] =~ /pass/ ? true : false
 
+    # remove success type for failing instance
+    instance.success_type = nil unless instance.passed
+
     # these are from +testhub.yml+ of installation (in base MESA_DIR after
     # installation), but are forwarded from the submission
     instance.compiler = submission.compiler
@@ -105,38 +108,52 @@ class TestInstance < ApplicationRecord
     instance.sdk_version = submission.sdk_version
     instance.math_backend = submission.math_backend
 
-    # now we need to go through the individual inlists, create them, and
-    # associate them with the test instance
-    instance_params[:inlists].each do |inlist_params|
-      new_inlist = instance.instance_inlists.build(
-        inlist_params.reject do |key|
-          ['extra_testhub_names', 'extra_testhub_vals'].include? key
-        end
-      )
-      # optionally build on extra data to the inlist
-      if inlist_params['extra_testhub_names'] &&
-         inlist_params['extra_testhub_vals']
-        inlist_params['extra_testhub_names'].zip(
-          inlist_params['extra_testhub_vals']).each do |datum_name, datum_val|
-          new_inlist.inlist_data.build(name: datum_name, val: datum_val)
-        end
-      end
-    end
-
-    # calculate summed values from all inlists
+    # initialize these now; will sum up from individual inlists later
     instance.runtime_minutes = 0
     instance.steps = 0
     instance.retries = 0
-    instance.newton_iters = 0
-    instance.newton_retries = 0
+    instance.redos = 0
+    instance.solver_iterations = 0
+    instance.solver_calls_failed = 0
+    instance.solver_calls_made = 0
+    instance.log_rel_run_E_err = 0.0
 
-    instance.instance_inlists.each do |inlist|
-      instance.runtime_minutes += inlist.runtime_minutes
-      instance.steps += inlist.steps
-      instance.retries += inlist.retries
-      instance.newton_iters += inlist.newton_iters
-      instance.newton_retries += inlist.newton_retries
+    # now we need to go through the individual inlists, create them, and
+    # associate them with the test instance
+    if instance_params[:inlists]
+      instance_params[:inlists].each do |inlist_params|
+        new_inlist = instance.instance_inlists.build(
+          inlist_params.reject do |key|
+            ['extra_testhub_names', 'extra_testhub_vals'].include? key
+          end
+        )
+        # optionally build on extra data to the inlist
+        if inlist_params['extra_testhub_names'] &&
+           inlist_params['extra_testhub_vals']
+          inlist_params['extra_testhub_names'].zip(
+            inlist_params['extra_testhub_vals']).each do |datum_name, datum_val|
+            new_inlist.inlist_data.build(name: datum_name, val: datum_val)
+          end
+        end
+      end
+
+      # calculate summed values from all inlists
+      instance.instance_inlists.each do |inlist|
+        instance.runtime_minutes += inlist.runtime_minutes if inlist.runtime_minutes
+        instance.steps += inlist.steps if inlist.steps
+        instance.retries += inlist.retries if inlist.retries
+        instance.redos += inlist.redos if inlist.redos
+        instance.solver_iterations += inlist.solver_iterations if inlist.solver_iterations
+        instance.solver_calls_failed += inlist.solver_calls_failed if inlist.solver_calls_failed
+        instance.solver_calls_made += inlist.solver_calls_made if inlist.solver_calls_made
+        # adding linear quantities; will take log at the end
+        instance.log_rel_run_E_err += 10**inlist.log_rel_run_E_err if inlist.log_rel_run_E_err
+      end
     end
+
+    # safely take log at the end
+    instance.log_rel_run_E_err = Math.log10(
+      [1e-99, instance.log_rel_run_E_err].max)
 
     # test case commit automatically set by +#set_tcv_or_tcc+ at validation
     instance
@@ -516,6 +533,31 @@ class TestInstance < ApplicationRecord
     end
   end
 
+  def data_names
+    inlist_data.load unless inlist_data.loaded?
+    test_data.pluck(:name).uniq
+  end
+
+  def get_data(*data_names)
+    inlist_data.load unless inlist_data.loaded?
+    if data_names.length == 1
+      data = inlist_data.select { |datum| datum.name == data_names[0] }
+      return nil if data.empty?
+      data.first.val
+    else
+      data_names.map do |data_name|
+        data = inlist_data.select { |datum| datum.name == data_name }
+        if data.empty?
+          nil
+        else
+          data.first.val
+        end
+      end
+    end
+  end
+
+
+
   def set_tcc
     # do absolutely nothing if this is already set
     return test_case_commit if test_case_commit
@@ -526,8 +568,6 @@ class TestInstance < ApplicationRecord
     if candidate
       # found it!
       self.test_case_commit = candidate
-      puts "successfully set test case commit to"
-      puts test_case_commit
     else
       # doesn't exist, so make a new one
       # this one doesn't have status and other values set; this should

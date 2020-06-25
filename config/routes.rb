@@ -24,6 +24,10 @@ Rails.application.routes.draw do
   resources :submissions, only: [:create, :show], defaults: { formats: :json }
   post 'submissions/create.json', to: 'submissions#create'
 
+  # view one submission from a computer
+  get '/computers/:computer/submissions/:id', to: 'submissions#show',
+    as: 'computer_submission'
+
   # for viewing data for one test case and one commit
   get '/:branch/commits/:sha/test_cases/:module/:test_case',
     to: 'test_case_commits#show', as:'test_case_commit', test_case: /[^\/]+/
