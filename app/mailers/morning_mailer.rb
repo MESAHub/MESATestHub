@@ -155,7 +155,7 @@ class MorningMailer < ApplicationMailer
 
     # gather sender, recipient(s), subject, and body before composing email
     from = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    to = Email.new(email: 'mesa-developers@lists.mesastar.org')
+    to = Email.new(email: ['mesa-developers@lists.mesastar.org', 'p7r3d3c7y5u1u9e8@mesadevelopers.slack.com'])
     # to = Email.new(email: 'wolfwm@uwec.edu', name: 'Bill Wolf')
     subject = "MesaTestHub Report #{Date.today}"
     html_content = ApplicationController.render(
@@ -189,9 +189,10 @@ class MorningMailer < ApplicationMailer
     email = Mail.new
     email.from = from
     email.subject = subject
-    per = Personalization.new
-    per.add_to(to)
-    email.add_personalization(per)
+    email.to = 'p7r3d3c7y5u1u9e8@mesadevelopers.slack.com'
+    # per = Personalization.new
+    # per.add_to(to)
+    # email.add_personalization(per)
 
     # due to SendGrid weirdness, plain text MUST come first or it won't send
     # email.add_content(Content.new(type: 'text/plain', value: text_content))
