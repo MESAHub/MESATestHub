@@ -10,7 +10,7 @@ class Commit < ApplicationRecord
   validates_presence_of :sha, :short_sha, :author, :author_email, :message,
     :commit_time
 
-  paginates_per 25
+  paginates_per 50
 
   ###########################################
   # WORKING WITH THE NAVIGATING RUGGED TREE #

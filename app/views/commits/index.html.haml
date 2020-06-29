@@ -27,17 +27,18 @@
       %i= page_entries_info @commits
     %ul.list-group.list-group-flush
       - @commits.each do |commit|
-        %li.list-group-item.list-group-item-action{class: @row_classes[commit], href: commit_path(branch: @branch, sha: commit.short_sha)}
+        %li.list-group-item.list-group-item-action{class: @row_classes[commit]}
           .d-flex.w-100.justify-content-between.mb-2
             %h5.font-weight-bold
-              = commit.message_first_line
+              %a.text-reset{href: commit_path(branch: @branch, sha: commit.short_sha)}
+                = commit.message_first_line
               -if commit.message_rest
                 %a.badge.badge-secondary{'data-toggle'.to_sym => 'collapse', href: "\#msg_#{commit.short_sha}", role: 'button', 'aria-expanded'.to_sym => 'false', 'aria-controls'.to_sym => "\#msg_#{commit.short_sha}"} &nbsp;&#8230;&nbsp;
             .btn-group.my-0
               %a.mr-1.my-0{href: commit_path(@branch, commit.short_sha)}
-                %button.btn.btn-outline-primary.text-monospace= commit.short_sha
+                %button.btn.text-monospace{class: @btn_classes[commit]}= commit.short_sha
               %a.my-0{href: commit.github_url, target: '_blank'}
-                %button.my-0.btn.btn-outline-primary.text-monospace
+                %button.my-0.btn.text-monospace{class: @btn_classes[commit]}
                   %i.fa.fa-code
           .d-flex.w-100.justify-content-between
             %p.mb-0

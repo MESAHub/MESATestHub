@@ -10,9 +10,9 @@ Rails.application.routes.draw do
   end
   resources :sessions
   resources :computers
-  resources :test_cases do
-    resources :test_instances
-  end
+  # resources :test_cases do
+  #   resources :test_instances
+  # end
 
 
   # handle push requests from github repo
@@ -31,6 +31,10 @@ Rails.application.routes.draw do
   # for viewing data for one test case and one commit
   get '/:branch/commits/:sha/test_cases/:module/:test_case',
     to: 'test_case_commits#show', as:'test_case_commit', test_case: /[^\/]+/
+
+  # for viewing data for one test case over many commits
+  get '/:branch/test_cases/:module/:test_case', to: 'test_cases#show',
+  as: 'test_case'
 
   # put this after the test case commit matcher since this is more general
   get '/:branch/commits/:sha', to: 'commits#show', as: 'commit'

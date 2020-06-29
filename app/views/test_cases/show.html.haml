@@ -1,92 +1,94 @@
 %p#notice= notice
-
 .row
-  .col-lg-6.col-xs12
-    %h3
-      %samp=@test_case.name + ':'
-      %span{class: @version_class}=@version_status
-    %form{action: test_case_path(@test_case), method: 'get', class: 'form-inline'}
-      .row.align-items-center
-        .col-auto.col-form-label.align-middle
-          =label_tag "version", 'MESA version: ', class: 'control-label form-control-lg'
-        .col-auto.align-middle
-          =select_tag "version", options_for_select(@mesa_versions, @selected), class: 'custom-select form-control form-control-lg', id: 'version_select'
-        .col-auto.align-middle
-          %noscript
-            =submit_tag 'Go', class: 'btn btn-primary text-light form-control', name: nil, id: 'version_select_go'
-
-    %table.table
-      %tr
-        %th{scope: 'row'} Module
-        %td
-          %samp=@test_case.module
-      %tr
-        %th{scope: 'row'} Description
-        %td=@test_case.description
-      %tr
-        %th{scope: 'row'}
-          %samp MESA
-          Version
-        %td=link_to(@version_number, version_path(@version_number))
-      %tr
-        %th{scope: 'row'} Diff Status
-        %td
-          - case @version.diff_status(@test_case)
-          - when 0
-            No diffs run
-          - when 1
-            At least one diff run
-          - else
-            No diffs run, some indeterminate
-      %tr
-        %th{scope: 'row'} Values Tracked
-        %td= @test_case.data_names.join(", ")
-      %tr
-        %th{scope: 'row'} Version Added
-        %td= link_to(@test_case.version_created.number, version_path(@test_case.version_created.number))
-    .text-center
-      .btn-group{style: 'margin-bottom: 20px'}
-        - if admin?
-          = link_to 'Edit', edit_test_case_path(@test_case), class: 'btn btn-primary btn-md text-light'
-        = link_to 'View All Cases', version_path(@version_number), class: 'btn btn-secondary btn-md text-light'
-        - if admin?
-          = link_to 'Delete', @test_case, method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-danger btn-md text-light'
-  .col-lg-6.col-xs-12
-    %h3
-      -if @test_instances.length < @instance_limit
-        = "All instances for version #{@version_number}"
-      - else
-        ="Last #{@instance_limit} instances for version #{@version_number}"
-    - if not @test_instances.empty?
-      .table-responsive
-        %table.table.table-hover.table-sm#test-detail
+  .col
+    %h2
+      History for
+      %span.text-primary.text-monospace= @test_case.name
+      %small.text-muted
+        =surround '(', ')' do
+          %span.text-monospace= @test_case.module
+.row
+  .col
+    = form_with url: url_for, method: :get  do
+      .form-check
+        =radio_button_tag(:history_type, 'show_instances', @show_instances, class: "form-check-input", type: 'radio', value: 'show_instances', checked: @show_instances ? 'checked' : '' )
+        =label_tag(:show_instances_label, "Show individual submission")
+      .form-check
+        =radio_button_tag(:history_type, 'show_summaries', @show_summaries, class: "form-check-input", type: 'radio', value: 'show_summaries')
+        =label_tag(:show_summaries_label, "Show commit summaries")
+      =submit_tag("Searth", class: 'btn btn-primary')
+.row
+  .col
+    -if @show_instances
+      .table-responsive.mt-2
+        %table.table.table-hover.table-sm.text-center#test-detail
           %thead.thead-default
             %tr
-              %th Date Uploaded
-              %th Computer
-              %th Runtime
-              %th Diff?
+              %th.column-status Status
+              %th.column-computer Computer
+              %th.column-date.d-none Date Uploaded
+              %th.column-runtime Runtime
+              %th.column-ram.d-none RAM Usage
+              %th.column-checksum Checksum
+              %th.column-threads.d-none Threads
+              %th.column-spec.d-none Computer Specification
+              %th.column-steps Steps
+              %th.column-retries Retries
+              %th.column-redos.d-none Redos
+              %th.column-solver_iterations.d-none Iterations
+              %th.column-solver_calls_made.d-none Calls Made
+              %th.column-solver_calls_failed.d-none Calls Failed
+              %th.column-log_rel_run_E_err.d-none Log Rel. E Err.
+              - @specific_columns.each do |specific_col, visible|
+                %th.text-monospace{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}= specific_col
+
           %tbody
-            - @test_instances.each do |instance|
-              %tr{class: @test_instance_classes[instance] + " clickable-row", "data-href": test_case_test_instance_path(@test_case, instance)}
-                %td=format_time(instance.created_at)
-                %td=instance.computer.name
-                %td=instance.runtime_seconds.to_s + ' s'
-                %td
-                  - case instance.diff
-                  - when 0
-                    &#x2717
-                  - when 1
-                    &#x2713
-                  - else
-                    &#x3f
+            -@test_instances.each do |instance|
+              -# %tr{class: @test_instance_classes[instance] + " clickable-row", "data-href": test_case_test_instance_path(@test_case, instance)}
+              %tr
+                %td.column-status{class: instance.passed ? 'text-success' : 'text-danger'}=instance.passage_status
+                %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
+                %td.column-date.d-none=format_time(instance.created_at)
+                %td.column-runtime=instance.runtime_minutes.to_s + ' m'
+                %td.column-ram.d-none=format("%.2f", instance.rn_mem_GB) + ' GB'
+                %td.column-checksum=instance.checksum[(-7..-1)] if instance.checksum
+                %td.column-threads.d-none=instance.omp_num_threads
+                %td.column-spec.d-none=instance.computer_specification
+                %td.column-steps=instance.steps
+                %td.column-retries=instance.retries
+                %td.column-redos.d-none= instance.redos
+                %td.column-solver_iterations.d-none= instance.solver_iterations
+                %td.column-solver_calls_made.d-none= instance.solver_calls_made
+                %td.column-solver_calls_failed.d-none= instance.solver_calls_failed
+                %td.column-log_rel_run_E_err.d-none= instance.log_rel_run_E_err
 
-
+                - @specific_columns.each do |specific_col, visible|
+                  %td{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}= format('%0.3g', instance.get_data(specific_col))
     - else
-      .alert.alert-warning
-        %h4 No tests have been run yet.
-    .text-center
-      .btn-group
-        - if admin?
-          = link_to 'Add Instance', new_test_case_test_instance_path(@test_case), class: 'btn btn-primary btn-md text-light'
-        = link_to 'View All Instances', test_case_test_instances_path(@test_case), class: 'btn btn-secondary btn-md text-light'
+      .table-responsive.mt-2
+        %table.table.table-hover.table-sm.text-center#test-detail
+          %thead.thead-default
+            %tr
+              %th.column-commit Commit
+              %th.column-status 
+                =link_to('Status', url_for(sort_query: @status_params[:sort_query], sort_order: @status_params[:sort_order]))
+              %th.column-date
+                =link_to('Date Created', url_for(sort_query: @date_params[:sort_query], sort_order: @date_params[:sort_order]))
+          %tbody
+            -@test_case_commits.each do |tcc|
+              %tr
+                %td.column-commit.text-primary.text-monospace
+                  =link_to(tcc.commit, test_case_commit_path(branch: params[:branch], sha: tcc.commit.short_sha, test_case: params[:test_case], module: params[:module]))
+                %td.column-status
+                  -case tcc.status
+                  -when 3
+                    %span.text-warning Mixed
+                  -when 2
+                    %span.text-primary Mult. Checksums
+                  -when 1
+                    %span.text-danger Failing
+                  -when 0
+                    %span.text-success Passing
+                  -else
+                    %span.text-info Untested
+                %td.column-date= format_time(tcc.created_at)

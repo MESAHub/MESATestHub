@@ -172,15 +172,25 @@ class CommitsController < ApplicationController
     )
 
     @row_classes = {}
+    @btn_classes = {}
     @commits.each do |commit|
       @row_classes[commit] = case commit.status
-      when 3 then 'text-warning'
-      when 2 then 'text-primary'
-      when 1 then 'text-danger'
-      when 0 then 'text-success'
+      when 3 then 'list-group-item-warning'
+      when 2 then 'list-group-item-primary'
+      when 1 then 'list-group-item-danger'
+      when 0 then 'list-group-item-success'
       else
-        'text-info'
+        'list-group-item-info'
       end
+      @btn_classes[commit] = case commit.status
+      when 3 then 'btn-warning'
+      when 2 then 'btn-primary'
+      when 1 then 'btn-danger'
+      when 0 then 'btn-success'
+      else
+        'btn-info'
+      end
+
     end
   end
 

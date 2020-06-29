@@ -18,6 +18,8 @@ class TestCaseCommit < ApplicationRecord
     3 => :mixed
   }
 
+  paginates_per 50
+
   @@status_encoder = @@status_decoder.invert
 
   # synthesize all test case commits necessary (and implicitly test cases

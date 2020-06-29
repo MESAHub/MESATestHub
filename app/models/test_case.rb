@@ -60,6 +60,53 @@ class TestCase < ApplicationRecord
     name[0,17] + '...'
   end
 
+  def find_test_case_commits(search_params)
+    # start with blank query that we can chain from, but be sure to include
+    # commits with whatever we come up with
+    res = test_case_commits.includes(:commit)
+    if search_params[:start_date] || search_params[:end_date]
+      unless search_params[:start_date] && search_params[:end_date]
+        all_dates = test_case_commits.pluck('created_at')
+      end
+      start_date = search_params[:start_date] || all_dates.min
+      end_date = search_params[:end_date] || all_dates.max
+      res = res.where(created_at: start_date..end_date)
+    end
+    if search_params[:status]
+      res = res.where(status: status)
+    end
+    sort_query = search_params[:sort_query] || :created_at
+    sort_order = search_params[:sort_order] || :desc
+    res.order(sort_query => sort_order).page(search_params[:page])
+  end
+
+  def find_instances(search_params)
+    start_date = search_params[:start_date] || test_instances.order(
+      created_at: :asc).first.created_at
+    end_date = search_params[:end_date] || test_instances.order(
+      created_at: :desc).first.created_at
+    res = test_instances.includes(:commit).where(created_at: start_date..end_date)
+
+    # which computer/computers to look for results from
+    computers = []
+    if search_params[:computers]
+      computers = Computer.where(name: search_params[:computers]).pluck(:id)
+    else
+      # if no computer is selected, only show computer with most computers
+      computer_ids = res.pluck(:computer_id)
+      frequencies = Hash.new(0)
+      computer_ids.each do |id|
+        frequencies[id] += 1
+      end
+      computers = [computer_ids.max_by { |id| frequencies[id] }]
+    end
+
+    res.where(computer_id: computers)
+    sort_query = search_params[:sort_query] || :created_at
+    sort_order = search_params[:sort_order] || :desc
+    res.order(sort_query => sort_order).page(search_params[:page])
+  end
+
   # list of version numbers with test instances that have failed since a
   # particular date (handled by TestInstance... unclear where this should live)
   def self.failing_versions_since(date)

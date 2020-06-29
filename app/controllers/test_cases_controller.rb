@@ -1,7 +1,5 @@
 class TestCasesController < ApplicationController
-  before_action :set_test_case, only: %i[show edit update destroy]
-
-  before_action :authorize_admin, only: %i[edit update destroy new create]
+  before_action :set_test_case, only: %i[show]
 
   # GET /test_cases
   # GET /test_cases.json
@@ -83,115 +81,64 @@ class TestCasesController < ApplicationController
   # GET /test_cases/1
   # GET /test_cases/1.json
   def show
-    @selected = params[:version] || 'latest'
-    # big daddy query, hopefully optimized
-    @mesa_versions = @test_case.versions.order(number: :desc).uniq.pluck(:number)
-    @version_number = if @selected == 'latest'
-                        @mesa_versions.max
-                      else
-                        @selected.to_i
-                      end
-    @version = Version.find_by_number(@version_number)
-    # all test instances, sorted by upload date
-    @instance_limit = 15
-    @test_instances = @test_case.version_instances(@version, @instance_limit)
-    @test_instance_classes = {}
-    @test_instances.each do |instance|
-      @test_instance_classes[instance] =
-        if instance.passed
-          'table-success'
-        else
-          'table-danger'
-        end
+    if params[:history_type] == 'show_instances' #|| !params[:show_summaries]
+      @test_instances = @test_case.find_instances(params.permit(:computers,
+        :start_date, :end_date, :sort_query, :sort_order, :page))
+      @show_instances = true
+      @show_summaries = false
+
+      # params for table column links
+    else
+      @show_instances = false
+      @show_summaries = true
+
+      @test_case_commits = @test_case.find_test_case_commits(params.permit(
+        :status, :start_date, :end_date, :sort_query, :sort_order, :page))
+
+      # if order is set to ascending, switch it. Otherwise pick default
+      # value of descending
+      status_order = if (params[:sort_order] == 'desc') && params[:sort_query] == 'status'
+                       :asc
+                     else
+                       :desc
+                     end
+      @status_params = {sort_query: :status, sort_order: status_order}
+      date_order = if (params[:sort_order] == 'desc') && params[:sort_query] == 'created_at'
+                       :asc
+                   else
+                       :desc
+                   end
+      @date_params = {sort_query: :created_at, sort_order: date_order}
     end
 
-    # text and class for last version test status
-    @version_status, @version_class = passing_status_and_class(
-      @test_case.version_status(@version)
-    )
 
-    # for populating select list
-    @mesa_versions.prepend('latest')
-  end
+    # names of default columns in the table of instances, can be toggled on
+    # and off
+    @default_columns = {
+      'status' => true,
+      'computer' => true,
+      'date' => false,
+      'runtime' => true,
+      'ram' => false,
+      'checksum' => true,
+      'threads' => false,
+      'spec' => false,
+      'steps' => true,
+      'retries' => true,
+      'redos' => false,
+      'solver_iterations' => false,
+      'solver_calls_made' => false,
+      'solver_calls_failed' => false,
+      'log_rel_run_E_err' => false
+    }
 
-  # GET /test_cases/new
-  def new
-    @test_case = TestCase.new
-    @modules = TestCase.modules
-  end
-
-  # GET /test_cases/1/edit
-  def edit
-    @modules = TestCase.modules
-    @show_path = test_case_path(@test_case)
-  end
-
-  # POST /test_cases
-  # POST /test_cases.json
-  def create
-    @modules = TestCase.modules
-    @test_case = TestCase.new(test_case_params)
-    @test_case.update_version_created
-
-    respond_to do |format|
-      if @test_case.save
-        format.html do
-          redirect_to @test_case, notice: 'Test case was successfully created.'
-        end
-        format.json { render :show, status: :created, location: @test_case }
-      else
-        format.html { render :new }
-        format.json do
-          render json: @test_case.errors, status: :unprocessable_entity
-        end
-      end
-    end
-  end
-
-  # PATCH/PUT /test_cases/1
-  # PATCH/PUT /test_cases/1.json
-  def update
-    respond_to do |format|
-      if @test_case.update(test_case_params)
-        format.html { redirect_to @test_case, notice: 'Test case was successfully updated.' }
-        format.json { render :show, status: :ok, location: @test_case }
-      else
-        format.html { render :edit }
-        format.json { render json: @test_case.errors, status: :unprocessable_entity }
-      end
-    end
-  end
-
-  # DELETE /test_cases/1
-  # DELETE /test_cases/1.json
-  def destroy
-    @test_case.destroy
-    respond_to do |format|
-      format.html do
-        redirect_to test_cases_url,
-        notice: 'Test case was successfully destroyed.'
-      end
-      format.json { head :no_content }
-    end
+    @specific_columns = []
   end
 
   private
   # Use callbacks to share common setup or constraints between actions.
   def set_test_case
-    @test_case = TestCase.find(params[:id])
-  end
-
-  # Never trust parameters from the scary internet, only allow the white list
-  # through.
-  def test_case_params
-    params.require(:test_case).permit(:name, :module, :version_added,
-      :description, :last_version, :last_version_status, :last_test_status,
-      :last_tested, :datum_1_name, :datum_1_type, :datum_2_name,
-      :datum_2_type, :datum_3_name, :datum_3_type, :datum_4_name,
-      :datum_4_type, :datum_5_name, :datum_5_type, :datum_6_name,
-      :datum_6_type, :datum_7_name, :datum_7_type, :datum_8_name,
-      :datum_8_type, :datum_9_name, :datum_9_type, :datum_10_name,
-      :datum_10_type)
+    @test_case = TestCase.includes(:test_case_commits).find_by(name: params[:test_case], module: params[:module])
   end
 
   # get a bootstrap text class and an appropriate string to convert integer 
