@@ -158,7 +158,7 @@ class MorningMailer < ApplicationMailer
     recipients = [Email.new(email: 'p7r3d3c7y5u1u9e8@mesadevelopers.slack.com',
                             name: 'MESA Developers'),
                   Email.new(email: 'mesa-developers@lists.mesastar.org',
-                            mail: 'MESA Developers')]
+                            name: 'MESA Developers')]
     # to = Email.new(email: 'wolfwm@uwec.edu', name: 'Bill Wolf')
     email_subject = "MesaTestHub Report #{Date.today}"
     html_content = ApplicationController.render(
