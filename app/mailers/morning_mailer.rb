@@ -155,7 +155,7 @@ class MorningMailer < ApplicationMailer
 
     # gather sender, recipient(s), subject, and body before composing email
     sender = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    recipients = 'p7r3d3c7y5u1u9e8@mesadevelopers.slack.com'
+    recipients = ['mesa-developers@lists.mesastar.org', 'p7r3d3c7y5u1u9e8@mesadevelopers.slack.com']
     # to = Email.new(email: 'wolfwm@uwec.edu', name: 'Bill Wolf')
     email_subject = "MesaTestHub Report #{Date.today}"
     html_content = ApplicationController.render(
@@ -195,7 +195,7 @@ class MorningMailer < ApplicationMailer
 
     email = Mail.new do
       from sender
-      subject subject
+      subject email_subject
       to recipients
     end
 
