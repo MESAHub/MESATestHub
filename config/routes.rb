@@ -9,7 +9,6 @@ Rails.application.routes.draw do
     resources :computers
   end
   resources :sessions
-  resources :computers
   # resources :test_cases do
   #   resources :test_instances
   # end

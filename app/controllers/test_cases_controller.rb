@@ -81,36 +81,49 @@ class TestCasesController < ApplicationController
   # GET /test_cases/1
   # GET /test_cases/1.json
   def show
-    if params[:history_type] == 'show_instances' #|| !params[:show_summaries]
-      @test_instances = @test_case.find_instances(params.permit(:computers,
-        :start_date, :end_date, :sort_query, :sort_order, :page))
-      @show_instances = true
-      @show_summaries = false
-
-      # params for table column links
-    else
+    # default start date is 30 days ago
+    @end_date = if (test_case_params[:end_date].nil? ||
+                    test_case_params[:end_date].empty?)
+                  Date.today
+                else
+                  Date.parse(test_case_params[:end_date])
+                end
+    @start_date = if (test_case_params[:start_date].nil? ||
+                      test_case_params[:start_date].empty?)
+                    @end_date - 30
+                  else
+                    Date.parse(test_case_params[:start_date])
+                  end
+    if test_case_params[:history_type] == 'show_summaries' #|| !params[:show_summaries]
       @show_instances = false
       @show_summaries = true
 
-      @test_case_commits = @test_case.find_test_case_commits(params.permit(
-        :status, :start_date, :end_date, :sort_query, :sort_order, :page))
+      @test_case_commits = @test_case.find_test_case_commits(test_case_params.permit(
+        :status, :sort_query, :sort_order, :page), @start_date, @end_date)
 
       # if order is set to ascending, switch it. Otherwise pick default
       # value of descending
-      status_order = if (params[:sort_order] == 'desc') && params[:sort_query] == 'status'
+      status_order = if (test_case_params[:sort_order] == 'desc') && test_case_params[:sort_query] == 'status'
                        :asc
                      else
                        :desc
                      end
       @status_params = {sort_query: :status, sort_order: status_order}
-      date_order = if (params[:sort_order] == 'desc') && params[:sort_query] == 'created_at'
+      date_order = if (test_case_params[:sort_order] == 'desc') && test_case_params[:sort_query] == 'created_at'
                        :asc
                    else
                        :desc
                    end
       @date_params = {sort_query: :created_at, sort_order: date_order}
+    else
+      @test_instances = @test_case.find_instances(test_case_params.permit(:computers,
+        :sort_query, :sort_order, :page), @start_date, @end_date)
+      @show_instances = true
+      @show_summaries = false
+      @computer = @test_instances.first.computer
     end
 
+    @computer_options = @test_case.sorted_computers(@start_date, @end_date)
 
     # names of default columns in the table of instances, can be toggled on
     # and off
@@ -138,7 +151,7 @@ class TestCasesController < ApplicationController
   private
   # Use callbacks to share common setup or constraints between actions.
   def set_test_case
-    @test_case = TestCase.includes(:test_case_commits).find_by(name: params[:test_case], module: params[:module])
+    @test_case = TestCase.includes(:test_case_commits).find_by(name: test_case_params[:test_case], module: test_case_params[:module])
   end
 
   # get a bootstrap text class and an appropriate string to convert integer 
@@ -164,5 +177,11 @@ class TestCasesController < ApplicationController
       cls = 'text-warning'
     end
     return sts, cls
+  end
+
+  def test_case_params
+    params.permit(:branch, :module, :test_case, :history_type, :utf8, :commit,
+                  :computers, :start_date, :end_date, :sort_query, :sort_order,
+                  :page, :status)
   end
 end

@@ -9,23 +9,44 @@
           %span.text-monospace= @test_case.module
 .row
   .col
-    = form_with url: url_for, method: :get  do
-      .form-check
-        =radio_button_tag(:history_type, 'show_instances', @show_instances, class: "form-check-input", type: 'radio', value: 'show_instances', checked: @show_instances ? 'checked' : '' )
-        =label_tag(:show_instances_label, "Show individual submission")
-      .form-check
-        =radio_button_tag(:history_type, 'show_summaries', @show_summaries, class: "form-check-input", type: 'radio', value: 'show_summaries')
-        =label_tag(:show_summaries_label, "Show commit summaries")
-      =submit_tag("Searth", class: 'btn btn-primary')
+    = form_with method: :get, local: true, class: 'mb-4' do
+      .form-row
+        .col-md
+          .form-check
+            =radio_button_tag(:history_type, 'show_instances', @show_instances, class: "form-check-input", type: 'radio', value: 'show_instances', checked: @show_instances ? 'checked' : '' )
+            =label_tag(:history_type_show_instances, "Show individual submission")
+          .form-check.mb-4
+            =radio_button_tag(:history_type, 'show_summaries', @show_summaries, class: "form-check-input", type: 'radio', value: 'show_summaries')
+            =label_tag(:history_type_show_summaries, "Show commit summaries")
+          .form-group.mb-2
+            =label_tag(:start_date, "Commits made after or on...")
+            =date_field_tag(:start_date, @start_date, class: 'form-control')
+          .form-group.mb-4
+            =label_tag(:end_date, "Commits made before or on...")
+            =date_field_tag(:end_date, @end_date, class: 'form-control')  
+        .col-md
+          .form-group.mb-2
+            =label_tag(:computers, "Only show instances from...")
+            =select_tag(:computers, options_for_select(@computer_options, params[:computers].to_s), class: 'form-control')
+          .form-group.mb-2
+            =label_tag(:status, "Passage Status")
+            =select_tag(:status, raw("<option class='summary' value=4>Mixed</option><option class='summary' value=3>Multiple Checksums</option><option value=0>Passed</option>"), class: 'form-control')
+      .form-row
+        .col
+          =submit_tag("Search", class: 'btn btn-primary btn-block')
 .row
   .col
     -if @show_instances
+      .h3
+        Test instances from
+        %a.text-monospace.text-primary{href: user_computer_path(@computer.user, @computer)}= @computer.name
       .table-responsive.mt-2
         %table.table.table-hover.table-sm.text-center#test-detail
           %thead.thead-default
             %tr
+              %th.column-status Commit
               %th.column-status Status
-              %th.column-computer Computer
+              -# %th.column-computer Computer
               %th.column-date.d-none Date Uploaded
               %th.column-runtime Runtime
               %th.column-ram.d-none RAM Usage
@@ -46,8 +67,11 @@
             -@test_instances.each do |instance|
               -# %tr{class: @test_instance_classes[instance] + " clickable-row", "data-href": test_case_test_instance_path(@test_case, instance)}
               %tr
+                %td.column-commit
+                  -if instance.commit
+                    =link_to(instance.commit, test_case_commit_path(branch: params[:branch], sha: instance.commit.sha, test_case: @test_case.name), class: 'text-monospace')
                 %td.column-status{class: instance.passed ? 'text-success' : 'text-danger'}=instance.passage_status
-                %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
+                -# %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
                 %td.column-date.d-none=format_time(instance.created_at)
                 %td.column-runtime=instance.runtime_minutes.to_s + ' m'
                 %td.column-ram.d-none=format("%.2f", instance.rn_mem_GB) + ' GB'

@@ -60,32 +60,26 @@ class TestCase < ApplicationRecord
     name[0,17] + '...'
   end
 
-  def find_test_case_commits(search_params)
-    # start with blank query that we can chain from, but be sure to include
-    # commits with whatever we come up with
-    res = test_case_commits.includes(:commit)
-    if search_params[:start_date] || search_params[:end_date]
-      unless search_params[:start_date] && search_params[:end_date]
-        all_dates = test_case_commits.pluck('created_at')
-      end
-      start_date = search_params[:start_date] || all_dates.min
-      end_date = search_params[:end_date] || all_dates.max
-      res = res.where(created_at: start_date..end_date)
-    end
+  def find_test_case_commits(search_params, start_date, end_date)
+    # start with search just on dates; can chain other things before we hit
+    # the database    
+    commits = Commit.where(commit_time: start_date..end_date)
+    res = test_case_commits.includes(:commit).where(commit: commits)
     if search_params[:status]
-      res = res.where(status: status)
+      puts '*********************'
+      puts "filtering by status"
+      puts '*********************'
+      res = res.where(status: search_params[:status])
     end
     sort_query = search_params[:sort_query] || :created_at
     sort_order = search_params[:sort_order] || :desc
     res.order(sort_query => sort_order).page(search_params[:page])
   end
 
-  def find_instances(search_params)
-    start_date = search_params[:start_date] || test_instances.order(
-      created_at: :asc).first.created_at
-    end_date = search_params[:end_date] || test_instances.order(
-      created_at: :desc).first.created_at
-    res = test_instances.includes(:commit).where(created_at: start_date..end_date)
+  def find_instances(search_params, start_date, end_date)
+    commits = Commit.where(commit_time: start_date..end_date)
+    res = test_instances.includes(:commit, computer: :user).where(
+      commit: commits)
 
     # which computer/computers to look for results from
     computers = []
@@ -101,10 +95,21 @@ class TestCase < ApplicationRecord
       computers = [computer_ids.max_by { |id| frequencies[id] }]
     end
 
-    res.where(computer_id: computers)
+    res = res.where(computer_id: computers)
     sort_query = search_params[:sort_query] || :created_at
     sort_order = search_params[:sort_order] || :desc
     res.order(sort_query => sort_order).page(search_params[:page])
+  end
+
+  def sorted_computers(start_date, end_date)
+    commits = Commit.where(commit_time: start_date..end_date)
+    all_ids = test_instances.where(commit: commits).pluck(:computer_id)
+    id_counts = {}
+    all_ids.uniq.each do |id|
+      id_counts[id] = all_ids.count(id)
+    end
+    all_ids.sort! { |id1, id2| -(id_counts[id1] <=> id_counts[id2]) }
+    Computer.includes(:user).find(all_ids)
   end
 
   # list of version numbers with test instances that have failed since a
