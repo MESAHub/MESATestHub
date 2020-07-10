@@ -1,23 +1,38 @@
 %p#notice= notice
 .row
   .col
-    %h2
-      History for
-      %span.text-primary.text-monospace= @test_case.name
-      %small.text-muted
-        =surround '(', ')' do
-          %span.text-monospace= @test_case.module
-.row
+    .dropdown.mb-5
+      %h2
+        History for  
+        .btn-group
+          %button.btn.btn-outline-primary.btn-lg.dropdown-toggle#test-case-select{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
+            %span.text-monospace#selected-test-case= @test_case.name
+            %small.text-muted
+              =surround '(', ')' do
+                %span.text-monospace=@test_case.module
+          .dropdown-menu{'aria-labelledby' => 'test-case-select'}
+            - @test_cases.each do |tc|
+              =link_to((tc.name + " <small class='text-muted'>(#{tc.module})</small>").html_safe, test_case_path(branch: params[:branch], test_case: tc.name, module: tc.module), class: "text-monospace dropdown-item text-primary#{tc == @test_case ? ' active' : ''}")
+        on
+        .btn-group
+          %button.btn.btn-outline-primary.btn-lg.dropdown-toggle#branch-select{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
+            %span.small.text-muted Branch:
+            %samp= @branch
+          .dropdown-menu{'aria-labelledby' => 'branch-select'}
+            - @unmerged_branches.each do |branch|
+              =link_to branch, test_case_path(branch: branch, test_case: params[:test_case], module: params[:module]), class: "dropdown-item text-monospace text-primary#{branch == params[:branch] ? 'active' : ''}"
+        
+.row.mb-4
   .col
     = form_with method: :get, local: true, class: 'mb-4' do
       .form-row
         .col-md
           .form-check
             =radio_button_tag(:history_type, 'show_instances', @show_instances, class: "form-check-input", type: 'radio', value: 'show_instances', checked: @show_instances ? 'checked' : '' )
-            =label_tag(:history_type_show_instances, "Show individual submission")
+            =label_tag(:history_type_show_instances, "Show individual submissions (1 computer)")
           .form-check.mb-4
             =radio_button_tag(:history_type, 'show_summaries', @show_summaries, class: "form-check-input", type: 'radio', value: 'show_summaries')
-            =label_tag(:history_type_show_summaries, "Show commit summaries")
+            =label_tag(:history_type_show_summaries, "Show summaries by commit")
           .form-group.mb-2
             =label_tag(:start_date, "Commits made after or on...")
             =date_field_tag(:start_date, @start_date, class: 'form-control')
@@ -27,92 +42,167 @@
         .col-md
           .form-group.mb-2
             =label_tag(:computers, "Only show instances from...")
-            =select_tag(:computers, options_for_select(@computer_options, params[:computers].to_s), class: 'form-control')
-          .form-group.mb-2
+            =select_tag(:computers, options_for_select(@computer_options, params[:computers].to_s), class: 'form-control', disabled: (params[:history_type] == 'show_summaries'))
+          .form-group.mt-2
             =label_tag(:status, "Passage Status")
-            =select_tag(:status, raw("<option class='summary' value=4>Mixed</option><option class='summary' value=3>Multiple Checksums</option><option value=0>Passed</option>"), class: 'form-control')
-      .form-row
-        .col
-          =submit_tag("Search", class: 'btn btn-primary btn-block')
-.row
-  .col
-    -if @show_instances
+            =select_tag(:status, raw(@status_options), class: 'form-control')
+          =submit_tag("Search", class: 'btn btn-primary btn-block btn-lg')
+-if @show_instances
+  .row
+    .col
+      -if @computer
+        .h3
+          Test instances from
+          %a.text-monospace.text-primary{href: user_computer_path(@computer.user, @computer)}= @computer.name
+  .row
+    .col
+      - if @test_instances.empty?
+        .alert.alert-warning.align-middle
+          %h4
+            No submissions 
+            - if @computer
+              from
+              %span.text-monospace=@computer.name
+            match this query.
+      - else
+        .form-check.mt-3
+          .row
+            .col-sm-4.mb-3
+              %h5
+                Default Columns
+                %small.text-muted Check/uncheck to show/hide
+              .row
+                -@default_column_visibility.each_slice(7) do |columns|
+                  .col
+                    -columns.each do |klass, checked|
+                      .mr-1
+                        %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: klass, id: klass.sub('column-', 'check-'), checked: checked, 'data-inlist' => 'default'}
+                        %label.form-check-label{for: klass.sub('column-', 'check-')}= @default_column_check_titles[klass]
+            .col-sm-8
+              %h5
+                Test Case-Specific Columns
+                %small.text-muted Check/uncheck to show/hide
+              .row
+                - @inlist_columns.each_pair do |inlist, columns|
+                  .col
+                    .mb-2
+                      %input.form-check-input.inlist-switch.mr-0{type: 'checkbox', value: inlist, id: "check-#{inlist}", checked: false, 'data-inlist' => inlist}
+                      %label.form-check-label{for: "check-#{inlist}"}
+                        %h5.text-monospace=inlist.sub(/^inlist_/, '')
+                    - columns.each do |column|
+                      .mr-1
+                        %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: "#{inlist}-#{column}", id: "check-#{inlist}-#{column}", checked: false, 'data-inlist' => inlist}
+                        -if @default_column_check_titles.keys.include? column
+                          %label.form-check-label{for: "check-#{inlist}-#{column}"}= @default_column_check_titles[column]
+                        -else
+                          %label.form-check-label.text-monospace{for: "check-#{inlist}-#{column}"}= column
+              -# - @specific_columns.each do |klass, checked|
+              -#   %div.mr-5
+              -#     %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: klass, id: klass.sub('column-', 'check-'), checked: checked}
+              -#     %label.form-check-label{for: klass.sub('column-', 'check-')} 
+              -#       = klass.sub('column-', '').titleize
+        -# %p
+          # %i= page_entries_info @test_instances
+        = paginate @test_instances 
+       
+        .table-responsive.mt-2
+          %table.table.table-hover.table-sm.text-center#test-detail
+            %thead.thead-default
+              %tr
+                %th{colspan: @default_width, id: 'header-default'} Test-wide data
+                -@inlists.each do |inlist|
+                  %th.text-monospace.d-none{colspan: 0, id: "header-#{inlist}"}=inlist.sub('inlist_', '')
+              %tr
+                -@default_columns.each do |col|
+                  %th{class: "column-#{col} header-column-default" + (@default_column_visibility[col] ? '' : ' d-none')}
+                    =link_to(@default_column_titles[col], url_for(@current_params.merge(sort_query: col, sort_order: @orders[col])))
+
+                - @inlist_columns.each_pair do |inlist, names|
+                  -names.each do |specific_col|
+                    -if @default_column_titles.keys.include? specific_col
+                      %th.d-none{class: "column-#{inlist}-#{specific_col} header-column-#{inlist}"}
+                        =@default_column_titles[specific_col]
+                    -else
+                      %th.text-monospace.d-none{class: "column-#{inlist}-#{specific_col} header-column-#{inlist}"}= specific_col
+
+            %tbody
+              -@test_instances.each do |instance|
+                -# %tr{class: @test_instance_classes[instance] + " clickable-row", "data-href": test_case_test_instance_path(@test_case, instance)}
+                %tr
+                  %td.align-middle.column-commit
+                    -if instance.commit
+                      %a.btn.btn-sm{href: test_case_commit_path(branch: params[:branch], test_case: params[:test_case], module: @test_case.module, sha: instance.commit.short_sha), class: @btn_classes[instance.test_case_commit.status]}
+                        %span.text-reset.text-monospace=instance.commit.short_sha
+                  %td.align-middle.column-status{class: instance.passed ? 'text-success' : 'text-danger'}=instance.passage_status
+                  -# %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
+                  %td.align-middle.column-date.d-none=format_time(instance.created_at)
+                  %td.align-middle.column-runtime=instance.runtime_minutes.to_s
+                  %td.align-middle.column-ram.d-none=format("%.2f", instance.rn_mem_GB) + ' GB'
+                  %td.align-middle.column-checksum=instance.checksum[(-7..-1)] if instance.checksum
+                  %td.align-middle.column-threads.d-none=instance.omp_num_threads
+                  %td.align-middle.column-spec.d-none=instance.computer_specification
+                  %td.align-middle.column-steps=instance.steps
+                  %td.align-middle.column-retries=instance.retries
+                  %td.align-middle.column-redos.d-none= instance.redos
+                  %td.align-middle.column-solver_iterations.d-none= instance.solver_iterations
+                  %td.align-middle.column-solver_calls_made.d-none= instance.solver_calls_made
+                  %td.align-middle.column-solver_calls_failed.d-none= instance.solver_calls_failed
+                  %td.align-middle.column-log_rel_run_E_err.d-none= instance.log_rel_run_E_err
+
+                  -@inlist_columns.each do |inlist, columns|
+                    - columns.each do |column|
+                      %td.d-none{class: "column-#{inlist}-#{column}"}
+                        = format('%0.3g', instance.get_inlist_data(inlist, column))
+  .row
+    .col
+      = paginate @test_instances        
+- else
+  .row
+    .col
       .h3
-        Test instances from
-        %a.text-monospace.text-primary{href: user_computer_path(@computer.user, @computer)}= @computer.name
-      .table-responsive.mt-2
-        %table.table.table-hover.table-sm.text-center#test-detail
-          %thead.thead-default
-            %tr
-              %th.column-status Commit
-              %th.column-status Status
-              -# %th.column-computer Computer
-              %th.column-date.d-none Date Uploaded
-              %th.column-runtime Runtime
-              %th.column-ram.d-none RAM Usage
-              %th.column-checksum Checksum
-              %th.column-threads.d-none Threads
-              %th.column-spec.d-none Computer Specification
-              %th.column-steps Steps
-              %th.column-retries Retries
-              %th.column-redos.d-none Redos
-              %th.column-solver_iterations.d-none Iterations
-              %th.column-solver_calls_made.d-none Calls Made
-              %th.column-solver_calls_failed.d-none Calls Failed
-              %th.column-log_rel_run_E_err.d-none Log Rel. E Err.
-              - @specific_columns.each do |specific_col, visible|
-                %th.text-monospace{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}= specific_col
+        Commit summaries for
+        %span.text-monospace.text-primary= @test_case.name
+  .row
+    .col
+      - if @test_case_commits.empty?
+        .alert.alert-warning.align-middle
+          %h4
+            No data from
+            %span.text-primary.text-monospace=@test_case.name
+            matches your query.
+      - else
+        %p
+          %i= page_entries_info @test_case_commits
+        = paginate @test_case_commits        
 
-          %tbody
-            -@test_instances.each do |instance|
-              -# %tr{class: @test_instance_classes[instance] + " clickable-row", "data-href": test_case_test_instance_path(@test_case, instance)}
+        .table-responsive.mt-2
+          %table.table.table-hover.table-sm.text-center#test-detail
+            %thead.thead-default
               %tr
-                %td.column-commit
-                  -if instance.commit
-                    =link_to(instance.commit, test_case_commit_path(branch: params[:branch], sha: instance.commit.sha, test_case: @test_case.name), class: 'text-monospace')
-                %td.column-status{class: instance.passed ? 'text-success' : 'text-danger'}=instance.passage_status
-                -# %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
-                %td.column-date.d-none=format_time(instance.created_at)
-                %td.column-runtime=instance.runtime_minutes.to_s + ' m'
-                %td.column-ram.d-none=format("%.2f", instance.rn_mem_GB) + ' GB'
-                %td.column-checksum=instance.checksum[(-7..-1)] if instance.checksum
-                %td.column-threads.d-none=instance.omp_num_threads
-                %td.column-spec.d-none=instance.computer_specification
-                %td.column-steps=instance.steps
-                %td.column-retries=instance.retries
-                %td.column-redos.d-none= instance.redos
-                %td.column-solver_iterations.d-none= instance.solver_iterations
-                %td.column-solver_calls_made.d-none= instance.solver_calls_made
-                %td.column-solver_calls_failed.d-none= instance.solver_calls_failed
-                %td.column-log_rel_run_E_err.d-none= instance.log_rel_run_E_err
-
-                - @specific_columns.each do |specific_col, visible|
-                  %td{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}= format('%0.3g', instance.get_data(specific_col))
-    - else
-      .table-responsive.mt-2
-        %table.table.table-hover.table-sm.text-center#test-detail
-          %thead.thead-default
-            %tr
-              %th.column-commit Commit
-              %th.column-status 
-                =link_to('Status', url_for(sort_query: @status_params[:sort_query], sort_order: @status_params[:sort_order]))
-              %th.column-date
-                =link_to('Date Created', url_for(sort_query: @date_params[:sort_query], sort_order: @date_params[:sort_order]))
-          %tbody
-            -@test_case_commits.each do |tcc|
-              %tr
-                %td.column-commit.text-primary.text-monospace
-                  =link_to(tcc.commit, test_case_commit_path(branch: params[:branch], sha: tcc.commit.short_sha, test_case: params[:test_case], module: params[:module]))
-                %td.column-status
-                  -case tcc.status
-                  -when 3
-                    %span.text-warning Mixed
-                  -when 2
-                    %span.text-primary Mult. Checksums
-                  -when 1
-                    %span.text-danger Failing
-                  -when 0
-                    %span.text-success Passing
-                  -else
-                    %span.text-info Untested
-                %td.column-date= format_time(tcc.created_at)
+                %th.column-commit Commit
+                %th.column-status 
+                  =link_to('Status', url_for(@current_params.merge({sort_query: @status_params[:sort_query], sort_order: @status_params[:sort_order]})))
+                %th.column-date
+                  =link_to('Date Created', url_for(@current_params.merge(sort_query: @date_params[:sort_query], sort_order: @date_params[:sort_order])))
+            %tbody
+              -@test_case_commits.each do |tcc|
+                %tr
+                  %td.column-commit
+                    %a.btn.btn-sm{href: test_case_commit_path(branch: params[:branch], test_case: params[:test_case], module: @test_case.module, sha: tcc.commit.short_sha), class: @btn_classes[tcc.status]}
+                      %span.text-reset.text-monospace=tcc.commit.short_sha
+                  %td.column-status
+                    -case tcc.status
+                    -when 3
+                      %span.text-warning Mixed
+                    -when 2
+                      %span.text-primary Mult. Checksums
+                    -when 1
+                      %span.text-danger Failing
+                    -when 0
+                      %span.text-success Passing
+                    -else
+                      %span.text-info Untested
+                  %td.column-date= format_time(tcc.created_at)
+  .row
+    .col
+      = paginate @test_case_commits        

@@ -18,6 +18,18 @@ version_select =
     $('#version_select').change(-> this.form.submit())
     $('#test_case_select').change(-> this.form.submit())
 
+history_form = 
+  setup : ->
+    history_form.adjust_computer_select()
+  adjust_computer_select: ->
+    $('#history_type_show_summaries').click ->
+      $('#computers').prop("disabled", true)
+      $('.summary').prop("disabled", false)
+    $('#history_type_show_instances').click ->
+      $('#computers').prop("disabled", false)
+      $('.summary').prop("disabled", true)
+
 $ ->
   index.setup()
   version_select.setup()
+  history_form.setup()

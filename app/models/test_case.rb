@@ -13,6 +13,21 @@ class TestCase < ApplicationRecord
     %w[star binary astero]
   end
 
+  def self.ordered_cases(includes: nil)
+    all_cases = if includes.nil?
+                  self.all.to_a
+                else
+                  self.includes(includes).all.to_a
+                end
+    res = []
+    self.modules.each do |mod|
+      res += all_cases.select { |tc| tc.module == mod }.sort do |tc1, tc2|
+        tc1.name <=> tc2.name
+      end
+    end
+    res
+  end
+
   validates_inclusion_of :module, in: TestCase.modules, allow_blank: true
 
   # def self.find_by_version(version = :all)
@@ -63,12 +78,10 @@ class TestCase < ApplicationRecord
   def find_test_case_commits(search_params, start_date, end_date)
     # start with search just on dates; can chain other things before we hit
     # the database    
-    commits = Commit.where(commit_time: start_date..end_date)
-    res = test_case_commits.includes(:commit).where(commit: commits)
-    if search_params[:status]
-      puts '*********************'
-      puts "filtering by status"
-      puts '*********************'
+    res = test_case_commits.includes(:commit).where(commits:
+      {commit_time: start_date..end_date,
+       sha: Commit.shas_in_branch(branch: search_params[:branch])})
+    unless search_params[:status].nil? or search_params[:status].empty?
       res = res.where(status: search_params[:status])
     end
     sort_query = search_params[:sort_query] || :created_at
@@ -77,17 +90,22 @@ class TestCase < ApplicationRecord
   end
 
   def find_instances(search_params, start_date, end_date)
-    commits = Commit.where(commit_time: start_date..end_date)
-    res = test_instances.includes(:commit, computer: :user).where(
-      commit: commits)
+    # build this up and then execute only once or twice
+    query = {
+      commits: {commit_time: start_date..end_date,
+                sha: Commit.shas_in_branch(branch: search_params[:branch])}
+      }
+    return nil if test_instances.joins(:commit).where(query).count == 0
 
     # which computer/computers to look for results from
     computers = []
     if search_params[:computers]
-      computers = Computer.where(name: search_params[:computers]).pluck(:id)
+      computers = Computer.select(:id).where(
+        name: search_params[:computers]).pluck(:id)
     else
       # if no computer is selected, only show computer with most computers
-      computer_ids = res.pluck(:computer_id)
+      computer_ids = test_instances.joins(:commit).select(:computer_id).where(query).pluck(
+        :computer_id)
       frequencies = Hash.new(0)
       computer_ids.each do |id|
         frequencies[id] += 1
@@ -95,14 +113,79 @@ class TestCase < ApplicationRecord
       computers = [computer_ids.max_by { |id| frequencies[id] }]
     end
 
-    res = res.where(computer_id: computers)
-    sort_query = search_params[:sort_query] || :created_at
-    sort_order = search_params[:sort_order] || :desc
-    res.order(sort_query => sort_order).page(search_params[:page])
+    query[:computer_id] = computers
+    unless search_params[:status].nil? || search_params[:status].empty?
+      case search_params[:status].to_i
+      when 0 then query[:passed] = true
+      when 1 then query[:passed] = false
+      end
+    end
+
+    sort_query = ''
+    # by default, with most recent commits and instances first
+    if search_params[:sort_query].nil? || search_params[:sort_query].empty?
+      sort_query = 'commits.commit_time DESC, test_instances.created_at DESC'
+    else
+      # enforce a valid sort order to prevent SQL injection
+      sort_order = search_params[:sort_order] || 'ASC'
+      sort_order.upcase!
+      unless %w{ASC DESC}.include? sort_order
+        sort_order = 'ASC'
+      end
+
+      # dictionary between what was passed in (if anything), and what the
+      # database understands. This is dumb and clunky.
+      # 
+      # For most cases, do the desired sorting, and then fall back to
+      # descending timestamps (newest first). Notable exceptions are commit and
+      # creation timestamp ordering, which respect user input for ordering.
+      sort_query = case search_params[:sort_query].to_s.downcase
+      when "commit" 
+        "commits.commit_time #{sort_order}, "\
+        "test_instances.created_at #{sort_order}"
+      when "status" 
+        "test_instances.passed #{sort_order}, test_instances.created_at DESC"
+      when "date" 
+        "test_instances.created_at #{sort_order}"
+      when "runtime" 
+        "test_instances.runtime_minutes #{sort_order}, "\
+        "test_instances.created_at DESC"
+      when "ram" 
+        "test_instances.mem_rn #{sort_order}, test_instances.created_at DESC"
+      when "spec" 
+        "test_instances.computer_specification #{sort_order}, "\
+        "test_instances.created_at DESC"
+      # when "log_rel_run_e_err"
+      #   "test_instances.log_rel_run_E_err #{sort_order}, "\
+      #   "test_instances.created_at DESC"
+      else
+        # not one of the special cases, but we need to MAKE SURE THAT THE ENTRY
+        # IS A VALID COLUMN, otherwise we are vulnerable to SQL injection
+        # attack, where a clever choice of sort_query could drop whole tables
+        if TestInstance.column_names.include?(search_params[:sort_query])
+          "test_instances.#{search_params[:sort_query]} #{sort_order}, "\
+          "test_instances.created_at DESC"
+        # if not a default column, maybe it's a custom column
+        elsif test_instances.inlist_data.select(:name).distinct.
+          include?(search_params[:sort_query])
+          "#{search_params[:sort_query].to_s} #{sort_order}, test_instances.created_at DESC"
+        else
+          # exhausted all possibilites, just default to created_at and hope
+          # for the best
+          'commits.commit_time DESC, test_instances.created_at DESC'
+        end
+      end
+    end
+    test_instances.
+      includes(:commit, :instance_inlists, :inlist_data, computer: :user).
+      where(query).
+      order(sort_query).
+      page(search_params[:page])
   end
 
-  def sorted_computers(start_date, end_date)
-    commits = Commit.where(commit_time: start_date..end_date)
+  def sorted_computers(branch, start_date, end_date)
+    commits = Commit.where(sha: Commit.shas_in_branch(branch: branch),
+      commit_time: start_date..end_date)
     all_ids = test_instances.where(commit: commits).pluck(:computer_id)
     id_counts = {}
     all_ids.uniq.each do |id|

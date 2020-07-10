@@ -100,6 +100,10 @@
   .col
     %a.btn.btn-outline-primary.btn-lg.btn-block{href: commit_path(branch: params[:branch], sha: params[:sha])}
       %span.text-reset View Commit on TestHub
+  .col
+    %a.btn.btn-outline-primary.btn-lg.btn-block{href: test_case_path(branch: params[:branch], test_case: params[:test_case], module: params[:module])}
+      %span.text-reset View History on TestHub
+
 
 
 .row.mt-5

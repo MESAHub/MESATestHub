@@ -33,7 +33,7 @@ Rails.application.routes.draw do
 
   # for viewing data for one test case over many commits
   get '/:branch/test_cases/:module/:test_case', to: 'test_cases#show',
-  as: 'test_case'
+  as: 'test_case', test_case: /[^\/]+/
 
   # put this after the test case commit matcher since this is more general
   get '/:branch/commits/:sha', to: 'commits#show', as: 'commit'

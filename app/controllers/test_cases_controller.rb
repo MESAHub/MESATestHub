@@ -81,6 +81,34 @@ class TestCasesController < ApplicationController
   # GET /test_cases/1
   # GET /test_cases/1.json
   def show
+    @test_cases = TestCase.ordered_cases
+    @unmerged_branches = Commit.unmerged_branches
+    @merged_branches = Commit.merged_branches
+    @branch = params[:branch] || 'master'
+
+    # status selection menu options
+    @status_menu = {
+      'Mixed' => {value: 3, klass: "summary"},
+      'Multiple Checksums' => {value: 2, klass: "summary"},
+      'Failing' => {value: 1, klass: ""},
+      'Passing' => {value: 0, klass: ""},
+      'Untested' => {value: -1, klass: "summary"}
+    }
+    @status_options = ""
+    @status_menu.keys.sort do |a, b|
+      -(@status_menu[a][:value] <=> @status_menu[b][:value])
+    end.each do |option|
+      data = @status_menu[option]
+      selected = data[:value].to_s == params[:status]
+      @status_options += "<option value=#{data[:value]}" \
+        "#{data[:klass].empty? ? '' : ' class=' + data[:klass]}" \
+        "#{selected ? " selected" : ''}"\
+        "#{(data[:klass].include?('summary') &&
+            params[:history_type] == 'show_instances') ? " disabled" : ''}>"\
+        "#{option}</option>"
+    end
+    @status_options = "<option value=''>Any Status</option>" + @status_options
+
     # default start date is 30 days ago
     @end_date = if (test_case_params[:end_date].nil? ||
                     test_case_params[:end_date].empty?)
@@ -99,8 +127,13 @@ class TestCasesController < ApplicationController
       @show_summaries = true
 
       @test_case_commits = @test_case.find_test_case_commits(test_case_params.permit(
-        :status, :sort_query, :sort_order, :page), @start_date, @end_date)
+        :status, :sort_query, :sort_order, :page, :branch), @start_date, @end_date)
 
+      # These "orders" tell the table headings what they should do if they
+      # are clicked on. They do NOT mean anything for the ordering of test
+      # case commits on the current page, which was already dealt with when
+      # the commits were ordered from the database
+      # 
       # if order is set to ascending, switch it. Otherwise pick default
       # value of descending
       status_order = if (test_case_params[:sort_order] == 'desc') && test_case_params[:sort_query] == 'status'
@@ -109,43 +142,175 @@ class TestCasesController < ApplicationController
                        :desc
                      end
       @status_params = {sort_query: :status, sort_order: status_order}
-      date_order = if (test_case_params[:sort_order] == 'desc') && test_case_params[:sort_query] == 'created_at'
+      date_order = if test_case_params[:sort_order].nil? ||
+                      test_case_params[:sort_order].empty? ||
+                      ((test_case_params[:sort_order] == 'desc') &&
+                       (test_case_params[:sort_query] == 'created_at'))
                        :asc
                    else
                        :desc
                    end
       @date_params = {sort_query: :created_at, sort_order: date_order}
     else
-      @test_instances = @test_case.find_instances(test_case_params.permit(:computers,
-        :sort_query, :sort_order, :page), @start_date, @end_date)
+      @test_instances = @test_case.find_instances(test_case_params.permit(
+        :computers, :sort_query, :sort_order, :status, :page, :branch),
+        @start_date, @end_date) || []
       @show_instances = true
       @show_summaries = false
-      @computer = @test_instances.first.computer
+      @computer = if @test_instances.empty?
+                    nil
+                  else
+                    Computer.includes(:user).find(@test_instances.first.computer_id)
+                  end
+
+      # all unique inlist names. we will organize columns on a per-inlist
+      # basis, so we need these. Order is unfortunately arbitrary
+      @inlists = []
+      @test_instances.each do |ti|
+        @inlists += ti.instance_inlists.pluck(:inlist)
+      end
+      # this will have many duplicates
+      @inlists.uniq!
+
+      # for consistency, sort alphabetically. Almost certainly isn't in
+      # order of how inlists work in the test case
+      @inlists.sort!
+
+      # get columns specific to each inlist
+      @inlist_columns = {}
+      @inlists.each do |inlist|
+        # all inlists have these columns
+        @inlist_columns[inlist] = %w{runtime steps retries redos 
+          solver_iterations solver_calls_made solver_calls_failed
+          log_rel_run_E_err}
+
+        # now get custom ones
+        extras = []
+
+        # only get "this" inlist from each test instance. Need to handle
+        # the case where the inlist doesn't exist, though
+        @test_instances.each do |ti|
+          to_access = ti.instance_inlists.select do |instance_inlist|
+            instance_inlist.inlist == inlist
+          end
+          next if to_access.empty?
+
+          # want the inlist object itself, not an array that contains it
+          to_access = to_access.first
+          extras += to_access.inlist_data.pluck(:name)
+        end
+        # same uniqueness/sorting situation as with inlists. Might not be
+        extras.uniq!
+        extras.sort!
+        @inlist_columns[inlist] += extras
+      end
+
+
+
+      @specific_columns = @test_instances.map do |ti|
+        ti.inlist_data.pluck(:name)
+      end.flatten.uniq.sort
+
+      # These "orders" tell the table headings what they should do if they
+      # are clicked on. They do NOT mean anything for the ordering of test
+      # instances on the current page, which was already dealt with when
+      # they were ordered from the database
+      def get_order(param_name)
+        if test_case_params[:sort_order] == 'ASC' &&
+           test_case_params[:sort_query] == param_name
+          'DESC'
+        else
+          'ASC'
+        end
+      end
+
+      # names of default columns in the table of instances, can be toggled on
+      # and off
+      @default_columns = %w{commit status date runtime ram checksum threads} +
+                         %w{spec steps retries redos solver_iterations} + 
+                         %w{solver_calls_made solver_calls_failed}
+      @default_column_visibility = {
+        'commit' => true,
+        'status' => true,
+        'date' => false,
+        'runtime' => true,
+        'ram' => false,
+        'checksum' => true,
+        'threads' => false,
+        'spec' => false,
+        'steps' => true,
+        'retries' => true,
+        'redos' => false,
+        'solver_iterations' => false,
+        'solver_calls_made' => false,
+        'solver_calls_failed' => false,
+      }
+
+      @default_column_titles = {
+        'commit' => 'Commit',
+        'status' => 'Status',
+        'date' => 'Date Uploaded',
+        'runtime' => 'Runtime [min]',
+        'ram' => 'RAM Usage',
+        'checksum' => 'Checksum',
+        'threads' => 'Threads',
+        'spec' => 'Computer Specification',
+        'steps' => 'Steps',
+        'retries' => 'Retries',
+        'redos' => 'Redos',
+        'solver_iterations' => 'Iterations',
+        'solver_calls_made' => 'Calls Made',
+        'solver_calls_failed' => 'Calls Failed',
+      }
+
+      # names for columns as they appear in the checkbox form
+      @default_column_check_titles = {
+        'commit' => 'Commit',
+        'status' => 'Status',
+        'date' => 'Date Uploaded',
+        'runtime' => 'Runtime',
+        'ram' => 'RAM Usage',
+        'checksum' => 'Checksum',
+        'threads' => 'Threads',
+        'spec' => 'Computer Spec.',
+        'steps' => 'Steps',
+        'retries' => 'Retries',
+        'redos' => 'Redos',
+        'solver_iterations' => 'Solver Iterations',
+        'solver_calls_made' => 'Solver Calls Made',
+        'solver_calls_failed' => 'Solver Calls Failed',
+        'log_rel_run_E_err' => 'Log Rel. Run E Err.'      
+      }
+
+      # how many columns are shown by default, helps style the table
+      @default_width = @default_columns.select do |col|
+        @default_column_visibility[col]
+      end.count
+
+      @orders = {}
+      @default_columns.each { |col| @orders[col] = get_order(col) }
+
+      @commit_order = get_order('commit')
+      @status_order = get_order('status')
+      @runtime_order = get_order('runtime')
     end
 
-    @computer_options = @test_case.sorted_computers(@start_date, @end_date)
-
-    # names of default columns in the table of instances, can be toggled on
-    # and off
-    @default_columns = {
-      'status' => true,
-      'computer' => true,
-      'date' => false,
-      'runtime' => true,
-      'ram' => false,
-      'checksum' => true,
-      'threads' => false,
-      'spec' => false,
-      'steps' => true,
-      'retries' => true,
-      'redos' => false,
-      'solver_iterations' => false,
-      'solver_calls_made' => false,
-      'solver_calls_failed' => false,
-      'log_rel_run_E_err' => false
+    # for styling buttons that take you to test case commits
+    @btn_classes = {
+      -1 => 'btn-outline-info',
+      0 => 'btn-outline-success',
+      1 => 'btn-outline-danger',
+      2 => 'btn-outline-primary',
+      3 => 'btn-outline-warning',
     }
 
-    @specific_columns = []
+    # all computers for a given branch and range of dates that have any
+    # instances of this test case. Used to populate dropdown.
+    @computer_options = @test_case.sorted_computers(@branch, @start_date, @end_date)
+    
+    # make current params available to view so we can merge into them to
+    # clean up links
+    @current_params = test_case_params
   end
 
   private
@@ -180,7 +345,7 @@ class TestCasesController < ApplicationController
   end
 
   def test_case_params
-    params.permit(:branch, :module, :test_case, :history_type, :utf8, :commit,
+    params.permit(:branch, :module, :test_case, :history_type, :utf8,
                   :computers, :start_date, :end_date, :sort_query, :sort_order,
                   :page, :status)
   end

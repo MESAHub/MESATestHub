@@ -30,6 +30,7 @@ class TestInstance < ApplicationRecord
   has_many :instance_inlists, dependent: :destroy
   has_many :inlist_data, through: :instance_inlists
 
+  paginates_per 100
 
   validates_presence_of :computer_id, :test_case_id, :compiler
   validates_inclusion_of :success_type, in: @@success_types.keys,
@@ -116,7 +117,6 @@ class TestInstance < ApplicationRecord
     instance.solver_iterations = 0
     instance.solver_calls_failed = 0
     instance.solver_calls_made = 0
-    instance.log_rel_run_E_err = 0.0
 
     # now we need to go through the individual inlists, create them, and
     # associate them with the test instance
@@ -147,13 +147,8 @@ class TestInstance < ApplicationRecord
         instance.solver_calls_failed += inlist.solver_calls_failed if inlist.solver_calls_failed
         instance.solver_calls_made += inlist.solver_calls_made if inlist.solver_calls_made
         # adding linear quantities; will take log at the end
-        instance.log_rel_run_E_err += 10**inlist.log_rel_run_E_err if inlist.log_rel_run_E_err
       end
     end
-
-    # safely take log at the end
-    instance.log_rel_run_E_err = Math.log10(
-      [1e-99, instance.log_rel_run_E_err].max)
 
     # test case commit automatically set by +#set_tcv_or_tcc+ at validation
     instance
@@ -536,6 +531,43 @@ class TestInstance < ApplicationRecord
   def data_names
     inlist_data.load unless inlist_data.loaded?
     test_data.pluck(:name).uniq
+  end
+
+  def get_inlist_data(inlist_name, *data_names)
+    instance_inlists.load unless instance_inlists.loaded?
+
+    # fix stupid runtime/runtime_minutes thing. This is hideous
+    data_names.map! { |col| col == 'runtime' ? 'runtime_minutes' : col }
+
+    # find inlist with the right name. This should give an array
+    inlist = instance_inlists.select do |instance_inlist|
+      instance_inlist.inlist == inlist_name
+    end
+
+    # bail out if we got a bad inlist
+    return nil if inlist.empty?
+
+    # just get the one inlist; it must be unique, so it's the only one
+    inlist = inlist.first
+
+    if data_names.length == 1
+      if InstanceInlist.column_names.include? data_names[0]
+        inlist.send(data_names[0].to_sym)
+      else
+        data = inlist.inlist_data.select { |datum| datum.name == data_names[0] }
+        return nil if data.empty?
+        data.first.val
+      end
+    else
+      data_names.map do |data_name|
+        data = inlist.inlist_data.select { |datum| datum.name == data_name }
+        if data.empty?
+          nil
+        else
+          data.first.val
+        end
+      end
+    end
   end
 
   def get_data(*data_names)
