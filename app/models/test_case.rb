@@ -78,9 +78,10 @@ class TestCase < ApplicationRecord
   def find_test_case_commits(search_params, start_date, end_date)
     # start with search just on dates; can chain other things before we hit
     # the database    
-    res = test_case_commits.includes(:commit).where(commits:
-      {commit_time: start_date..end_date,
-       sha: Commit.shas_in_branch(branch: search_params[:branch])})
+    res = test_case_commits.includes(:commit, 
+        test_instances: {instance_inlists: :inlist_data}).where(commits:
+          {commit_time: start_date..end_date,
+           sha: Commit.shas_in_branch(branch: search_params[:branch])})
     unless search_params[:status].nil? or search_params[:status].empty?
       res = res.where(status: search_params[:status])
     end

@@ -18,6 +18,24 @@ version_select =
     $('#version_select').change(-> this.form.submit())
     $('#test_case_select').change(-> this.form.submit())
 
+test_case_select = 
+  setup: ->
+    test_case_select.search_field()
+  search_field: ->
+    $('#test-case-select').click( ->
+      $('#tc-search').focus()
+    )
+    $('#tc-search').on('input', ->
+      self = $(this)
+      $('.tc-option').each( ->
+        opt = $(this)
+        if opt.text().includes(self.val())
+          opt.removeClass('d-none')
+        else
+          opt.addClass('d-none')
+      )
+    )
+
 history_form = 
   setup : ->
     history_form.adjust_computer_select()
@@ -33,3 +51,4 @@ $ ->
   index.setup()
   version_select.setup()
   history_form.setup()
+  test_case_select.setup()

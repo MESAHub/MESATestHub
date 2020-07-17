@@ -57,8 +57,12 @@
                 =surround '(', ')' do
                   %span.text-monospace=@test_case.module
             .dropdown-menu
+              %form.px-2.my-0
+                .form-group
+                  %input.form-control-lg.w-100#tc-search{type: 'text', placeholder: 'Search Test Cases'}
+              .dropdown-divider
               - @commit_tccs.each do |tcc|
-                =link_to((tcc.test_case.name + "<small class='text-muted'>(#{tcc.test_case.module})</small>").html_safe, test_case_commit_path(branch: params[:branch], sha: params[:sha], test_case: tcc.test_case.name, module: params[:module]), class: "text-monospace dropdown-item")
+                =link_to((tcc.test_case.name + "<small class='text-muted'>(#{tcc.test_case.module})</small>").html_safe, test_case_commit_path(branch: params[:branch], sha: params[:sha], test_case: tcc.test_case.name, module: params[:module]), class: "text-monospace dropdown-item tc-option text-primary")
             is 
             %span{class: "#{@commit_class} font-weight-bold"}=@commit_status.downcase
             in 

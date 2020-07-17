@@ -540,19 +540,20 @@ class TestInstance < ApplicationRecord
     data_names.map! { |col| col == 'runtime' ? 'runtime_minutes' : col }
 
     # find inlist with the right name. This should give an array
-    inlist = instance_inlists.select do |instance_inlist|
-      instance_inlist.inlist == inlist_name
+    inlist = nil
+    instance_inlists.each do |instance_inlist|
+      if (instance_inlist.inlist == inlist_name)
+        inlist = instance_inlist
+        break
+      end
     end
 
     # bail out if we got a bad inlist
-    return nil if inlist.empty?
-
-    # just get the one inlist; it must be unique, so it's the only one
-    inlist = inlist.first
+    return nil if inlist.nil?
 
     if data_names.length == 1
       if InstanceInlist.column_names.include? data_names[0]
-        inlist.send(data_names[0].to_sym)
+        inlist[data_names[0].to_sym]
       else
         data = inlist.inlist_data.select { |datum| datum.name == data_names[0] }
         return nil if data.empty?
