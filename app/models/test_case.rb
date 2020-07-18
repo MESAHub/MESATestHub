@@ -77,17 +77,58 @@ class TestCase < ApplicationRecord
 
   def find_test_case_commits(search_params, start_date, end_date)
     # start with search just on dates; can chain other things before we hit
-    # the database    
-    res = test_case_commits.includes(:commit, 
-        test_instances: {instance_inlists: :inlist_data}).where(commits:
-          {commit_time: start_date..end_date,
-           sha: Commit.shas_in_branch(branch: search_params[:branch])})
+    # the database
+    query = {
+      commits: {commit_time: start_date..end_date,
+                sha: Commit.shas_in_branch(branch: search_params[:branch])}
+    }
     unless search_params[:status].nil? or search_params[:status].empty?
-      res = res.where(status: search_params[:status])
+      query[:status] = search_params[:status]
     end
-    sort_query = search_params[:sort_query] || :created_at
-    sort_order = search_params[:sort_order] || :desc
-    res.order(sort_query => sort_order).page(search_params[:page])
+
+    sort_query = ''
+    # by default, with most recent commits and instances first
+    if search_params[:sort_query].nil? || search_params[:sort_query].empty?
+      sort_query = 'commits.commit_time DESC'
+    else
+      # enforce a valid sort order to prevent SQL injection
+      sort_order = search_params[:sort_order] || 'ASC'
+      sort_order.upcase!
+      unless %w{ASC DESC}.include? sort_order
+        sort_order = 'ASC'
+      end
+
+      # dictionary between what was passed in (if anything), and what the
+      # database understands. This is dumb and clunky.
+      # 
+      # For most cases, do the desired sorting, and then fall back to
+      # descending timestamps (newest first).
+      sort_query = case search_params[:sort_query].to_s.downcase
+      when "commit" 
+        "commits.commit_time #{sort_order}, test_case_commits.created_at DESC"
+      when "status" 
+        "test_case_commits.status #{sort_order}, test_case_commits.created_at DESC"
+      when "date" 
+        # these two don't have a real purpose. We could just use the test case
+        # commit creation date, but that's not a useful date, and it's not
+        # what the column heading says, so this is just redundant for now
+        "commits.commit_time #{sort_order}, test_case_commits.created_at DESC"
+
+        # ideally we'd be able to sort on steps/retries, etc., but it's very
+        # hard (perhaps impossible?) to create database query that sorts on
+        # the first association of a test case commit that is passing, but
+        # not a skip case. I'm giving up at this point.
+      else
+        'commits.commit_time DESC, test_case_commits.created_at DESC'
+      end
+    end
+
+
+    test_case_commits.includes(:commit,
+      test_instances: {instance_inlists: :inlist_data}).
+      where(query).
+      order(sort_query).
+      page(search_params[:page])
   end
 
   def find_instances(search_params, start_date, end_date)

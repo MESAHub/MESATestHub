@@ -69,50 +69,43 @@
               %span.text-monospace=@computer.name
             match this query.
       - else
-        .form-check.mt-3
-          .row
-            .col-sm-4.mb-3
-              %h5
-                Default Columns
-                -# %small.text-muted Check/uncheck to show/hide
-              .row
-                .col
-                  .mb-2
-                    %input.form-check-input.inlist-switch.mr-0{type: 'checkbox', value: 'default', id: "check-default", checked: false, 'data-inlist' => 'default'}
-                    %label.form-check-label{for: "check-default"}
-                      %h5 Show/Hide All
-                  .row
-                    -@default_column_visibility.each_slice(7) do |columns|
-                      .col
-                        -columns.each do |klass, checked|
-                          .mr-1
-                            %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: klass, id: klass.sub('column-', 'check-'), checked: checked, 'data-inlist' => 'default'}
-                            %label.form-check-label{for: klass.sub('column-', 'check-')}= @default_column_check_titles[klass]
-            .col-sm-8
-              %h5
-                Test Case-Specific Columns
-                -# %small.text-muted Check/uncheck to show/hide
-              .row
-                - @inlist_columns.each_pair do |inlist, columns|
-                  .col
-                    .mb-2
-                      %input.form-check-input.inlist-switch.mr-0{type: 'checkbox', value: inlist, id: "check-#{inlist}", checked: false, 'data-inlist' => inlist}
-                      %label.form-check-label{for: "check-#{inlist}"}
-                        %h5.text-monospace=inlist.sub(/^inlist_/, '').sub(/_header$/, '')
-                    - columns.each do |column|
-                      .mr-1
-                        %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: "#{inlist}-#{column}", id: "check-#{inlist}-#{column}", checked: false, 'data-inlist' => inlist}
-                        -if @default_column_check_titles.keys.include? column
-                          %label.form-check-label{for: "check-#{inlist}-#{column}"}= @default_column_check_titles[column]
-                        -else
-                          %label.form-check-label.text-monospace{for: "check-#{inlist}-#{column}"}= column
-              -# - @specific_columns.each do |klass, checked|
-              -#   %div.mr-5
-              -#     %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: klass, id: klass.sub('column-', 'check-'), checked: checked}
-              -#     %label.form-check-label{for: klass.sub('column-', 'check-')} 
-              -#       = klass.sub('column-', '').titleize
-        -# %p
-          # %i= page_entries_info @test_instances
+        .row
+          .col-sm-4.col-12.mb-3
+            %h5
+              General Columns
+              -# %small.text-muted Check/uncheck to show/hide
+            .row
+              .col
+                .form-check
+                  %input.form-check-input.inlist-switch.mr-0{type: 'checkbox', value: 'default', id: "check-default", checked: false, 'data-inlist' => 'default'}
+                  %label.form-check-label{for: "check-default"}
+                    %h5 Show/Hide All
+                .row
+                  -@default_column_visibility.each_slice(7) do |columns|
+                    .col-lg-6.col-sm-12.col-6.mb-0
+                      -columns.each do |klass, checked|
+                        .form-check
+                          %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: klass, id: klass.sub('column-', 'check-'), checked: checked, 'data-inlist' => 'default'}
+                          %label.form-check-label{for: klass.sub('column-', 'check-')}= @default_column_check_titles[klass]
+          .col-sm-8.col-12
+            %h5
+              Inlist-Specific Columns
+              -# %small.text-muted Check/uncheck to show/hide
+            .row
+              - @inlist_columns.each_pair do |inlist, columns|
+                .col-xl-3.col-lg-4.col-6.mb-3
+                  .form-check
+                    %input.form-check-input.inlist-switch.mr-0{type: 'checkbox', value: inlist, id: "check-#{inlist}", checked: false, 'data-inlist' => inlist}
+                    %label.form-check-label{for: "check-#{inlist}"}
+                      %h5.text-monospace=inlist.sub(/^inlist_/, '').sub(/_header$/, '')
+                  - columns.each do |column|
+                    .form-check
+                      %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: "#{inlist}-#{column}", id: "check-#{inlist}-#{column}", checked: @inlist_column_visibility[column], 'data-inlist' => inlist}
+                      -if @default_column_check_titles.keys.include? column
+                        %label.form-check-label{for: "check-#{inlist}-#{column}"}= @default_column_check_titles[column]
+                      -else
+                        %label.form-check-label.text-monospace{for: "check-#{inlist}-#{column}"}= column
+
         = paginate @test_instances 
        
         .table-responsive.mt-2
@@ -121,7 +114,7 @@
               %tr
                 %th{colspan: @default_width, id: 'header-default'} Test-wide data
                 -@inlists.each do |inlist|
-                  %th.text-monospace.d-none{colspan: 0, id: "header-#{inlist}"}=inlist.sub('inlist_', '').sub('_header', '')
+                  %th.text-monospace{colspan: @inlist_width, id: "header-#{inlist}"}=inlist.sub('inlist_', '').sub('_header', '')
               %tr
                 -@default_columns.each do |col|
                   %th{class: "column-#{col} header-column-default" + (@default_column_visibility[col] ? '' : ' d-none')}
@@ -130,10 +123,10 @@
                 - @inlist_columns.each_pair do |inlist, names|
                   -names.each do |specific_col|
                     -if @default_column_titles.keys.include? specific_col
-                      %th.d-none{class: "column-#{inlist}-#{specific_col} header-column-#{inlist}"}
+                      %th{class: "column-#{inlist}-#{specific_col} header-column-#{inlist}#{@inlist_column_visibility[specific_col] ? '' : ' d-none'}"}
                         =@default_column_titles[specific_col]
                     -else
-                      %th.text-monospace.d-none{class: "column-#{inlist}-#{specific_col} header-column-#{inlist}"}= specific_col
+                      %th.text-monospace{class: "column-#{inlist}-#{specific_col} header-column-#{inlist}#{@inlist_column_visibility[specific_col] ? '' : ' d-none'}"}= specific_col
 
             %tbody
               -@test_instances.each do |instance|
@@ -145,23 +138,22 @@
                         %span.text-reset.text-monospace=instance.commit.short_sha
                   %td.align-middle.column-status{class: instance.passed ? 'text-success' : 'text-danger'}=instance.passage_status
                   -# %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
-                  %td.align-middle.column-date.d-none=format_time(instance.created_at)
-                  %td.align-middle.column-runtime=instance.runtime_minutes.to_s
-                  %td.align-middle.column-ram.d-none=format("%.2f", instance.rn_mem_GB) + ' GB'
-                  %td.align-middle.column-checksum=instance.checksum[(-7..-1)] if instance.checksum
-                  %td.align-middle.column-threads.d-none=instance.omp_num_threads
-                  %td.align-middle.column-spec.d-none=instance.computer_specification
-                  %td.align-middle.column-steps=instance.steps
-                  %td.align-middle.column-retries=instance.retries
-                  %td.align-middle.column-redos.d-none= instance.redos
-                  %td.align-middle.column-solver_iterations.d-none= instance.solver_iterations
-                  %td.align-middle.column-solver_calls_made.d-none= instance.solver_calls_made
-                  %td.align-middle.column-solver_calls_failed.d-none= instance.solver_calls_failed
-                  %td.align-middle.column-log_rel_run_E_err.d-none= instance.log_rel_run_E_err
+                  %td.align-middle.column-date{class: @default_column_visibility['date'] ? '' : 'd-none'}=format_time(instance.created_at)
+                  %td.align-middle.column-runtime{class: @default_column_visibility['runtime'] ? '' : 'd-none'}=instance.runtime_minutes.to_s
+                  %td.align-middle.column-ram{class: @default_column_visibility['ram'] ? '' : 'd-none'}=format("%.2f", instance.rn_mem_GB) + ' GB'
+                  %td.align-middle.column-checksum.text-monospace{class: @default_column_visibility['checksum'] ? '' : 'd-none'}=instance.checksum[(-7..-1)] if instance.checksum
+                  %td.align-middle.column-threads{class: @default_column_visibility['threads'] ? '' : 'd-none'}=instance.omp_num_threads
+                  %td.align-middle.column-spec{class: @default_column_visibility['spec'] ? '' : 'd-none'}=instance.computer_specification
+                  %td.align-middle.column-steps{class: @default_column_visibility['steps'] ? '' : 'd-none'}=instance.steps
+                  %td.align-middle.column-retries{class: @default_column_visibility['retries'] ? '' : 'd-none'}=instance.retries
+                  %td.align-middle.column-redos{class: @default_column_visibility['redos'] ? '' : 'd-none'}= instance.redos
+                  %td.align-middle.column-solver_iterations{class: @default_column_visibility['solver_iterations'] ? '' : 'd-none'}= instance.solver_iterations
+                  %td.align-middle.column-solver_calls_made{class: @default_column_visibility['solver_calls_made'] ? '' : 'd-none'}= instance.solver_calls_made
+                  %td.align-middle.column-solver_calls_failed{class: @default_column_visibility['solver_calls_failed'] ? '' : 'd-none'}= instance.solver_calls_failed
 
                   -@inlist_columns.each do |inlist, columns|
                     - columns.each do |column|
-                      %td.align-middle.d-none{class: "column-#{inlist}-#{column}"}
+                      %td.align-middle{class: "column-#{inlist}-#{column}#{@inlist_column_visibility[column] ? '' : ' d-none'}"}
                         -val = instance.get_inlist_data(inlist, column)
                         -if val.nil?
                           –
@@ -176,43 +168,46 @@
       .h3
         Commit summaries for
         %span.text-monospace.text-primary= @test_case.name
-  .form-check.mt-3
-    .row
-      .col-sm-4.mb-3
-        %h5
-          Default Columns
-          -# %small.text-muted Check/uncheck to show/hide
-        .row
-          .col
-            .mb-2
-              %input.form-check-input.inlist-switch.mr-0{type: 'checkbox', value: 'default', id: "check-default", checked: false, 'data-inlist' => 'default'}
-              %label.form-check-label{for: "check-default"}
-                %h5 Show/Hide All
-            .row
-              -@default_column_visibility.each_slice(7) do |columns|
-                .col
-                  -columns.each do |klass, checked|
-                    .mr-1
-                      %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: klass, id: klass.sub('column-', 'check-'), checked: checked, 'data-inlist' => 'default'}
-                      %label.form-check-label{for: klass.sub('column-', 'check-')}= @default_column_check_titles[klass]
-      .col-sm-8
-        %h5
-          Test Case-Specific Columns
-          -# %small.text-muted Check/uncheck to show/hide
-        .row
-          - @inlist_columns.each_pair do |inlist, columns|
-            .col
-              .mb-2
-                %input.form-check-input.inlist-switch.mr-0{type: 'checkbox', value: inlist, id: "check-#{inlist}", checked: false, 'data-inlist' => inlist}
-                %label.form-check-label{for: "check-#{inlist}"}
-                  %h5.text-monospace=inlist.sub(/^inlist_/, '').sub(/_header$/, '')
-              - columns.each do |column|
-                .mr-1
-                  %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: "#{inlist}-#{column}", id: "check-#{inlist}-#{column}", checked: false, 'data-inlist' => inlist}
-                  -if @default_column_check_titles.keys.include? column
-                    %label.form-check-label{for: "check-#{inlist}-#{column}"}= @default_column_check_titles[column]
-                  -else
-                    %label.form-check-label.text-monospace{for: "check-#{inlist}-#{column}"}= column
+  .row
+    -# .col-sm-4.mb-3
+    -# .mb-3.border.border-secondary{class: @inlist_columns.keys.length > 4 ? 'col-xs-12' : 'col-sm-4'}
+    .col-md-4.mb-4
+      %h5
+        General Columns
+        -# %small.text-muted Check/uncheck to show/hide
+      .row
+        .col
+          .mb-2.form-check
+            %input.form-check-input.inlist-switch.mr-0{type: 'checkbox', value: 'default', id: "check-default", checked: false, 'data-inlist' => 'default'}
+            %label.form-check-label{for: "check-default"}
+              %h5 Show/Hide All
+      .row
+        -@default_column_visibility.each_slice(5) do |columns|
+          .col-lg-6.col-md-12.col-sm-6
+            -columns.each do |klass, checked|
+              .form-check
+                %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: klass, id: klass.sub('column-', 'check-'), checked: checked, 'data-inlist' => 'default'}
+                %label.form-check-label{for: klass.sub('column-', 'check-')}= @default_column_check_titles[klass]
+      -# .col-sm-8.mb-3
+    .col-md-8
+      %h5
+        Inlist-Specific Columns
+        -# %small.text-muted Check/uncheck to show/hide
+      .row
+        -@inlist_columns.each_pair do |inlist, columns|
+          .col-xl-3.col-lg-4.col-md-6.col-6.mb-3
+            .form-check
+              %input.form-check-input.inlist-switch.mr-0{type: 'checkbox', value: inlist, id: "check-#{inlist}", checked: false, 'data-inlist' => inlist}
+              %label.form-check-label{for: "check-#{inlist}"}
+                %h5.text-monospace=inlist.sub(/^inlist_/, '').sub(/_header$/, '')
+            - columns.each do |column|
+              .form-check
+                %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: "#{inlist}-#{column}", id: "check-#{inlist}-#{column}", checked: @inlist_column_visibility[column], 'data-inlist' => inlist}
+                -if @default_column_check_titles.keys.include? column
+                  %label.form-check-label{for: "check-#{inlist}-#{column}"}= @default_column_check_titles[column]
+                -else
+                  %label.form-check-label.text-monospace{for: "check-#{inlist}-#{column}"}= column
+
   .row
     .col
       - if @test_case_commits.empty?
@@ -230,11 +225,30 @@
           %table.table.table-hover.table-sm.text-center#test-detail
             %thead.thead-default
               %tr
-                %th.column-commit Commit
-                %th.column-status 
-                  =link_to('Status', url_for(@current_params.merge({sort_query: @status_params[:sort_query], sort_order: @status_params[:sort_order]})))
-                %th.column-date
-                  =link_to('Date Created', url_for(@current_params.merge(sort_query: @date_params[:sort_query], sort_order: @date_params[:sort_order])))
+                %th{colspan: @default_width, id: 'header-default'} Test-wide data
+                -@inlists.each do |inlist|
+                  %th.text-monospace{colspan: @inlist_width, id: "header-#{inlist}", class: @inlist_width > 0 ? '' : 'd-none'}=inlist.sub('inlist_', '').sub('_header', '')
+              %tr
+                %th.column-commit.header-column-default
+                  =link_to('Commit', url_for(@current_params.merge({sort_query: 'commit', sort_order: @orders['commit']})))
+                %th.column-status.header-column-default
+                  =link_to('Status', url_for(@current_params.merge({sort_query: 'status', sort_order: @orders['status']})))
+                -# %th.column-date
+                -#   =link_to('Date Created', url_for(@current_params.merge(sort_query: @date_params[:sort_query], sort_order: @date_params[:sort_order])))
+                -@default_columns[(2..-1)].each do |col|
+                  %th{class: "column-#{col} header-column-default" + (@default_column_visibility[col] ? '' : ' d-none')}
+                    -if @sortable_columns.include? col
+                      =link_to(@default_column_titles[col], url_for(@current_params.merge(sort_query: col, sort_order: @orders[col])))
+                    -else
+                      =@default_column_titles[col]
+                - @inlist_columns.each_pair do |inlist, names|
+                  -names.each do |specific_col|
+                    -if @default_column_titles.keys.include? specific_col
+                      %th{class: "column-#{inlist}-#{specific_col} header-column-#{inlist}#{@inlist_column_visibility[specific_col] ? '' : ' d-none'}"}
+                        =@default_column_titles[specific_col]
+                    -else
+                      %th.text-monospace.d-none{class: "column-#{inlist}-#{specific_col} header-column-#{inlist}"}= specific_col
+
             %tbody
               -@test_case_commits.each do |tcc|
                 %tr
@@ -253,7 +267,57 @@
                       %span.text-success Passing
                     -else
                       %span.text-info Untested
-                  %td.align-middle.column-date= format_time(tcc.created_at)
+                  %td.align-middle.column-date{class: @default_column_visibility['date'] ? '' : ' d-none'}= format_time(tcc.created_at)
+                  %td.align-middle.column-checksum.text-monospace{class: @default_column_visibility['checksum'] ? '' : ' d-none'}
+                    -if @first_instances[tcc] && @first_instances[tcc].checksum
+                      = @first_instances[tcc].checksum[(-7..-1)]
+                    -else
+                      –
+                  %td.align-middle.column-steps{class: @default_column_visibility['steps'] ? '' : ' d-none'}
+                    -if @first_instances[tcc]
+                      = @first_instances[tcc].steps
+                    -else
+                      –
+                  %td.align-middle.column-retries{class: @default_column_visibility['retries'] ? '' : ' d-none'}
+                    -if @first_instances[tcc]
+                      = @first_instances[tcc].retries
+                    -else
+                      –
+                  %td.align-middle.column-redos{class: @default_column_visibility['redos'] ? '' : ' d-none'}
+                    -if @first_instances[tcc]
+                      = @first_instances[tcc].redos
+                    -else
+                      –
+                  %td.align-middle.column-solver_iterations{class: @default_column_visibility['solver_iterations'] ? '' : ' d-none'}
+                    -if @first_instances[tcc]
+                      = @first_instances[tcc].solver_iterations
+                    -else
+                      –
+                  %td.align-middle.column-solver_calls_made{class: @default_column_visibility['solver_calls_made'] ? '' : ' d-none'}
+                    -if @first_instances[tcc]
+                      = @first_instances[tcc].solver_calls_made
+                    -else
+                      –
+                  %td.align-middle.column-solver_calls_failed{class: @default_column_visibility['solver_calls_failed'] ? '' : ' d-none'}
+                    -if @first_instances[tcc]
+                      = @first_instances[tcc].solver_calls_failed
+                    -else
+                      –
+                  -@inlist_columns.each do |inlist, columns|
+                    - columns.each do |column|
+                      %td.align-middle{class: "column-#{inlist}-#{column}#{@inlist_column_visibility[column] ? '' : ' d-none'}"}
+                        - if @first_instances[tcc]
+                          -val = @first_instances[tcc].get_inlist_data(inlist, column)
+                          -if val.nil?
+                            –
+                          -elsif val.is_a? Integer
+                            = val
+                          -else
+                            = format('%0.3g', val)
+                        - else
+                          –
+
+
   .row
     .col
       = paginate @test_case_commits        

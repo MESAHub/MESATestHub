@@ -457,10 +457,11 @@ class Commit < ApplicationRecord
       new_entry = {}
       new_entry[:computer] = Computer.includes(:user).find(sub.computer_id)
       new_entry[:spec] = sub.computer_specification
-      new_entry[:frac] = test_instances.where(
-        computer_id: sub.computer_id,
-        computer_specification: sub.computer_specification
-      ).pluck(:test_case_id).uniq.count.to_f / test_cases.count.to_f
+      new_entry[:numerator] = test_instances.where(
+        computer_id: sub.computer_id, computer_specification: sub.computer_specification
+      ).pluck(:test_case_id).uniq.count
+      new_entry[:denominator] = test_cases.count
+      new_entry[:frac] = new_entry[:numerator].to_f / new_entry[:denominator].to_f
       compilation_stati = submissions.where(
         computer: new_entry[:computer]
       ).pluck(:compiled).uniq.reject(&:nil?)

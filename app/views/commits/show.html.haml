@@ -78,25 +78,26 @@
         %dl.row
           - @specs.each do |entry|
             %dt.col-md-4
-              -case entry[:frac] * 16
-              -when 0.0
-                =render partial: 'none_tested'
-              -when (0..3)
-                =render partial: 'one_eighth'
-              -when (3..5)
-                =render partial: 'one_quarter'
-              -when (5..7)
-                =render partial: 'three_eighths'
-              -when (7..9)
-                =render partial: 'one_half'
-              -when (9..11)
-                =render partial: 'five_eighths'
-              -when (11..13)
-                =render partial: 'three_quarters'
-              -when (13...16)
-                =render partial: 'seven_eighths'
-              -else
-                =render partial: 'complete'
+              %span{'data-toggle' => 'tooltip', title: "#{entry[:numerator]}/#{entry[:denominator]}"}
+                -case entry[:frac] * 16
+                -when 0.0
+                  =render partial: 'none_tested'
+                -when (0..3)
+                  =render partial: 'one_eighth'
+                -when (3..5)
+                  =render partial: 'one_quarter'
+                -when (5..7)
+                  =render partial: 'three_eighths'
+                -when (7..9)
+                  =render partial: 'one_half'
+                -when (9..11)
+                  =render partial: 'five_eighths'
+                -when (11..13)
+                  =render partial: 'three_quarters'
+                -when (13...16)
+                  =render partial: 'seven_eighths'
+                -else
+                  =render partial: 'complete'
               =link_to(entry[:computer].name, user_computer_path(entry[:computer].user, entry[:computer]), class: 'text-primary')
               = surround '(', ')' do
                 %a{href: user_path(entry[:computer].user), class: 'text-primary'}=entry[:computer].user.name

@@ -13,3 +13,5 @@
 #       alert('making ' + newBranch + ' visible')
 #       $('#' + newBranch + '-commits').removeClass('d-none')
 
+$ ->
+  $('[data-toggle="tooltip"]').tooltip()
