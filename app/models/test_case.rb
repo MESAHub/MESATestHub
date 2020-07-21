@@ -9,24 +9,31 @@ class TestCase < ApplicationRecord
 
   validates_presence_of :name
 
+  # this happens to be in reverse alphabetical order, which we exploit heavily
+  # in sorting
   def self.modules
     %w[star binary astero]
   end
 
   def self.ordered_cases(includes: nil)
-    all_cases = if includes.nil?
-                  self.all.to_a
-                else
-                  self.includes(includes).all.to_a
-                end
-    res = []
-    self.modules.each do |mod|
-      res += all_cases.select { |tc| tc.module == mod }.sort do |tc1, tc2|
-        tc1.name <=> tc2.name
-      end
+    if includes.nil?
+      self.where.not(module: nil).order(module: :desc, name: :asc)
+    else
+      self.includes(includes).all
     end
-    res
+    # res = []
+    # self.modules.each do |mod|
+    #   res += all_cases.select { |tc| tc.module == mod }.sort do |tc1, tc2|
+    #     tc1.name <=> tc2.name
+    #   end
+    # end
+    # res
   end
+
+  def self.current_cases(includes: nil)
+    Commit.head.test_cases
+  end
+
 
   validates_inclusion_of :module, in: TestCase.modules, allow_blank: true
 
@@ -137,6 +144,7 @@ class TestCase < ApplicationRecord
       commits: {commit_time: start_date..end_date,
                 sha: Commit.shas_in_branch(branch: search_params[:branch])}
       }
+
     return nil if test_instances.joins(:commit).where(query).count == 0
 
     # which computer/computers to look for results from

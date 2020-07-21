@@ -16,7 +16,11 @@
                 %input.form-control-lg.w-100#tc-search{type: 'text', placeholder: 'Search Test Cases'}
             .dropdown-divider
             - @test_cases.each do |tc|
-              =link_to((tc.name + " <small class='text-muted'>(#{tc.module})</small>").html_safe, test_case_path(branch: params[:branch], test_case: tc.name, module: tc.module), class: "text-monospace dropdown-item text-primary tc-option#{tc == @test_case ? ' active' : ''}")
+              -if @current_test_cases.include? tc
+                =link_to((tc.name + " <small class='text-muted'>(#{tc.module})</small>").html_safe, test_case_path(branch: params[:branch], test_case: tc.name, module: tc.module), class: "text-monospace dropdown-item text-primary tc-option#{tc == @test_case ? ' active' : ''}")
+              -else
+                =link_to(("[#{tc.name} <small class='text-muted'>(#{tc.module})</small>]").html_safe, test_case_path(branch: params[:branch], test_case: tc.name, module: tc.module), class: "text-monospace dropdown-item text-primary tc-option d-none#{tc == @test_case ? ' active' : ''}")
+
         on
         .btn-group
           %button.btn.btn-outline-primary.btn-lg.dropdown-toggle#branch-select{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
@@ -60,7 +64,7 @@
           %a.text-monospace.text-primary{href: user_computer_path(@computer.user, @computer)}= @computer.name
   .row
     .col
-      - if @test_instances.empty?
+      - if @test_instances.nil? || @test_instances.empty?
         .alert.alert-warning.align-middle
           %h4
             No submissions 
@@ -81,7 +85,7 @@
                   %label.form-check-label{for: "check-default"}
                     %h5 Show/Hide All
                 .row
-                  -@default_column_visibility.each_slice(7) do |columns|
+                  -@default_column_visibility.each_slice(8) do |columns|
                     .col-lg-6.col-sm-12.col-6.mb-0
                       -columns.each do |klass, checked|
                         .form-check
@@ -95,16 +99,16 @@
               - @inlist_columns.each_pair do |inlist, columns|
                 .col-xl-3.col-lg-4.col-6.mb-3
                   .form-check
-                    %input.form-check-input.inlist-switch.mr-0{type: 'checkbox', value: inlist, id: "check-#{inlist}", checked: false, 'data-inlist' => inlist}
-                    %label.form-check-label{for: "check-#{inlist}"}
+                    %input.form-check-input.inlist-switch.mr-0{type: 'checkbox', value: inlist.sub('.', 'p'), id: "check-#{inlist.sub('.', 'p')}", checked: false, 'data-inlist' => inlist.sub('.', 'p')}
+                    %label.form-check-label{for: "check-#{inlist.sub('.', 'p')}"}
                       %h5.text-monospace=inlist.sub(/^inlist_/, '').sub(/_header$/, '')
                   - columns.each do |column|
                     .form-check
-                      %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: "#{inlist}-#{column}", id: "check-#{inlist}-#{column}", checked: @inlist_column_visibility[column], 'data-inlist' => inlist}
+                      %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: "#{inlist.sub('.', 'p')}-#{column}", id: "check-#{inlist.sub('.', 'p')}-#{column}", checked: @inlist_column_visibility[inlist][column], 'data-inlist' => inlist.sub('.', 'p')}
                       -if @default_column_check_titles.keys.include? column
-                        %label.form-check-label{for: "check-#{inlist}-#{column}"}= @default_column_check_titles[column]
+                        %label.form-check-label{for: "check-#{inlist.sub('.', 'p')}-#{column}"}= @default_column_check_titles[column]
                       -else
-                        %label.form-check-label.text-monospace{for: "check-#{inlist}-#{column}"}= column
+                        %label.form-check-label.text-monospace{for: "check-#{inlist.sub('.', 'p')}-#{column}"}= column
 
         = paginate @test_instances 
        
@@ -114,7 +118,7 @@
               %tr
                 %th{colspan: @default_width, id: 'header-default'} Test-wide data
                 -@inlists.each do |inlist|
-                  %th.text-monospace{colspan: @inlist_width, id: "header-#{inlist}"}=inlist.sub('inlist_', '').sub('_header', '')
+                  %th.text-monospace{colspan: @inlist_width[inlist], id: "header-#{inlist.sub('.', 'p')}", class: @inlist_width[inlist] > 0 ? '' : 'd-none'}=inlist.sub('inlist_', '').sub('_header', '')
               %tr
                 -@default_columns.each do |col|
                   %th{class: "column-#{col} header-column-default" + (@default_column_visibility[col] ? '' : ' d-none')}
@@ -123,10 +127,10 @@
                 - @inlist_columns.each_pair do |inlist, names|
                   -names.each do |specific_col|
                     -if @default_column_titles.keys.include? specific_col
-                      %th{class: "column-#{inlist}-#{specific_col} header-column-#{inlist}#{@inlist_column_visibility[specific_col] ? '' : ' d-none'}"}
+                      %th{class: "column-#{inlist.sub('.', 'p')}-#{specific_col} header-column-#{inlist.sub('.', 'p')}#{@inlist_column_visibility[inlist][specific_col] ? '' : ' d-none'}"}
                         =@default_column_titles[specific_col]
                     -else
-                      %th.text-monospace{class: "column-#{inlist}-#{specific_col} header-column-#{inlist}#{@inlist_column_visibility[specific_col] ? '' : ' d-none'}"}= specific_col
+                      %th.text-monospace{class: "column-#{inlist.sub('.', 'p')}-#{specific_col} header-column-#{inlist.sub('.', 'p')}#{@inlist_column_visibility[inlist][specific_col] ? '' : ' d-none'}"}= specific_col
 
             %tbody
               -@test_instances.each do |instance|
@@ -142,6 +146,11 @@
                   %td.align-middle.column-runtime{class: @default_column_visibility['runtime'] ? '' : 'd-none'}=instance.runtime_minutes.to_s
                   %td.align-middle.column-ram{class: @default_column_visibility['ram'] ? '' : 'd-none'}=format("%.2f", instance.rn_mem_GB) + ' GB'
                   %td.align-middle.column-checksum.text-monospace{class: @default_column_visibility['checksum'] ? '' : 'd-none'}=instance.checksum[(-7..-1)] if instance.checksum
+                  %td.align-middle.column-restart_photo.text-monospace{class: @default_column_visibility['restart_photo'] ? '' : 'd-none'}
+                    =instance.restart_photo || ''
+                  %td.align-middle.column-restart_checksum.text-monospace{class: @default_column_visibility['restart_checksum'] ? '' : 'd-none'}
+                    =instance.restart_checksum[(-7..-1)] if instance.restart_checksum
+
                   %td.align-middle.column-threads{class: @default_column_visibility['threads'] ? '' : 'd-none'}=instance.omp_num_threads
                   %td.align-middle.column-spec{class: @default_column_visibility['spec'] ? '' : 'd-none'}=instance.computer_specification
                   %td.align-middle.column-steps{class: @default_column_visibility['steps'] ? '' : 'd-none'}=instance.steps
@@ -153,7 +162,7 @@
 
                   -@inlist_columns.each do |inlist, columns|
                     - columns.each do |column|
-                      %td.align-middle{class: "column-#{inlist}-#{column}#{@inlist_column_visibility[column] ? '' : ' d-none'}"}
+                      %td.align-middle{class: "column-#{inlist.sub('.', 'p')}-#{column}#{@inlist_column_visibility[inlist][column] ? '' : ' d-none'}"}
                         -val = instance.get_inlist_data(inlist, column)
                         -if val.nil?
                           –
@@ -161,7 +170,7 @@
                           = format('%0.3g', val)
   .row
     .col
-      = paginate @test_instances        
+      = paginate @test_instances unless (@test_instances.empty? || @test_instances.nil?)      
 - else
   .row
     .col
@@ -182,7 +191,7 @@
             %label.form-check-label{for: "check-default"}
               %h5 Show/Hide All
       .row
-        -@default_column_visibility.each_slice(5) do |columns|
+        -@default_column_visibility.each_slice(6) do |columns|
           .col-lg-6.col-md-12.col-sm-6
             -columns.each do |klass, checked|
               .form-check
@@ -197,16 +206,16 @@
         -@inlist_columns.each_pair do |inlist, columns|
           .col-xl-3.col-lg-4.col-md-6.col-6.mb-3
             .form-check
-              %input.form-check-input.inlist-switch.mr-0{type: 'checkbox', value: inlist, id: "check-#{inlist}", checked: false, 'data-inlist' => inlist}
-              %label.form-check-label{for: "check-#{inlist}"}
+              %input.form-check-input.inlist-switch.mr-0{type: 'checkbox', value: inlist, id: "check-#{inlist.sub('.', 'p')}", checked: false, 'data-inlist' => inlist}
+              %label.form-check-label{for: "check-#{inlist.sub('.', 'p')}"}
                 %h5.text-monospace=inlist.sub(/^inlist_/, '').sub(/_header$/, '')
             - columns.each do |column|
               .form-check
-                %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: "#{inlist}-#{column}", id: "check-#{inlist}-#{column}", checked: @inlist_column_visibility[column], 'data-inlist' => inlist}
+                %input.form-check-input.column-switch.mr-0{type: 'checkbox', value: "#{inlist.sub('.', 'p')}-#{column}", id: "check-#{inlist.sub('.', 'p')}-#{column}", checked: @inlist_column_visibility[inlist][column], 'data-inlist' => inlist}
                 -if @default_column_check_titles.keys.include? column
-                  %label.form-check-label{for: "check-#{inlist}-#{column}"}= @default_column_check_titles[column]
+                  %label.form-check-label{for: "check-#{inlist.sub('.', 'p')}-#{column}"}= @default_column_check_titles[column]
                 -else
-                  %label.form-check-label.text-monospace{for: "check-#{inlist}-#{column}"}= column
+                  %label.form-check-label.text-monospace{for: "check-#{inlist.sub('.', 'p')}-#{column}"}= column
 
   .row
     .col
@@ -227,14 +236,12 @@
               %tr
                 %th{colspan: @default_width, id: 'header-default'} Test-wide data
                 -@inlists.each do |inlist|
-                  %th.text-monospace{colspan: @inlist_width, id: "header-#{inlist}", class: @inlist_width > 0 ? '' : 'd-none'}=inlist.sub('inlist_', '').sub('_header', '')
+                  %th.text-monospace{colspan: @inlist_width[inlist], id: "header-#{inlist.sub('.', 'p')}", class: @inlist_width[inlist] > 0 ? '' : 'd-none'}=inlist.sub('inlist_', '').sub('_header', '')
               %tr
                 %th.column-commit.header-column-default
                   =link_to('Commit', url_for(@current_params.merge({sort_query: 'commit', sort_order: @orders['commit']})))
                 %th.column-status.header-column-default
                   =link_to('Status', url_for(@current_params.merge({sort_query: 'status', sort_order: @orders['status']})))
-                -# %th.column-date
-                -#   =link_to('Date Created', url_for(@current_params.merge(sort_query: @date_params[:sort_query], sort_order: @date_params[:sort_order])))
                 -@default_columns[(2..-1)].each do |col|
                   %th{class: "column-#{col} header-column-default" + (@default_column_visibility[col] ? '' : ' d-none')}
                     -if @sortable_columns.include? col
@@ -244,10 +251,10 @@
                 - @inlist_columns.each_pair do |inlist, names|
                   -names.each do |specific_col|
                     -if @default_column_titles.keys.include? specific_col
-                      %th{class: "column-#{inlist}-#{specific_col} header-column-#{inlist}#{@inlist_column_visibility[specific_col] ? '' : ' d-none'}"}
+                      %th{class: "column-#{inlist.sub('.', 'p')}-#{specific_col} header-column-#{inlist.sub('.', 'p')}#{@inlist_column_visibility[inlist][specific_col] ? '' : ' d-none'}"}
                         =@default_column_titles[specific_col]
                     -else
-                      %th.text-monospace.d-none{class: "column-#{inlist}-#{specific_col} header-column-#{inlist}"}= specific_col
+                      %th.text-monospace.d-none{class: "column-#{inlist.sub('.', 'p')}-#{specific_col} header-column-#{inlist.sub('.', 'p')}"}= specific_col
 
             %tbody
               -@test_case_commits.each do |tcc|
@@ -273,6 +280,16 @@
                       = @first_instances[tcc].checksum[(-7..-1)]
                     -else
                       –
+                  %td.align-middle.column-restart_photo{class: @default_column_visibility['restart_photo'] ? '' : ' d-none'}
+                    -if @first_instances[tcc] && @first_instances[tcc].restart_photo
+                      = @first_instances[tcc].restart_photo
+                    -else
+                      –
+                  %td.align-middle.column-restart_checksum.text-monospace{class: @default_column_visibility['restart_checksum'] ? '' : ' d-none'}
+                    -if @first_instances[tcc] && @first_instances[tcc].restart_checksum
+                      = @first_instances[tcc].restart_checksum[(-7..-1)]
+                    -else
+                      –                      
                   %td.align-middle.column-steps{class: @default_column_visibility['steps'] ? '' : ' d-none'}
                     -if @first_instances[tcc]
                       = @first_instances[tcc].steps
@@ -305,7 +322,7 @@
                       –
                   -@inlist_columns.each do |inlist, columns|
                     - columns.each do |column|
-                      %td.align-middle{class: "column-#{inlist}-#{column}#{@inlist_column_visibility[column] ? '' : ' d-none'}"}
+                      %td.align-middle{class: "column-#{inlist.sub('.', 'p')}-#{column}#{@inlist_column_visibility[inlist][column] ? '' : ' d-none'}"}
                         - if @first_instances[tcc]
                           -val = @first_instances[tcc].get_inlist_data(inlist, column)
                           -if val.nil?

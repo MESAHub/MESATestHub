@@ -82,6 +82,8 @@ class TestCasesController < ApplicationController
   # GET /test_cases/1.json
   def show
     @test_cases = TestCase.ordered_cases
+    @test_cases.load
+    @current_test_cases = TestCase.current_cases.to_a
     @unmerged_branches = Commit.unmerged_branches
     @merged_branches = Commit.merged_branches
     @branch = params[:branch] || 'master'
@@ -113,13 +115,28 @@ class TestCasesController < ApplicationController
     # default start date is 30 days ago
     @end_date = if (test_case_params[:end_date].nil? ||
                     test_case_params[:end_date].empty?)
-                  Date.today
+                  # first use last entered date, then default to today
+                  if cookies[:commit_end]
+                    Date.parse(cookies[:commit_end])
+                  else
+                    Date.today
+                  end
                 else
                   Date.parse(test_case_params[:end_date])
                 end
     @start_date = if (test_case_params[:start_date].nil? ||
                       test_case_params[:start_date].empty?)
-                    @end_date - 30
+                    # first use last entered date, then default to one month
+                    # ago
+                    if cookies[:commit_start]
+                      begin
+                        Date.parse(cookies[:commit_start])
+                      rescue ArgumentError
+                        @end_date - 30
+                      end
+                    else
+                      @end_date - 30
+                    end
                   else
                     Date.parse(test_case_params[:start_date])
                   end
@@ -140,12 +157,35 @@ class TestCasesController < ApplicationController
     end
 
 
-    if test_case_params[:history_type] == 'show_summaries' #|| !params[:show_summaries]
+    if test_case_params[:history_type] == 'show_summaries'
       prepare_summaries
     else
       prepare_instances
     end
 
+    # override default visibilities from cookies
+    @default_column_visibility.keys.each do |key|
+      klass = "column-#{key}"
+      if cookies[klass] == 'checked'
+        @default_column_visibility[key] = true
+      elsif cookies[klass] == 'unchecked'
+        @default_column_visibility[key] = false
+      end
+    end
+
+    @inlists.each do |inlist|
+      @inlist_column_visibility[inlist].keys.each do |key|
+        # have to account for periods in classes, which cause problems
+        # this is done throughout the view to aid in css selectors
+        # (periods indicate classes, so their presence in names wreak havoc)
+        klass = "column-#{inlist.sub('.', 'p')}-#{key}"
+        if cookies[klass] == 'checked'
+          @inlist_column_visibility[inlist][key] = true
+        elsif cookies[klass] == 'unchecked'
+          @inlist_column_visibility[inlist][key] = false
+        end
+      end
+    end
 
 
     # how many columns are shown by default, helps style the table
@@ -154,9 +194,14 @@ class TestCasesController < ApplicationController
     end.count
 
     # how many columns per inlist are shown by default, helps style the table
-    @inlist_width = @inlist_column_visibility.keys.select do |col|
-      @inlist_column_visibility[col]
-    end.count
+    @inlist_width = Hash.new(0)
+
+    @inlists.each do |inlist|
+      @inlist_width[inlist] =
+        @inlist_column_visibility[inlist].keys.select do |col|
+          @inlist_column_visibility[inlist][col]
+        end.count
+    end
 
     @orders = {}
     @default_columns.each { |col| @orders[col] = get_order(col) }
@@ -220,9 +265,10 @@ class TestCasesController < ApplicationController
     # Their default visibility, however, is not. So don't mess with the
     # ordering of this array without also changing the view. You CAN, however
     # change the vsibility or titles, which the view will respect.
-    @default_columns = %w{commit status date checksum} +
-                       %w{steps retries redos solver_iterations} + 
-                       %w{solver_calls_made solver_calls_failed}
+    @default_columns = %w{commit status date checksum restart_photo} +
+                       %w{restart_checksum steps retries redos} +
+                       %w{solver_iterations solver_calls_made} +
+                       %w{solver_calls_failed}
     @sortable_columns = %w{commit status date}
 
     @default_column_titles = {
@@ -230,6 +276,8 @@ class TestCasesController < ApplicationController
      'status' => 'Status',
      'date' => 'Commit Date',
      'checksum' => 'Checksum',
+     'restart_photo' => 'Re Photo',
+     'restart_checksum' => 'Re Checksum',
      'steps' => 'Steps',
      'retries' => 'Retries',
      'redos' => 'Redos',
@@ -244,6 +292,8 @@ class TestCasesController < ApplicationController
       'status' => 'Status',
       'date' => 'Commit Date',
       'checksum' => 'Checksum',
+      'restart_photo' => 'Re Photo',
+      'restart_checksum' => 'Re Checksum',
       'steps' => 'Steps',
       'retries' => 'Retries',
       'redos' => 'Redos',
@@ -258,6 +308,8 @@ class TestCasesController < ApplicationController
       'status' => true,
       'date' => false,
       'checksum' => false,
+      'restart_photo' => false,
+      'restart_checksum' => false,
       'steps' => true,
       'retries' => true,
       'redos' => false,
@@ -266,7 +318,7 @@ class TestCasesController < ApplicationController
       'solver_calls_failed' => false
     }
 
-    @inlist_column_visibility = {
+    @inlist_column_visibility = Hash.new({
       'steps' => true,
       'retries' => true,
       'redos' => false,
@@ -274,7 +326,7 @@ class TestCasesController < ApplicationController
       'solver_calls_made' => false,
       'solver_calls_failed' => false,
       'log_rel_run_E_err' => false
-    }
+    })
 
     @sortable_columns = %w{commit status date}
 
@@ -345,6 +397,7 @@ class TestCasesController < ApplicationController
     @test_instances = @test_case.find_instances(test_case_params.permit(
       :computers, :sort_query, :sort_order, :status, :page, :branch),
       @start_date, @end_date) || []
+
     @show_instances = true
     @show_summaries = false
     @computer = if @test_instances.empty?
@@ -397,9 +450,10 @@ class TestCasesController < ApplicationController
 
     # names of default columns in the table of instances, can be toggled on
     # and off
-    @default_columns = %w{commit status date runtime ram checksum threads} +
-                       %w{spec steps retries redos solver_iterations} + 
-                       %w{solver_calls_made solver_calls_failed}
+    @default_columns = %w{commit status date runtime ram checksum } +
+                       %w{restart_photo restart_checksum threads spec steps } +
+                       %w{retries redos solver_iterations solver_calls_made} +
+                       %w{solver_calls_failed}
     @default_column_titles = {
       'commit' => 'Commit',
       'status' => 'Status',
@@ -407,6 +461,8 @@ class TestCasesController < ApplicationController
       'runtime' => 'Runtime [min]',
       'ram' => 'RAM Usage',
       'checksum' => 'Checksum',
+      'restart_photo' => 'Re Photo',
+      'restart_checksum' => 'Re Checksum',
       'threads' => 'Threads',
       'spec' => 'Computer Specification',
       'steps' => 'Steps',
@@ -433,6 +489,8 @@ class TestCasesController < ApplicationController
       'runtime' => true,
       'ram' => false,
       'checksum' => false,
+      'restart_photo' => false,
+      'restart_checksum' => false,
       'threads' => false,
       'spec' => false,
       'steps' => true,
@@ -443,7 +501,7 @@ class TestCasesController < ApplicationController
       'solver_calls_failed' => false,
     }
 
-    @inlist_column_visibility = {
+    @inlist_column_visibility = Hash.new({
       'runtime' => false,
       'ram' => false,
       'checksum' => false,
@@ -455,7 +513,7 @@ class TestCasesController < ApplicationController
       'solver_iterations' => false,
       'solver_calls_made' => false,
       'solver_calls_failed' => false,
-    }
+    })
 
     # names for columns as they appear in the checkbox form
     @default_column_check_titles = {
@@ -465,6 +523,8 @@ class TestCasesController < ApplicationController
       'runtime' => 'Runtime',
       'ram' => 'RAM Usage',
       'checksum' => 'Checksum',
+      'restart_photo' => 'Re Photo',
+      'restart_checksum' => 'Re Checksum',
       'threads' => 'Threads',
       'spec' => 'Computer Spec.',
       'steps' => 'Steps',

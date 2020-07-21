@@ -104,7 +104,6 @@ class SubmissionsController < ApplicationController
     # if there are bad test cases, errors are stored in @failures, which
     # will cause a failed submission in `create`
     @failures = instances_params.map do |single_instance_params|
-      puts single_instance_params
       create_one_instance(single_instance_params)
     end.reject { |elt| elt.nil? }
   end
