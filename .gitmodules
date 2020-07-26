@@ -1,0 +1,3 @@
+[submodule "data/mesa-git"]
+	path = data/mesa-git
+	url = https://wmwolf:d193db506f16fc09e92636d1dd03ab324f18b76d@github.com/MESAHub/mesa-sandbox-lfs.git
