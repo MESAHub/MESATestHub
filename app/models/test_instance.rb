@@ -224,6 +224,9 @@ class TestInstance < ApplicationRecord
   #   above example, where we have to search for user_id (which we have to find
   #   by the preprocessor argument, see below). Searching for number of threads
   #   (name: 'threads' requires searching on the omp_num_threads attribute.)
+  # ranged : whether or not the option can be searched on a range. For
+  #   instance, a datetime or memory used make sense to search over a range,
+  #   while a user name does not. Default is false.
   # preprocessor (optional) : a block that takes the input value from the 
   #   search query, which is ALWAYS A STRING, and converts it into the value
   #   that gets searched on in the model. ANY ATTRIBUTE THAT EXPECTS SOMETHING
@@ -236,30 +239,81 @@ class TestInstance < ApplicationRecord
   #   conversion we want to do.
   class SearchOption
     attr_reader :name
-    def initialize(this_name, this_model, this_attribute, &preprocessor)
+    attr_reader :ranged
+    def initialize(this_name, this_model, this_attribute, ranged=false, 
+                   &preprocessor)
       @name = this_name
       @model = this_model
       @attribute = this_attribute
+      @ranged = ranged
       @has_preprocessor = block_given?
       @preprocessor = preprocessor if @has_preprocessor
     end
 
+    # need to account for values that have dashes, like computer names or
+    # dates formatted as YYYY-MM-DD... currently broken
     def parse_value(value)
-      range_matcher = /^\s*(?<min>[^-]+)\s*-\s*(?<max>[^-]+)$/
-      m2 = value.match(range_matcher)
-      if m2
-        # value is a range, so format query appropriately
-        if @has_preprocessor
-          @preprocessor.call(m2[:min])..@preprocessor.call(m2[:max])
+      # catch tricky situations when ranged objects themselves have values with
+      # hyphens (mostly dates)
+      hyphen_count = value.count('-')
+      if ranged and hyphen_count > 1
+        parse_hyphen_range(value)
+      else
+        # simple range or collection
+        range_matcher = /^\s*(?<min>[^-]+)\s*-\s*(?<max>[^-]+)$/
+        m2 = value.match(range_matcher)
+        if m2 && ranged
+          # value is a range, so format query appropriately
+          if @has_preprocessor
+            @preprocessor.call(m2[:min])..@preprocessor.call(m2[:max])
+          else
+            m2[:min]..m2[:max]
+          end
         else
-          m2[:min]..m2[:max]
+          if @has_preprocessor
+            value.split(',').map(&:strip).map(&@preprocessor)
+          else
+            value.split(',').map(&:strip)
+          end
+        end
+      end
+    end
+
+    def parse_hyphen_range(value)
+      hyphen_count = value.count('-')
+      if hyphen_count.modulo(2) == 1
+        # odd number of hyphens, so treat middle one as range indicator,
+        # others are part of literal to be fed to preprocessor (or preserved)
+        rank = 0 # tracks which hyphen we have are looking for
+        range_rank = hyphen_count / 2 # integer division to the rescue
+        range_position = nil # this will hold the index of the range hyphen
+        position = 0
+        value.each_char do |char|
+          if char == '-'
+            # found a hyphen! is it the correct one?
+            if rank == range_rank
+              # it is! save its position and stop looping
+              range_position = position
+              break
+            end
+
+            # found one, but it's not the range one, so up
+            rank += 1
+          end
+
+          # always update position (crummy enumerable... should couple these)
+          position += 1
+        end
+        min = value[(0...range_position)].strip
+        max = value[((range_position + 1)..-1)].strip
+        if @has_preprocessor
+          @preprocessor.call(min)..@preprocessor.call(max)
+        else
+          min..max
         end
       else
-        if @has_preprocessor
-          value.split(',').map(&:strip).map(&@preprocessor)
-        else
-          value.split(',').map(&:strip)
-        end
+        # even number of hyphens? Uh... return nil, I guess?
+        nil
       end
     end
 
@@ -301,14 +355,45 @@ class TestInstance < ApplicationRecord
     seconds + 60 * minutes
   end
 
+  def self.split_query(query_text)
+    # split on colons, but note that the divider separates keys from values,
+    # and not key-value pairs from each other. So we will have an array that
+    # looks like [key1, val1 key2, val2 key3, ... valn-1 keyn, valn]
+    split_up = query_text.split(':')
+
+    # first key is trivial
+    keys = [split_up[0].strip.downcase]
+    values = []
+
+    # now go through interior elements to split up keys and values
+    split_up[(1..-2)].each do |piece|
+      m = piece.match(/(?<val>^.*)[\s,;]+(?<next_key>\w+$)/)
+      values << m[:val].gsub(/['"]/, '').sub(/[\s,;]+$/, '').strip
+      keys << m[:next_key].strip.downcase
+    end
+
+    # last element is the last value
+    values << split_up[-1].gsub(/['"]/, '').sub(/[\s,;]+$/, '').strip
+
+    # return as a hash
+    # need an error here if keys are not unique
+    Hash[keys.zip(values)]
+  end    
+
   def self.query(query_text)
     query_hash = {}
     # see definition of SearchOption class above; this aids in efficiently
     # building up the search query from many pre-defined searchable options.
     options = [
       SearchOption.new('test_case', TestCase, :name),
-      SearchOption.new('version', TestInstance, :mesa_version) do |number|
-        number.to_i 
+      # SearchOption.new('version', TestInstance, :mesa_version, true) do |number|
+        # number.to_i 
+      # end,
+      SearchOption.new('commit', Commit, :short_sha) do |sha|
+        sha[(0..7)]
+      end,
+      SearchOption.new('commit_datetime', Commit, :commit_time, true) do |datetime|
+        Date.parse(datetime)
       end,
       SearchOption.new('user', Computer, :user_id) do |user_name|
         User.find_by_name(user_name)
@@ -316,37 +401,29 @@ class TestInstance < ApplicationRecord
       SearchOption.new('computer', self, :computer_name),
       # platforms are tied to the computer
       SearchOption.new('platform', Computer, :platform),
-      SearchOption.new('platform_version', self, :platform_version),
+      SearchOption.new('platform_version', self, :platform_version, true),
       # give memory usage in GB, convert to float, and then to kB (how it is in
       # the database)
-      SearchOption.new('rn_RAM', self, :mem_rn) do |mem_GB|
+      SearchOption.new('rn_RAM', self, :mem_rn, true) do |mem_GB|
         mem_GB.to_f * (1024**2)
       end,
-      SearchOption.new('re_RAM', self, :mem_re) do |mem_GB|
+      SearchOption.new('re_RAM', self, :mem_re, true) do |mem_GB|
         mem_GB.to_f * (1024**2)
       end,
-      # runtimes in seconds. Note that runtime_seconds is also aliased to
-      # rn_time, so this is the right one
-      SearchOption.new('rn_runtime', self, :runtime_seconds) do |rn_runtime|
-        parse_runtime(rn_runtime)
-      end,
-      SearchOption.new('re_runtime', self, :re_time) do |re_runtime|
-        parse_runtime(re_runtime)
-      end,
-      SearchOption.new('runtime', self, :total_runtime_seconds) do |runtime|
-        parse_runtime(runtime)
-      end,
-      SearchOption.new('date', self, :created_at) do |datestring|
+      # runtimes now in minutes. Meaning less clear as this is reported by
+      # test cases themselves
+      SearchOption.new('runtime', self, :total_runtime_minutes, true),
+      SearchOption.new('date', self, :created_at, true) do |datestring|
         Date.parse(datestring)
       end,
-      SearchOption.new('datetime', self, :created_at) do |datetimestring|
+      SearchOption.new('datetime', self, :created_at, true) do |datetimestring|
         DateTime.parse(datetimestring)
       end,
-      SearchOption.new('threads', self, :omp_num_threads) do |n_threads|
+      SearchOption.new('threads', self, :omp_num_threads, true) do |n_threads|
         n_threads.to_i
       end,
       SearchOption.new('compiler', self, :compiler),
-      SearchOption.new('compiler_version', self, :compiler_version),
+      SearchOption.new('compiler_version', self, :compiler_version, true),
       SearchOption.new('passed', self, :passed) do |passage_status|
         if passage_status =~ /f$|false$/i
           false
@@ -357,35 +434,52 @@ class TestInstance < ApplicationRecord
     ]
     option_names = options.map(&:name)
     options_hash = Hash[option_names.zip(options)]
-    reconstructed_query = ''
     failed_requirements = []
     res = TestInstance.where(nil)
-    requirement_matcher = /^(?<key>[^:"']+):\s+("|')?(?<value>[^'"]+)("|')?$/
-    query_text.split(';').map(&:strip).each do |requirement|
-      # puts "checking string #{requirement}"
-      m1 = requirement.match(requirement_matcher)
+    # requirement_matcher = /^(?<key>[^:"']+):\s*("|')?(?<value>[^'"]+)("|')?$/
+    # query_text.split(';').map(&:strip).each do |requirement|
+    #   # puts "checking string #{requirement}"
+    #   m1 = requirement.match(requirement_matcher)
       
-      unless m1 && option_names.include?(m1[:key])
-        # poorly formed query requirement; add to failure list to report back
-        # later
-        # puts "didn't find any valid options"
-        failed_requirements << requirement
-        next
+    #   unless m1 && option_names.include?(m1[:key])
+    #     # poorly formed query requirement; add to failure list to report back
+    #     # later
+    #     # puts "didn't find any valid options"
+    #     failed_requirements << requirement
+    #     next
+    #   end
+    #   # puts "found key: #{m1[:key]} and value: #{m1[:value]}"
+    #   query_hash[m1[:key]] = m1[:value]
+    # end
+    query_hash = split_query(query_text)
+    query_hash.keys.each do |key|
+      unless option_names.include?(key)
+        failed_requirements << key
       end
-      # puts "found key: #{m1[:key]} and value: #{m1[:value]}"
-      query_hash[m1[:key]] = m1[:value]
     end
 
+    # obliterate ill-formed search keys
+    failed_requirements.each {|key| query_hash.delete(key) }
+
+    puts '#########################'
+    puts 'query:'
+    puts query_hash
+    puts '#########################'
+    
     # now have key-value pairs, values may be ranges. Reach out to each
     # SearchOption to actually get query, and shove each into a where call.
     # ActiveRecord is lazy and will compress these all into a single search
     # when it is needed.
     query_hash.each_pair do |key, value|
       res = res.where(options_hash[key].query_piece(value))
+      puts "adding to query:"
+      puts options_hash[key].query_piece(value)
     end
+
+    res = res.where.not(commit_id: nil)
     # res
-    return [res.order(mesa_version: :desc, created_at: :desc).
-      includes(:test_case, :version, computer: :user), failed_requirements]
+    return [res.includes(:test_case, :test_case_commit, :commit, computer: :user).
+      order('commits.commit_time DESC, test_instances.created_at DESC'), failed_requirements]
   end
 
   def update_computer_name

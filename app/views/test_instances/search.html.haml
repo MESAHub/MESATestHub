@@ -108,9 +108,12 @@
   %h2 Search Results
   %p
     %i= page_entries_info @test_instances
+  .my-3
+    = paginate @test_instances
+
   = render 'search_table'
 
-  .row
+  .row.mb-4
     .col
       = paginate @test_instances
     

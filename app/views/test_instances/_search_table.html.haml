@@ -4,7 +4,8 @@
       %table.table.table-sm
         %thead.thead-default
           %tr
-            %th.text-center Version
+            -# %th.text-center Version
+            %th.text-center Commit
             %th.text-center Test Case
             %th.text-center Status
             %th.text-center Computer
@@ -15,16 +16,18 @@
             %th.text-center Platform
             %th.text-center Threads
             %th.text-center User
-            %th.text-center
-            - if current_user
-              %th.text-center
-              %th.text-center
+            -# %th.text-center
+            -# - if current_user
+            -#   %th.text-center
+            -#   %th.text-center
 
         %tbody
           - @test_instances.each do |test_instance|
+            - next unless test_instance.commit
             %tr.text-center
-              %td.align-middle= link_to test_instance.version.number, version_path(test_instance.version.number)
-              %td.align-middle= link_to test_instance.test_case.name, test_case_version_path(test_instance.version.number, test_instance.test_case.name)
+              -# %td.align-middle= link_to test_instance.version.number, version_path(test_instance.version.number)
+              %td.align-middle= link_to test_instance.commit.short_sha, commit_path(sha: test_instance.commit.short_sha, branch: :master), class: 'btn btn-outline-primary text-monospace'
+              %td.align-middle= link_to test_instance.test_case.name, test_case_commit_path(branch: :master, module: test_instance.test_case.module, test_case: test_instance.test_case.name, sha: test_instance.commit.short_sha)
               %td.align-middle
                 -if test_instance.passed
                   %span.text-success= test_instance.passage_status
@@ -51,10 +54,10 @@
               %td.align-middle= ((test_instance.computer.platform || '' ) + ' ' + (test_instance.platform_version || '')).strip
               %td.align-middle= test_instance.omp_num_threads
               %td.align-middle= link_to test_instance.computer.user.name, user_path(test_instance.computer.user)
-              %td.align-middle= link_to 'Show', [ test_instance.test_case, test_instance], class: 'btn btn-sm btn-secondary text-light'
-              -if current_user
-                %td.align-middle= link_to 'Edit', edit_test_case_test_instance_path(test_instance.test_case, test_instance), class: 'btn btn-sm btn-primary text-light'
-                %td.align-middle= link_to 'Destroy', [test_instance.test_case, test_instance], method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-sm btn-danger text-light'
+              -# %td.align-middle= link_to 'Show', [ test_instance.test_case, test_instance], class: 'btn btn-sm btn-secondary text-light'
+              -# -if current_user
+              -#   %td.align-middle= link_to 'Edit', edit_test_case_test_instance_path(test_instance.test_case, test_instance), class: 'btn btn-sm btn-primary text-light'
+              -#   %td.align-middle= link_to 'Destroy', [test_instance.test_case, test_instance], method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-sm btn-danger text-light'
   -# .row
   -#   .col
   -#     = paginate @test_instances
