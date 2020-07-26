@@ -4,7 +4,7 @@ git_source(:github) do |repo_name|
   "https://github.com/#{repo_name}.git"
 end
 ruby '~> 2.6.1'
-# gem 'bundler', '~> 2.1'
+gem 'bundler', '~> 2.1.4'
 gem 'sinatra', '~> 2.0.2'
 gem 'rack', '~> 2.0.8'
 gem 'rails', '~> 5.1.6.2'
@@ -35,10 +35,10 @@ gem 'github_webhook', '~> 1.1'
 
 group :development, :test do
   gem 'byebug', platforms: [:mri, :mingw, :x64_mingw]
-  gem 'guard-bundler'
-  gem 'guard-rails'
-  gem 'guard-rspec'
-  gem 'guard-cucumber'
+  # gem 'guard-bundler'
+  # gem 'guard-rails'
+  # gem 'guard-rspec'
+  # gem 'guard-cucumber'
   gem 'cucumber-rails', require: false
   gem 'cucumber-rails-training-wheels'  
   gem 'capybara', '~> 2.13'

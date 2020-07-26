@@ -181,11 +181,11 @@ ActiveRecord::Schema.define(version: 20200721182333) do
 
   create_table "users", force: :cascade do |t|
     t.string "email"
-    t.string "name"
     t.string "password_digest"
     t.boolean "admin"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "name"
     t.string "time_zone", default: "Pacific Time (US & Canada)"
     t.index ["email"], name: "index_users_on_email", unique: true
   end
