@@ -1,0 +1,1 @@
+(function(){var n;n={setup:function(){return n.change_form_style(),n.listen_for_change()},change_form_style:function(){return $("#version_select").parent().parent().removeClass("form-inline")},listen_for_change:function(){return $("#version_select").change(function(){return this.form.submit()})}},$(function(){return n.setup()})}).call(this);
