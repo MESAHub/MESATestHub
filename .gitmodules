@@ -1,4 +1,0 @@
-[submodule "data/mesa-git"]
-	path = data/mesa-git
-	url = https://github.com/MESAHub/mesa-sandbox-lfs.git
-  ignore = all
