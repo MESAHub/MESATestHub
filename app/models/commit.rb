@@ -32,8 +32,8 @@ class Commit < ApplicationRecord
     # update git repo; should be fired every time a push webhook event comes
     # in to the server
     
-    credentials = Rugged::Credentials::UserPassword.new(username: 'wmwolf',
-      password: ENV['GIT_TOKEN'])
+    credentials = Rugged::Credentials::UserPassword.new(
+      username: ENV['GIT_USERNAME'], password: ENV['GIT_TOKEN'])
     # strike out my credentials before this goes live!
     repo.fetch('origin', credentials: credentials)
   end
