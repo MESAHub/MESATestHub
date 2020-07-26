@@ -24,7 +24,7 @@ class Commit < ApplicationRecord
     # handle into Git repo
     
     # short circuit assignment to avoid re-instantiation
-    @repo ||= Rugged::Repository.new(Rails.root.join('public', 'mesa-git'))
+    @repo ||= Rugged::Repository.new(Rails.root.join('data', 'mesa-git'))
     @repo
   end
 
