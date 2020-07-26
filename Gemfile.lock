@@ -359,7 +359,6 @@ DEPENDENCIES
   better_errors
   bootstrap (~> 4.5)
   bootstrap_form
-  bundler (~> 2.1.4)
   byebug
   capybara (~> 2.13)
   coffee-rails (~> 4.2)
@@ -410,7 +409,7 @@ DEPENDENCIES
   web-console (>= 3.3.0)
 
 RUBY VERSION
-   ruby 2.6.1p33
+   ruby 2.7.1p83
 
 BUNDLED WITH
    2.1.4
