@@ -10,10 +10,20 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20200721182333) do
+ActiveRecord::Schema.define(version: 20200728234317) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
+
+  create_table "branches", force: :cascade do |t|
+    t.string "name", null: false
+    t.boolean "merged", default: false
+    t.bigint "head_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["head_id"], name: "index_branches_on_head_id"
+    t.index ["name"], name: "index_branches_on_name", unique: true
+  end
 
   create_table "commits", force: :cascade do |t|
     t.string "sha", null: false
@@ -181,11 +191,11 @@ ActiveRecord::Schema.define(version: 20200721182333) do
 
   create_table "users", force: :cascade do |t|
     t.string "email"
+    t.string "name"
     t.string "password_digest"
     t.boolean "admin"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.string "name"
     t.string "time_zone", default: "Pacific Time (US & Canada)"
     t.index ["email"], name: "index_users_on_email", unique: true
   end
@@ -202,6 +212,7 @@ ActiveRecord::Schema.define(version: 20200721182333) do
     t.index ["number"], name: "index_versions_on_number", unique: true
   end
 
+  add_foreign_key "branches", "commits", column: "head_id"
   add_foreign_key "inlist_data", "instance_inlists"
   add_foreign_key "instance_inlists", "test_instances"
   add_foreign_key "submissions", "commits"
