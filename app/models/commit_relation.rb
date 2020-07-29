@@ -1,0 +1,2 @@
+class CommitRelation < ApplicationRecord
+end
