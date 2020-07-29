@@ -10,10 +10,17 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20200728234317) do
+ActiveRecord::Schema.define(version: 20200728235453) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
+
+  create_table "branch_memberships", force: :cascade do |t|
+    t.bigint "branch_id"
+    t.bigint "commit_id"
+    t.index ["branch_id"], name: "index_branch_memberships_on_branch_id"
+    t.index ["commit_id"], name: "index_branch_memberships_on_commit_id"
+  end
 
   create_table "branches", force: :cascade do |t|
     t.string "name", null: false

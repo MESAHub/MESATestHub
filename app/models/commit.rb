@@ -1,4 +1,6 @@
 class Commit < ApplicationRecord
+  has_many :branch_memberships
+  has_many :branches, through: :branch_memberships
   has_many :test_case_commits, dependent: :destroy
   has_many :submissions, dependent: :destroy
   
@@ -392,10 +394,10 @@ class Commit < ApplicationRecord
   end
 
   # list of branch names that contain this commit
-  def branches
-    res = `git -C #{Commit.repo.path} branch --contains #{sha}`.split("\n")
-    res.reject { |line| line =~ /\(no branch\)/}.map(&:strip)
-  end
+  # def branches
+  #   res = `git -C #{Commit.repo.path} branch --contains #{sha}`.split("\n")
+  #   res.reject { |line| line =~ /\(no branch\)/}.map(&:strip)
+  # end
 
   # get list of commits that are near in +commit_time+ to this commit. If
   # possible, get +limit+ commits, with equal numbers before and after this
