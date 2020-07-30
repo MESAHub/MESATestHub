@@ -30,7 +30,6 @@ gem 'rubyzip', '~>1.3.0'
 gem 'barista'
 gem 'font-awesome-rails'
 # Git stuff
-gem 'rugged', git: 'git://github.com/libgit2/rugged.git', submodules: true
 gem 'octokit', "~> 4.0"
 gem 'github_webhook', '~> 1.1'
 
