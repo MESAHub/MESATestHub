@@ -62,4 +62,8 @@ class Branch < ApplicationRecord
     Branch.where(merged: false)
   end
 
+  def to_s
+    self.name
+  end
+
 end

@@ -144,7 +144,7 @@ class TestCaseCommit < ApplicationRecord
   # TODO: update all methods below to work with a specified branch, and thus
   # query for the proper depth of commits in that branch
 
-  def relevant_instances_to_depth(depth: 100, branch: 'master', force: false)
+  def relevant_instances_to_depth(depth: 100, branch: Branch.master, force: false)
     # search query for all instances of this test case that have been tested
     # by the same computers as this test case commit back +depth+ commit
     # 
@@ -154,9 +154,9 @@ class TestCaseCommit < ApplicationRecord
     # *NOTE* This is sloppy. We are assuming that the +depth+ keyword is not
     # often changed, and it is behaving more like an instance variable since it
     # is shared among several methods. Probably good enough for now, though.
-    
     return @relevant_instances if @relevant_instances && !force
-    commits = Commit.subset_of_branch(branch: branch, depth: depth)
+    # commits = Commit.subset_of_branch(branch: branch, depth: depth)
+    commits = branch.commits.order(commit_time: :desc).limit(depth)
     query = test_case.test_instances.where(computer: computers,
       commit: commits, passed: true).includes(:computer)
     @relevant_instances = query.to_a

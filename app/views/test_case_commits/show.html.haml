@@ -11,7 +11,7 @@
         %samp#selected-branch= @selected_branch
       .dropdown-menu
         - @branches.each do |branch|
-          =link_to branch, test_case_commit_path(branch: branch, sha: params[:sha], test_case: params[:test_case], module: params[:module]), class: "text-monospace dropdown-item"  
+          =link_to branch, test_case_commit_path(branch: branch.name, sha: params[:sha], test_case: params[:test_case], module: params[:module]), class: "text-monospace dropdown-item"  
   .col-6.col-md-5
     .dropdown
       %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle#commit-selector{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}

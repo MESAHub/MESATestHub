@@ -10,7 +10,7 @@ class CommitsController < ApplicationController
 
     # populate branch/commit selection menus
     # get all branches that contain this commit, this will be first dropdown
-    @selected_branch = params[:branch]
+    @selected_branch = Branch.named(params[:branch])
     @other_branches = @commit.branches.reject do |branch|
       branch == @selected_branch
     end
@@ -21,13 +21,14 @@ class CommitsController < ApplicationController
     # at current commit in time in the branch. That is, if this is the head
     # commit, get ten last commits. If this is the first commit of a branch,
     # get the next ten. If it is in the middle, get five on either side.
-    @nearby_commits = @commit.nearby_commits(branch: @selected_branch, limit: 7).reverse
+    @nearby_commits = @commit.nearby_commits(branch: @selected_branch, limit: 7).reverse.reject(&:nil?)
+
     @next_commit, @previous_commit = nil, nil
     loc = @nearby_commits.pluck(:id).index(@commit.id)
     # we've reversed nearby commits, so the "next" one is later in time, and 
     # thus EARLIER in the array. Clunky, but I think it works in practice
     if loc > 0
-      @next_commit = @nearby_commits[loc - 1]
+    @next_commit = @nearby_commits[loc - 1]
     end
     if loc < @nearby_commits.length - 1
       @previous_commit = @nearby_commits[loc + 1]
@@ -162,14 +163,15 @@ class CommitsController < ApplicationController
   end
 
   def index
-    @unmerged_branches = Commit.unmerged_branches
-    @merged_branches = Commit.merged_branches
-    @branch = params[:branch] || 'master'
-    @commits = Commit.all_in_branch(
-      branch: @branch,
-      includes: :test_case_commits,
-      page: params[:page]
-    )
+    @unmerged_branches = Branch.unmerged
+    @merged_branches = Branch.merged
+    @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.master
+    @commits = @branch.commits.includes(:test_case_commits).order(commit_time: :desc).page(params[:page])
+    # Commit.all_in_branch(
+    #   branch: @branch,
+    #   includes: :test_case_commits,
+    #   page: params[:page]
+    # )
 
     @row_classes = {}
     @btn_classes = {}

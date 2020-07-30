@@ -3,7 +3,7 @@ class TestCaseCommitsController < ApplicationController
 
   def show
     # set up branch/commit selector
-    @selected_branch = params[:branch]
+    @selected_branch = Branch.named(params[:branch])
     @other_branches = @commit.branches.reject do |branch|
       branch == @selected_branch
     end
@@ -17,7 +17,7 @@ class TestCaseCommitsController < ApplicationController
     @nearby_tccs = TestCaseCommit.includes(:commit).where(
       commit: @commit.nearby_commits(branch: @selected_branch, limit: 7),
       test_case: @test_case_commit.test_case
-    ).order(created_at: :desc)
+    ).order('commits.commit_time desc')
     @nearby_commits = @nearby_tccs.map(&:commit)
     @next_commit, @previous_commit = nil, nil
     loc = @nearby_commits.pluck(:id).index(@commit.id)
@@ -46,7 +46,7 @@ class TestCaseCommitsController < ApplicationController
     end
 
     # other test case commits for this commit
-    unsorted = @test_case_commit.commit.test_case_commits.each
+    unsorted = @test_case_commit.commit.test_case_commits.includes(:test_case).each
     @commit_tccs = []
 
     # set up picky ordering for test case commits: mixed, then checksums, then

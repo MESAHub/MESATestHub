@@ -64,7 +64,6 @@ class Commit < ApplicationRecord
 
     # now establish branch membership
     if branch.is_a? Branch
-      puts "setting up a branch membership between #{branch.name} and #{commit}"
       BranchMembership.find_or_create_by(branch: branch, commit: commit)
     end
     commit
@@ -163,25 +162,25 @@ class Commit < ApplicationRecord
     names
   end
 
-  def self.merged_branches(branch=nil)
-    if branch.nil?
-      branches - unmerged_branches
-    else
-      check_branch(branch)
-      # shell out to get list of branches that are "merged into" the desired
-      # branch
-      res = `git -C #{repo.path} branch --merged #{branch}`.split("\n")
+  # def self.merged_branches(branch=nil)
+  #   if branch.nil?
+  #     branches - unmerged_branches
+  #   else
+  #     check_branch(branch)
+  #     # shell out to get list of branches that are "merged into" the desired
+  #     # branch
+  #     res = `git -C #{repo.path} branch --merged #{branch}`.split("\n")
 
-      # get rid of bogus branch and clear out whitespace
-      res.reject! { |branch| branch.include? '(no branch)' }
-      res.map!(&:strip)
+  #     # get rid of bogus branch and clear out whitespace
+  #     res.reject! { |branch| branch.include? '(no branch)' }
+  #     res.map!(&:strip)
 
-      # remove branch we are checking against... only want to find OTHER branches
-      # that have been merged into this branch
-      res.delete(branch)
-      res
-    end
-  end
+  #     # remove branch we are checking against... only want to find OTHER branches
+  #     # that have been merged into this branch
+  #     res.delete(branch)
+  #     res
+  #   end
+  # end
 
   # get full SHAs for all commits in a branch by walking through the tree and
   # scooping up commits
@@ -383,40 +382,40 @@ class Commit < ApplicationRecord
     sorted_query(shas_in_branch(branch: branch), includes: includes, page: nil)
   end
 
-  def self.subset_of_branch(branch: 'master', size: 25, page: 1,
-    includes: nil)
-    # Retrieve properly sorted collection of commits, but limit the size
-    # 
-    # Meant to simulate pagination, but since we have to do sorting on the
-    # tree, we can't rely on Rails magic. Instead, we get SHAs of the 
-    # relevant commits, find them in the database, and then sort the results
-    # accordingly.
-    # 
-    # +branch+ string matching a branch's name. If it isn't found, returns
-    # nil
-    # +size+ integer describing the "chunk size" of commits to be returned.
-    # Defaults to 25
-    # +page+ which chunk to get Essentially we'll start at item (page-1) * size
-    # and then scrape the next "size" amount of commits
-    # +includes+ argument to be passed on to AcitveRecord#includes (pre-load
-    # associations)
-    head = rugged_get_head(branch)
-    return if head.nil?
+  # def self.subset_of_branch(branch: 'master', size: 25, page: 1,
+  #   includes: nil)
+  #   # Retrieve properly sorted collection of commits, but limit the size
+  #   # 
+  #   # Meant to simulate pagination, but since we have to do sorting on the
+  #   # tree, we can't rely on Rails magic. Instead, we get SHAs of the 
+  #   # relevant commits, find them in the database, and then sort the results
+  #   # accordingly.
+  #   # 
+  #   # +branch+ string matching a branch's name. If it isn't found, returns
+  #   # nil
+  #   # +size+ integer describing the "chunk size" of commits to be returned.
+  #   # Defaults to 25
+  #   # +page+ which chunk to get Essentially we'll start at item (page-1) * size
+  #   # and then scrape the next "size" amount of commits
+  #   # +includes+ argument to be passed on to AcitveRecord#includes (pre-load
+  #   # associations)
+  #   head = rugged_get_head(branch)
+  #   return if head.nil?
 
-    # define parameters for "pagination"
-    counter = 0
-    start_recording = (page - 1) * size
-    stop_recording = page * size
-    shas = []
-    repo.walk(head, DEFAULT_SORTING).each do |commit|
-      # only start recording when we are deep enough, and stop when we are too
-      # deep
-      shas.append(commit.oid) if counter >= start_recording
-      counter += 1
-      break if counter >= stop_recording
-    end
-    sorted_query(shas, includes: includes)
-  end
+  #   # define parameters for "pagination"
+  #   counter = 0
+  #   start_recording = (page - 1) * size
+  #   stop_recording = page * size
+  #   shas = []
+  #   repo.walk(head, DEFAULT_SORTING).each do |commit|
+  #     # only start recording when we are deep enough, and stop when we are too
+  #     # deep
+  #     shas.append(commit.oid) if counter >= start_recording
+  #     counter += 1
+  #     break if counter >= stop_recording
+  #   end
+  #   sorted_query(shas, includes: includes)
+  # end
 
   def self.commits_before(anchor, depth, inclusive: true, includes: nil)
     # retrieve all commits before a certain commit in a branch to some depth
@@ -563,16 +562,11 @@ class Commit < ApplicationRecord
   # get list of commits that are near in +commit_time+ to this commit. If
   # possible, get +limit+ commits, with equal numbers before and after this
   # commit
-  def nearby_commits(branch: 'master', limit: 11)
-    shas = Commit.shas_in_branch(branch: branch)
-    earliest = Commit.where(sha: shas).order(commit_time: :asc).first.commit_time
-    before = Commit.where(
-      sha: shas,
-      commit_time: earliest...commit_time
-    ).order(commit_time: :desc).limit(limit).reverse.to_a
-    after = Commit.where(
-      sha: shas,
-      commit_time: commit_time..Time.now
+  def nearby_commits(branch: Branch.master, limit: 11)
+    earliest = branch.commits.order(commit_time: :asc).first.commit_time
+    before = branch.commits.where(commit_time: earliest...commit_time).
+                            order(commit_time: :desc).limit(limit).reverse.to_a
+    after = branch.commits.where(commit_time: commit_time..Time.now
     ).where.not(id: id).order(commit_time: :asc).limit(limit).to_a
 
     # create list of all commits, including this commit
@@ -581,7 +575,7 @@ class Commit < ApplicationRecord
     end
 
     # make sure head commit is at the right location
-    if all_commits.include? Commit.head(branch: branch)
+    if all_commits.include? branch.head
       all_commits << all_commits.delete(Commit.head(branch: branch))
     end
 
@@ -604,7 +598,7 @@ class Commit < ApplicationRecord
       res.prepend(all_commits[one_before]) if one_before >= 0
       res.append(all_commits[one_after]) if one_after < size
     end
-    res
+    res.reject(&:nil?)
   end
 
   def computer_info

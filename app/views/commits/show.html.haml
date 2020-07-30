@@ -1,7 +1,7 @@
 .row
   .col-sm-1.d-none.d-md-block
     -if @previous_commit
-      %a.btn.btn-outline-primary.btn-lg.btn-block{href: commit_path(branch: @selected_branch, sha: @previous_commit.short_sha)}
+      %a.btn.btn-outline-primary.btn-lg.btn-block{href: commit_path(branch: @selected_branch.name, sha: @previous_commit.short_sha)}
         %i.fa.fa-step-backward.text-reset
   .col-6.col-md-5.text-right
     .dropdown
@@ -10,7 +10,7 @@
         %samp#selected-branch= @selected_branch
       .dropdown-menu
         - @branches.each do |branch|
-          =link_to branch, commit_path(branch: branch, sha: @commit.short_sha), class: "text-monospace dropdown-item"  
+          =link_to branch, commit_path(branch: branch.name, sha: @commit.short_sha), class: "text-monospace dropdown-item" + (branch == @selected_branch ? ' selected' : '')  
   .col-6.col-md-5
     .dropdown
       %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle#commit-selector{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
@@ -30,7 +30,7 @@
                     =(short_msg + '&#8230;').html_safe
                   -else
                     =commit.message_first_line
-                %a.stretched-link.text-reset{href: commit_path(branch: @selected_branch, sha: commit.short_sha)}
+                %a.stretched-link.text-reset{href: commit_path(branch: @selected_branch.name, sha: commit.short_sha)}
                   %span.h5.text-monospace.text-primary=commit.short_sha
               .d-flex.w-100
                 %p.mb-0
@@ -41,7 +41,7 @@
 
   .col-1.d-none.d-md-block
     -if @next_commit
-      %a.btn.btn-outline-primary.btn-lg.btn-block{href: commit_path(branch: @selected_branch, sha: @next_commit.short_sha)}
+      %a.btn.btn-outline-primary.btn-lg.btn-block{href: commit_path(branch: @selected_branch.name, sha: @next_commit.short_sha)}
         %i.fa.fa-step-forward.text-reset
 .row.mt-5.mb-0
   .col
