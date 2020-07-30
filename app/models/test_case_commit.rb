@@ -27,33 +27,33 @@ class TestCaseCommit < ApplicationRecord
   # being tested in a particular commit
   def self.create_from_commits(commits)
     commits.each do |commit|
-      # go through each module and create necessary test cases and test case
-      # commits
-      TestCase.modules.each do |mod|
-        # get a list of the test case names
-        test_case_names = commit.test_case_names(mod)
+      TestCaseCommit.create_from_commit(commit)
+    end
+  end
 
-        # create any missing (new) test cases
-        existing_cases = TestCase.where(name: test_case_names, module: mod).to_a
-        existing_names = existing_cases.pluck(:name)
-        to_create = test_case_names - existing_names
-        to_create.each { |tc_name| puts tc_name }
-        TestCase.transaction do
-          to_create.each do |new_name|
-            existing_cases << TestCase.create!(name: new_name, module: mod)
-          end
+  def self.create_from_commit(commit)
+    # go through each module and create necessary test cases and test case
+    # commits
+    commit.api_test_cases.each do |mod, test_case_names|
+      # create any missing (new) test cases
+      existing_cases = TestCase.where(name: test_case_names, module: mod).to_a
+      existing_names = existing_cases.pluck(:name)
+      to_create = test_case_names - existing_names
+      to_create.each { |tc_name| puts tc_name }
+      TestCase.transaction do
+        to_create.each do |new_name|
+          existing_cases << TestCase.create(name: new_name, module: mod)
         end
-        # now create any missing test case commits
-        existing_tccs = TestCaseCommit.where(test_case: existing_cases,
-                                             commit: commit)
-        missing_tcc_cases = existing_cases - existing_tccs.includes(:test_case).map(&:test_case)
-        # do all test case commit creations in one transaction (hopefully this
-        # is better on the database? Not really sure...)
-        TestCaseCommit.transaction do
-          missing_tcc_cases.each do |test_case|
-            puts "Creating test case commit for test case #{test_case.name}"
-            test_case.test_case_commits.create(commit: commit)
-          end
+      end
+      # now create any missing test case commits
+      existing_tccs = TestCaseCommit.where(test_case: existing_cases,
+                                           commit: commit)
+      missing_tcc_cases = existing_cases - existing_tccs.includes(:test_case).map(&:test_case)
+      # do all test case commit creations in one transaction (hopefully this
+      # is better on the database? Not really sure...)
+      TestCaseCommit.transaction do
+        missing_tcc_cases.each do |test_case|
+          test_case.test_case_commits.create(commit: commit)
         end
       end
     end

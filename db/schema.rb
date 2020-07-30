@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20200728235453) do
+ActiveRecord::Schema.define(version: 20200730012918) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -28,8 +28,16 @@ ActiveRecord::Schema.define(version: 20200728235453) do
     t.bigint "head_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["head_id"], name: "index_branches_on_head_id"
     t.index ["name"], name: "index_branches_on_name", unique: true
+  end
+
+  create_table "commit_relations", force: :cascade do |t|
+    t.bigint "child_id"
+    t.bigint "parent_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["child_id"], name: "index_commit_relations_on_child_id"
+    t.index ["parent_id"], name: "index_commit_relations_on_parent_id"
   end
 
   create_table "commits", force: :cascade do |t|
@@ -198,11 +206,11 @@ ActiveRecord::Schema.define(version: 20200728235453) do
 
   create_table "users", force: :cascade do |t|
     t.string "email"
-    t.string "name"
     t.string "password_digest"
     t.boolean "admin"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "name"
     t.string "time_zone", default: "Pacific Time (US & Canada)"
     t.index ["email"], name: "index_users_on_email", unique: true
   end
@@ -220,6 +228,8 @@ ActiveRecord::Schema.define(version: 20200728235453) do
   end
 
   add_foreign_key "branches", "commits", column: "head_id"
+  add_foreign_key "commit_relations", "commits", column: "child_id"
+  add_foreign_key "commit_relations", "commits", column: "parent_id"
   add_foreign_key "inlist_data", "instance_inlists"
   add_foreign_key "instance_inlists", "test_instances"
   add_foreign_key "submissions", "commits"
