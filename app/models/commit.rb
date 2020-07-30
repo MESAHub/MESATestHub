@@ -189,43 +189,43 @@ class Commit < ApplicationRecord
   end
 
 
-  def self.unmerged_branches(branch=nil)
-    if branch.nil?
-      all = branches
-      all_merged = all.inject([]) do |res, branch|
-        res + merged_branches(branch)
-      end.uniq
-      all - all_merged
-    else
-      check_branch(branch)
-      # shell out to get list of branches that are "merged into" the desired
-      # branch
-      res = `git -C #{repo.path} branch --no-merged #{branch}`.split("\n")
+  # def self.unmerged_branches(branch=nil)
+  #   if branch.nil?
+  #     all = branches
+  #     all_merged = all.inject([]) do |res, branch|
+  #       res + merged_branches(branch)
+  #     end.uniq
+  #     all - all_merged
+  #   else
+  #     check_branch(branch)
+  #     # shell out to get list of branches that are "merged into" the desired
+  #     # branch
+  #     res = `git -C #{repo.path} branch --no-merged #{branch}`.split("\n")
 
-      # get rid of bogus branch and clear out whitespace
-      res.reject! { |branch| branch.include? '(no branch)' }
-      res.map!(&:strip)
+  #     # get rid of bogus branch and clear out whitespace
+  #     res.reject! { |branch| branch.include? '(no branch)' }
+  #     res.map!(&:strip)
 
-      # remove branch we are checking against... only want to find OTHER branches
-      # that have been merged into this branch
-      res.delete(branch)
-      res
-    end
-  end
+  #     # remove branch we are checking against... only want to find OTHER branches
+  #     # that have been merged into this branch
+  #     res.delete(branch)
+  #     res
+  #   end
+  # end
 
-  def self.check_branch(branch)
-    unless branches.include? branch
-      raise GitError.new(
-        "Invalid branch: {#branch}. Must be one of #{branches.join(', ')}."
-        )
-    end
-  end
+  # def self.check_branch(branch)
+  #   unless branches.include? branch
+  #     raise GitError.new(
+  #       "Invalid branch: {#branch}. Must be one of #{branches.join(', ')}."
+  #       )
+  #   end
+  # end
 
-  def self.head_commit_shas
-    # hash mapping branch names to head commits SHA of respective branch
+  # def self.head_commit_shas
+  #   # hash mapping branch names to head commits SHA of respective branch
 
-    repo.branches.map { |branch| branch.target.oid }
-  end
+  #   repo.branches.map { |branch| branch.target.oid }
+  # end
 
   def self.rugged_get_branch(branch_name)
     # first branch that matches the name. Problematic for repeated names, but

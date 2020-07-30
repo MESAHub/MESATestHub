@@ -234,8 +234,7 @@ class TestCase < ApplicationRecord
   end
 
   def sorted_computers(branch, start_date, end_date)
-    commits = Commit.where(sha: Commit.shas_in_branch(branch: branch),
-      commit_time: start_date..end_date)
+    commits = branch.commits.where(commit_time: start_date..end_date)
     all_ids = test_instances.where(commit: commits).pluck(:computer_id)
     id_counts = {}
     all_ids.uniq.each do |id|

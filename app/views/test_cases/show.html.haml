@@ -28,7 +28,7 @@
             %samp= @branch
           .dropdown-menu{'aria-labelledby' => 'branch-select'}
             - @unmerged_branches.each do |branch|
-              =link_to branch, test_case_path(branch: branch, test_case: params[:test_case], module: params[:module]), class: "dropdown-item text-monospace text-primary#{branch == params[:branch] ? 'active' : ''}"
+              =link_to branch, test_case_path(branch: branch.name, test_case: params[:test_case], module: params[:module]), class: "dropdown-item text-monospace text-primary#{branch == params[:branch] ? 'active' : ''}"
         
 .row.mb-4
   .col

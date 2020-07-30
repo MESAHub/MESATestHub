@@ -84,9 +84,9 @@ class TestCasesController < ApplicationController
     @test_cases = TestCase.ordered_cases
     @test_cases.load
     @current_test_cases = TestCase.current_cases.to_a
-    @unmerged_branches = Commit.unmerged_branches
-    @merged_branches = Commit.merged_branches
-    @branch = params[:branch] || 'master'
+    @unmerged_branches = Branch.unmerged
+    @merged_branches = Branch.merged
+    @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.master
 
     # status selection menu options
     @status_menu = {
