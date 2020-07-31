@@ -115,7 +115,7 @@ class Commit < ApplicationRecord
       # even if the commit exists, we need to set up a branch membership.
       unless force
         github_shas = github_data.pluck(:sha)
-        db_shas = Branch.commits.pluck(:sha)
+        db_shas = branch.commits.pluck(:sha)
 
         to_add = github_shas - db_shas
         github_data.select! { |github_hash| to_add.include? github_hash[:sha] }

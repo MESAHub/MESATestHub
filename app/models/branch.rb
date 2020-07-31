@@ -46,7 +46,7 @@ class Branch < ApplicationRecord
     end
 
     # make sure each branch extends back to the root commit
-    Branch.each { |branch| branch.recursive_assign_root }
+    Branch.all.each { |branch| branch.recursive_assign_root }
 
     # make sure that all commits in a merged branch belong to at least the
     # branches that its head node belongs to
