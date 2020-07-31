@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20200730012918) do
+ActiveRecord::Schema.define(version: 2020_07_30_231522) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -59,6 +59,8 @@ ActiveRecord::Schema.define(version: 20200730012918) do
     t.integer "complete_computer_count", default: 0
     t.integer "computer_count", default: 0
     t.integer "status", default: 0
+    t.integer "children_count", default: 0
+    t.integer "parents_count", default: 0
     t.index ["sha"], name: "index_commits_on_sha", unique: true
     t.index ["short_sha"], name: "index_commits_on_short_sha", unique: true
   end
@@ -206,11 +208,11 @@ ActiveRecord::Schema.define(version: 20200730012918) do
 
   create_table "users", force: :cascade do |t|
     t.string "email"
+    t.string "name"
     t.string "password_digest"
     t.boolean "admin"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.string "name"
     t.string "time_zone", default: "Pacific Time (US & Canada)"
     t.index ["email"], name: "index_users_on_email", unique: true
   end

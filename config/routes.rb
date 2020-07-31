@@ -41,34 +41,6 @@ Rails.application.routes.draw do
 
   root to: 'commits#show', sha: 'head', branch: 'master'
 
-
-
-
-
-
-
-
-
-
-  get '/versions/:number/test_cases/:test_case',
-    to: 'test_case_versions#show', as:'test_case_version', test_case: /[^\/]+/
-  get '/versions/:number', to: 'versions#show', as: 'version'
-
-  match '/version/test_case' => 'test_case_versions#show_test_case_version', via: :get
-  # get '/:number', to: 'versions#show', as: 'version'
-  # get '/:number/:test_case', to: 'test_case_versions#show', as: 'test_case_version'
-
-  get 'versions', to: 'versions#index', as: 'versions'
-  get 'versions/:number', to: 'versions#show'  #, as: 'version'
-  get 'versions/:number/:test_case', to: 'test_case_versions#show'  #, as: 'test_case_version'
-  
-  # this one just takes number from params nad redirects to version_path
-  get 'show_version', to: 'versions#show_version'
-
-  # meant for remote HTTP requests
-  post '/test_instances/submit', to: 'test_instances#submit'
-  post '/versions/submit_revision', to: 'versions#submit_revision'
-
   # searching test_instances (should work for remote JSON requests)
   get '/test_instances/search', to: 'test_instances#search', as: 'search_instances'
   # just for counts; for API access only to prevent disastrous data dump
@@ -93,4 +65,5 @@ Rails.application.routes.draw do
 
   # global list of all computers (admins only)
   get 'all_computers', to: 'computers#index_all', as: 'all_computers'
+
 end

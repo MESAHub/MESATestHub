@@ -3,10 +3,10 @@ class Commit < ApplicationRecord
   # Git structure
   has_many :branch_memberships, dependent: :destroy
   has_many :branches, through: :branch_memberships
-  has_many :parent_relations, class_name: 'CommitRelation', foreign_key: :parent_id,
-           dependent: :destroy
-  has_many :child_relations, class_name: 'CommitRelation', foreign_key: :child_id,
-           dependent: :destroy
+  has_many :parent_relations, class_name: 'CommitRelation',
+           foreign_key: :parent_id, dependent: :destroy
+  has_many :child_relations, class_name: 'CommitRelation',
+           foreign_key: :child_id, dependent: :destroy
   has_many :children, through: :parent_relations
   has_many :parents, through: :child_relations
 
@@ -71,30 +71,114 @@ class Commit < ApplicationRecord
     commit
   end
 
-  def self.api_update_tree(branch: nil)
+  # gather all commits from GitHub and update database to include and/or
+  # update them. Does the following:
+  # - Get all commits to some time before the most recent commit (or to the
+  #   beginning of time)
+  # - Figure out which are missing from database and create them
+  # - Set relations for all newly inserted commits
+  # - Update branch membership for any newly merged branches
+  # Params
+  # +branch+ branch to update. +nil+ will update branches and then do them all
+  # +force+ if true, gather all commits from api and create them all or update
+  #   them if they already exist. Otherwise only gather commits from api from
+  #   30 days before the most recent commit, and only create missing commits
+  def self.api_update_tree(branch: nil, force: false)
     if branch.nil?
-      Branch.api_update_branches(basic: true)
-      Branch.all.each { |this_branch| api_update_tree(branch: this_branch) }
+      # make sure we know about every branch
+      Branch.api_update_branch_names
+      
+      # do main method for each branch
+      Branch.all.each do |this_branch|
+        api_update_tree(branch: this_branch, force: force)
+      end
+
+      # Somewhat redundant, as it re-establishes branch names, but also
+      # updates head commits and determines whether each branch is merged or
+      # not. Crucially, this makes sure that older commits in newly-merged
+      # branches have their branch memberships updated
       Branch.api_update_branches
     else
-      github_data = api_commits(sha: branch.name)
+      # Avoid asking api for commits since the beginning of time unless we 
+      # REALLY want it.
+      github_data = if force || Commit.count.zero?
+                      api_commits(sha: branch.name)
+                    else
+                      api_commits(
+                        sha: branch.name,
+                        since: 30.days.before(Commit.maximum(:commit_time)))
+                    end
+
+      # Prevent abusive calls to database to the beginning of time by only
+      # looking at new commits in this branch. Note, this allows commits
+      # through that already exist in other branches. This is correct, because
+      # even if the commit exists, we need to set up a branch membership.
+      unless force
+        github_shas = github_data.pluck(:sha)
+        db_shas = Branch.commits.pluck(:sha)
+
+        to_add = github_shas - db_shas
+        github_data.select! { |github_hash| to_add.include? github_hash[:sha] }
+      end
+
       Commit.transaction do
-        commits = []
         # initialize and/or update commits with basic data and branch
         # memberships, but don't do parent/child relationships yet (relations
         # might not exist, and we get to recursive api hell in a handbasket)
-        github_data.each do |github_hash|
-          commits << create_or_update_from_github_hash(github_hash: github_hash,
-                                                       branch: branch)
+        commits = github_data.map do |github_hash|
+          create_or_update_from_github_hash(github_hash: github_hash,
+                                            branch: branch)
         end
         # all commits should exist now, so we can safely set up parent/child
         # relations
         github_data.zip(commits).each do |github_hash, commit|
           commit.api_update_parents(github_hash[:parents])
         end
+
+        # still need to update branch ownership if this branch was merged into
+        # another (this branch's commits already belong to this branch, but if,
+        # for example, this branch was merged into another branch, we don't
+        # know that yet). Branch.update_branches (not the basic version) should
+        # take care of this in a separate call. If this method is called with
+        # no specific branch, you get this automatically. A +force+ call will
+        # also handle this, since every single commit gets touched with that.
       end
     end
     nil
+  end
+
+  # Update memberships for a branch or all branches. Pairs nicely with update
+  # tree, since we can reuse the api payload (which may have been quite
+  # expensive) for the commits of a given branch.
+  # Params:
+  # +branch+: branch to update, +nil+ indicates to update branches and do each
+  # +api_payload+: hash containing data from previous api call to comments. If
+  #   left +nil+, does the call on its own.
+  def self.api_update_memberships(branch: nil, api_payload: nil)
+    if branch.nil?
+      Branch.api_update_branches(basic: true)
+      Branch.all.each do |this_branch|
+        api_update_membership(branch: this_branch, api_payload: api_payload)
+      end
+      Branch.api_update_branches
+    else
+      api_payload ||= api.commits(sha: branch.name)
+      # database ids for all commits in the branch that are in the database
+      # Note: does not account for whether all commits are actually present in
+      # database
+      all_commit_ids = Commit.where(sha: api_payload.pluck(:sha)).pluck(:id)
+
+      # database ids for all commits that have a membership in the branch
+      existing_commit_ids = BranchMembership.where(branch: branch).pluck(:id)
+
+      # get ids for all commits that don't have the appropriate membership,
+      # then batch create the memberships
+      needing_membership = all_commit_ids - existing_commit_ids
+      BranchMembership.create(
+        needing_membership.map do |commit_id|
+          {commit_id: commit_id, branch_id: branch.id}
+        end)
+    end
   end
 
   def self.api_hash_from_github(github_hash)
@@ -152,12 +236,17 @@ class Commit < ApplicationRecord
     # probably name these two silly functions that transform the github hashes
     # into rails-friendly ones...
     create(payload[:commits].map { |commit| hash_from_github(commit) })
+
     # upon creation, our after_create hook fires and updates test cases and
     # test_case_commits; no need to worry about it here
-    # 
+    
+    # update branch memberships for ALL commits, as a merge may have happened
+    api_update_memberships
+     
     # We do need parent/child relations established. Now all commits exist,
     # do that. We'll also get branches updated for "free" with this expensive
     # API call and database assault
+    
     Commit.api_update_tree    
   end
 
@@ -175,6 +264,16 @@ class Commit < ApplicationRecord
     end
   end
 
+  # the very first commit. Should have no parents, but in case we've screwed
+  # this up, also check for parents (there should be none), and iteratively
+  # go through them until there are no more parents
+  def self.root
+    res = Commit.includes(:parents).order(:commit_time).first
+    until res.parents.count.zero?
+      res = res.parents.includes(:parents).first
+    end
+    res
+  end
 
   # get the [Rails] head commit of a particular branch
   # Params:
@@ -228,7 +327,8 @@ class Commit < ApplicationRecord
           end
         end
       rescue Octokit::NotFound
-        puts "No do1_test_source found for module #{mod} in commit #{self}. Skipping it."
+        puts "No do1_test_source found for module #{mod} in commit #{self}. "\
+             "Skipping it."
       end
     end
     cases_present
@@ -295,10 +395,12 @@ class Commit < ApplicationRecord
       new_entry[:computer] = Computer.includes(:user).find(sub.computer_id)
       new_entry[:spec] = sub.computer_specification
       new_entry[:numerator] = test_instances.where(
-        computer_id: sub.computer_id, computer_specification: sub.computer_specification
+        computer_id: sub.computer_id,
+        computer_specification: sub.computer_specification
       ).pluck(:test_case_id).uniq.count
       new_entry[:denominator] = test_cases.count
-      new_entry[:frac] = new_entry[:numerator].to_f / new_entry[:denominator].to_f
+      new_entry[:frac] = new_entry[:numerator].to_f /
+                         new_entry[:denominator].to_f
       compilation_stati = submissions.where(
         computer: new_entry[:computer]
       ).pluck(:compiled).uniq.reject(&:nil?)
@@ -324,7 +426,8 @@ class Commit < ApplicationRecord
     self.passed_count = test_case_commits.where(status: [0, 2]).count
     self.failed_count = test_case_commits.where(status: 1).count
     self.mixed_count = test_case_commits.where(status: 3).count
-    self.checksum_count = test_case_commits.where.not(checksum_count: [0, 1]).count
+    self.checksum_count = test_case_commits.where.not(
+      checksum_count: [0, 1]).count
     self.untested_count = test_case_commits.where(status: -1).count
     self.computer_count = computer_info.count
     self.complete_computer_count = computer_info.select do |spec|

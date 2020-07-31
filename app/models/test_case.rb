@@ -85,10 +85,8 @@ class TestCase < ApplicationRecord
   def find_test_case_commits(search_params, start_date, end_date)
     # start with search just on dates; can chain other things before we hit
     # the database
-    query = {
-      commits: {commit_time: start_date..end_date,
-                sha: Commit.shas_in_branch(branch: search_params[:branch])}
-    }
+    valid_commit_ids = Branch.named(search_params[:branch]).commits.pluck(:id)
+    query = {commit_id: valid_commit_ids}
     unless search_params[:status].nil? or search_params[:status].empty?
       query[:status] = search_params[:status]
     end
@@ -140,9 +138,10 @@ class TestCase < ApplicationRecord
 
   def find_instances(search_params, start_date, end_date)
     # build this up and then execute only once or twice
+    valid_commit_ids = Branch.named(search_params[:branch]).commits.where(
+      commit_time: start_date..end_date).pluck(:id)
     query = {
-      commits: {commit_time: start_date..end_date,
-                sha: Commit.shas_in_branch(branch: search_params[:branch])}
+      commit_id: valid_commit_ids
       }
 
     return nil if test_instances.joins(:commit).where(query).count == 0
