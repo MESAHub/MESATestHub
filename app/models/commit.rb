@@ -158,7 +158,7 @@ class Commit < ApplicationRecord
     if branch.nil?
       Branch.api_update_branches(basic: true)
       Branch.all.each do |this_branch|
-        api_update_membership(branch: this_branch, api_payload: api_payload)
+        api_update_memberships(branch: this_branch, api_payload: api_payload)
       end
       Branch.api_update_branches
     else
