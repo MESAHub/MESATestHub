@@ -12,7 +12,7 @@ class Branch < ApplicationRecord
 
   def self.api_update_branch_names(**params)
     api_branches(**params).each do |branch_hash|
-      unless Branch.exists(name: branch_hash[:name])
+      unless Branch.exists?(name: branch_hash[:name])
         Branch.create(name: branch_hash[:name])
       end
     end
@@ -46,13 +46,13 @@ class Branch < ApplicationRecord
     end
 
     # make sure each branch extends back to the root commit
-    Branch.each { |branch| branch.iterative_assign }
+    Branch.each { |branch| branch.recursive_assign_root }
 
     # make sure that all commits in a merged branch belong to at least the
     # branches that its head node belongs to
-    # Branch.merged.each do |branch|
-    #   branch.
-    # end
+    Branch.merged.each do |branch|
+      branch.update_membership
+    end
     nil
   end
 
@@ -82,7 +82,7 @@ class Branch < ApplicationRecord
   def update_membership
     # first make sure that all the proper commits in this branch are stored
     # in this branch.
-    iterative_assign
+    recursive_assign_root
 
     # Now make sure that all commits are parts of each of the branches that the
     # head commit belongs to. Go through each branch besides this one present
@@ -106,7 +106,8 @@ class Branch < ApplicationRecord
 
   def root
     res = commits.find_by(parents_count: 0)
-    unless res
+    # make sure we actually found the root commit
+    unless res == Commit.root
       iterative_assign 
       res = commits.find_by(parents_count: 0)
     end
@@ -115,13 +116,13 @@ class Branch < ApplicationRecord
 
   # make sure the root of a branch is the true root of the entire repo
   # this is bad for the database since it could require repeated 
-  def iterative_assign(root: nil)
+  def recursive_assign_root(root: nil)
     root ||= self.head
     return if root == Commit.root
     self.root.parents.each do |parent|
       next if commits.include? parent
       BranchMembership.create(branch_id: id, commit_id: parent.id)
-      iterative_assign(root: parent)
+      recursive_assign_root(root: parent)
     end
   end
 
