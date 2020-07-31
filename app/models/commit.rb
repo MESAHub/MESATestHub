@@ -106,7 +106,7 @@ class Commit < ApplicationRecord
                     else
                       api_commits(
                         sha: branch.name,
-                        since: 30.days.before(Commit.maximum(:commit_time)))
+                        since: 30.days.before(branch.commits.maximum(:commit_time)))
                     end
 
       # Prevent abusive calls to database to the beginning of time by only
@@ -166,7 +166,7 @@ class Commit < ApplicationRecord
       # database ids for all commits in the branch that are in the database
       # Note: does not account for whether all commits are actually present in
       # database
-      all_commit_ids = Commit.where(sha: api_payload.pluck(:sha)).pluck(:id)
+      all_commit_ids = branch.commits.where(sha: api_payload.pluck(:sha)).pluck(:id)
 
       # database ids for all commits that have a membership in the branch
       existing_commit_ids = BranchMembership.where(branch: branch).pluck(:id)

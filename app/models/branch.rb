@@ -117,7 +117,7 @@ class Branch < ApplicationRecord
   # make sure the root of a branch is the true root of the entire repo
   # this is bad for the database since it could require repeated 
   def recursive_assign_root(root: nil)
-    root ||= self.head
+    root ||= self.root
     return if root == Commit.root
     self.root.parents.each do |parent|
       next if commits.include? parent
