@@ -156,13 +156,13 @@ class Commit < ApplicationRecord
   #   left +nil+, does the call on its own.
   def self.api_update_memberships(branch: nil, api_payload: nil)
     if branch.nil?
-      Branch.api_update_branches(basic: true)
+      Branch.api_update_branch_names
       Branch.all.each do |this_branch|
         api_update_memberships(branch: this_branch, api_payload: api_payload)
       end
       Branch.api_update_branches
     else
-      api_payload ||= api.commits(sha: branch.name)
+      api_payload ||= api_commits(sha: branch.name)
       # database ids for all commits in the branch that are in the database
       # Note: does not account for whether all commits are actually present in
       # database
@@ -245,9 +245,9 @@ class Commit < ApplicationRecord
      
     # We do need parent/child relations established. Now all commits exist,
     # do that. We'll also get branches updated for "free" with this expensive
-    # API call and database assault
-    
-    Commit.api_update_tree    
+    # API call and database assault. It's not _that_ expensive now, since
+    # it will only work on commits made in the last month or so.
+    Commit.api_update_tree
   end
 
   #####################################
