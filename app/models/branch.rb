@@ -108,7 +108,7 @@ class Branch < ApplicationRecord
     res = commits.find_by(parents_count: 0)
     # make sure we actually found the root commit
     unless res == Commit.root
-      iterative_assign 
+      recursive_assign_root 
       res = commits.find_by(parents_count: 0)
     end
     res
