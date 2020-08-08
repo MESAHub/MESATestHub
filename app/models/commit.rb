@@ -295,15 +295,18 @@ class Commit < ApplicationRecord
     # note, we don't explicitly deal with children relations, since parent
     # relations implicitly take care of it. They would be set whenever this
     # is done to the children
+    # 
+    # TODO: MAKE IT SO BULK PARENT ASSIGNMENTS DON'T CALL API UNTIL ALL ARE DONE
+    # MAYBE HUNT FOR ORPHANS LATER?
     parent_hashes.each do |parent_hash|
-      # if parent doesn't exist, create a dummy withe right sha that will
+      # if parent doesn't exist, create a dummy with right sha that will
       # hopefully be filled in later
       new_parent = if Commit.exists?(sha: parent_hash[:sha])
                      Commit.find_by(sha: parent_hash[:sha])
                    else
                      Commit.api_create(sha: parent_hash[:sha])
                    end
-      # link the two in a commit relation
+        # link the two in a commit relation
       unless CommitRelation.exists?(parent: new_parent, child: self)
         CommitRelation.create(parent: new_parent, child: self)
       end
