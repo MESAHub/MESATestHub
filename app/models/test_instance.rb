@@ -43,6 +43,9 @@ class TestInstance < ApplicationRecord
   before_save :update_computer_specification, :update_computer_name
   after_save :update_tcc
 
+  scope :full, -> { where(run_optional: true) }
+  scope :partial, -> { where(run_optional: false) }
+
   def self.success_types
     @@success_types
   end

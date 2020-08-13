@@ -4,6 +4,9 @@ class Branch < ApplicationRecord
   has_many :branch_memberships, dependent: :destroy
   has_many :commits, through: :branch_memberships
 
+  scope :merged, -> { where(merged: true) }
+  scope :unmerged, -> { where(merged: false) }
+
   # use github api to create an array of hashes that contain data about all
   # known branches
   def self.api_branches(**params)
@@ -37,11 +40,9 @@ class Branch < ApplicationRecord
                       Commit.api_create(sha: branch_hash[:commit][:sha])
                     end
       branch.head = head_commit
-      if head_commit.children.count > 0
-        branch.merged = true
-      else
-        branch.merged = false
-      end
+      # branch is merged if its head commit has children. Otherwise, it is the
+      # latest commit (a true head commit)
+      branch.merged = (head_commit.children.count > 0)
       branch.save
     end
 

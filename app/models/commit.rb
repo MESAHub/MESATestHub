@@ -87,14 +87,14 @@ class Commit < ApplicationRecord
   # +force+ if true, gather all commits from api and create them all or update
   #   them if they already exist. Otherwise only gather commits from api from
   #   30 days before the most recent commit, and only create missing commits
-  def self.api_update_tree(branch: nil, force: false)
+  def self.api_update_tree(branch: nil, force: false, earliest: nil)
     if branch.nil?
       # make sure we know about every branch
       Branch.api_update_branch_names
       
       # do main method for each branch
       Branch.all.each do |this_branch|
-        api_update_tree(branch: this_branch, force: force)
+        api_update_tree(branch: this_branch, force: force, earliest: earliest)
       end
 
       # Somewhat redundant, as it re-establishes branch names, but also
@@ -103,14 +103,13 @@ class Commit < ApplicationRecord
       # branches have their branch memberships updated
       Branch.api_update_branches
     else
+      earliest ||= 30.days.before(branch.commits.maximum(:commit_time))
       # Avoid asking api for commits since the beginning of time unless we 
       # REALLY want it.
       github_data = if force || Commit.count.zero?
                       api_commits(sha: branch.name)
                     else
-                      api_commits(
-                        sha: branch.name,
-                        since: 30.days.before(branch.commits.maximum(:commit_time)))
+                      api_commits(sha: branch.name, since: earliest)
                     end
 
       # Prevent abusive calls to database to the beginning of time by only
@@ -131,7 +130,8 @@ class Commit < ApplicationRecord
         # might not exist, and we get to recursive api hell in a handbasket)
         commits = github_data.map do |github_hash|
           create_or_update_from_github_hash(github_hash: github_hash,
-                                            branch: branch)
+                                            branch: branch,
+                                            update_parents: false)
         end
         # all commits should exist now, so we can safely set up parent/child
         # relations
@@ -215,43 +215,49 @@ class Commit < ApplicationRecord
   # TRANSLATING BETWEEN RAILS AND GITHUB WEBHOOK #
   ################################################
 
-  def self.hash_from_github(github_hash)
-    # convert hash from a github webhook payload representing a commit to 
-    # a hash ready to be inserted into the database
-    # +github_hash+ a hash for one commit resulting from a github webhook
-    # push payload
+  # DEPRECATED WITH SIMPLER GITHUB WEBHOOK SOLUTION
+  # def self.hash_from_github(github_hash)
+  #   # convert hash from a github webhook payload representing a commit to 
+  #   # a hash ready to be inserted into the database
+  #   # +github_hash+ a hash for one commit resulting from a github webhook
+  #   # push payload
 
-    {
-      sha: github_hash[:sha] || github_hash[:id],
-      short_sha: (github_hash[:sha] || github_hash[:id])[(0...7)],
-      author: github_hash[:author][:name],
-      author_email: github_hash[:author][:email],
-      commit_time: github_hash[:timestamp],
-      message: github_hash[:message],
-      github_url: github_hash[:url]
-    }
-  end
+  #   {
+  #     sha: github_hash[:sha] || github_hash[:id],
+  #     short_sha: (github_hash[:sha] || github_hash[:id])[(0...7)],
+  #     author: github_hash[:author][:name],
+  #     author_email: github_hash[:author][:email],
+  #     commit_time: github_hash[:timestamp],
+  #     message: github_hash[:message],
+  #     github_url: github_hash[:url]
+  #   }
+  # end
 
-  def self.create_many_from_github_push(payload)
-    # take payload from githubs push webhook, extract commits to
-    # hashes, and then insert them into the database.
-    # 
-    # note that the hash structure from webhook is different than api. Should
-    # probably name these two silly functions that transform the github hashes
-    # into rails-friendly ones...
-    create(payload[:commits].map { |commit| hash_from_github(commit) })
+  # def self.create_many_from_github_push(payload)
+  #   # take payload from githubs push webhook, extract commits to
+  #   # hashes, and then insert them into the database.
+  #   # 
+  #   # note that the hash structure from webhook is different than api. Should
+  #   # probably name these two silly functions that transform the github hashes
+  #   # into rails-friendly ones...
+  #   create(payload[:commits].map { |commit| hash_from_github(commit) })
 
-    # upon creation, our after_create hook fires and updates test cases and
-    # test_case_commits; no need to worry about it here
+  #   # upon creation, our after_create hook fires and updates test cases and
+  #   # test_case_commits; no need to worry about it here
     
-    # update branch memberships for ALL commits, as a merge may have happened
-    api_update_memberships
+  #   # update branch memberships for ALL commits, as a merge may have happened
+  #   api_update_memberships
      
-    # We do need parent/child relations established. Now all commits exist,
-    # do that. We'll also get branches updated for "free" with this expensive
-    # API call and database assault. It's not _that_ expensive now, since
-    # it will only work on commits made in the last month or so.
-    Commit.api_update_tree
+  #   # We do need parent/child relations established. Now all commits exist,
+  #   # do that. We'll also get branches updated for "free" with this expensive
+  #   # API call and database assault. It's not _that_ expensive now, since
+  #   # it will only work on commits made in the last month or so.
+  #   Commit.api_update_tree
+  # end
+
+  def self.push_update(payload)
+    earliest = 1.hour.before(payload[:commits].pluck(:timestamp).sort.first)
+    api_update_tree(earliest: earliest)
   end
 
   #####################################
@@ -314,9 +320,11 @@ class Commit < ApplicationRecord
       end
     end
 
-    # missing parents get created afterwards
+    # missing parents get created afterwards. This will recursively 
+    # create parents of parents in an inefficient manner, but since we don't
+    # have the parent data in bulk, we're just sticking with this.
     to_create.each do |sha|
-      created[sha] = Commit.api_create(sha: sha)
+      created[sha] = Commit.api_create(sha: sha, update_parents: true)
     end
 
     parent_hashes.each do |parent_hash|
@@ -324,6 +332,7 @@ class Commit < ApplicationRecord
       unless CommitRelation.exists?(parent: new_parent, child: self)
         CommitRelation.create(parent: new_parent, child: self)
       end
+    end
 
 
   end
