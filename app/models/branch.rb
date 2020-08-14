@@ -69,15 +69,7 @@ class Branch < ApplicationRecord
     named('master')
   end
 
-  # # access all merged branches
-  # def self.merged
-  #   Branch.where(merged: true)
-  # end
 
-  # # access all unmerged branches
-  # def self.unmerged
-  #   Branch.where(merged: false)
-  # end
 
   # update branch membership for all commits in branches
   def update_membership
