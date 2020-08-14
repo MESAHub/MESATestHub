@@ -24,6 +24,7 @@ class Commit < ApplicationRecord
     :commit_time
 
   after_create :api_update_test_cases
+  before_save :update_scalars
 
   paginates_per 50
 
@@ -327,7 +328,7 @@ class Commit < ApplicationRecord
       created[sha] = Commit.api_create(sha: sha, update_parents: true)
     end
 
-    parent_hashes.each do |parent_hash|
+    created.each do |sha, new_parent|
       # link the two in a commit relation
       unless CommitRelation.exists?(parent: new_parent, child: self)
         CommitRelation.create(parent: new_parent, child: self)
