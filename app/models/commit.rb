@@ -257,7 +257,9 @@ class Commit < ApplicationRecord
   # end
 
   def self.push_update(payload)
-    earliest = 1.hour.before(payload[:commits].pluck(:timestamp).sort.first)
+    earliest = 1.hour.before(payload[:commits].pluck(:timestamp).map do |str|
+      DateTime.parse(str) 
+    end.sort.first)
     api_update_tree(earliest: earliest)
   end
 
