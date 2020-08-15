@@ -7,7 +7,7 @@ class GithubWebhooksController < ApplicationController
   # Handle push event
   def github_push(payload)
     # Create new entry in database for each new commit in push
-    Commit.create_many_from_github_push(payload)
+    Commit.push_update(payload)
   end
 
   private
