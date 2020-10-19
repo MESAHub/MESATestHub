@@ -3,7 +3,7 @@ class ApplicationMailer < ActionMailer::Base
   layout 'mailer'
 end
 
-ApplicationMailer::Base.smtp_settings = {
+ApplicationMailer.smtp_settings = {
   :port           => ENV['MAILGUN_SMTP_PORT'],
   :address        => ENV['MAILGUN_SMTP_SERVER'],
   :user_name      => ENV['MAILGUN_SMTP_LOGIN'],
@@ -11,4 +11,4 @@ ApplicationMailer::Base.smtp_settings = {
   :domain         => 'yourapp.heroku.com',
   :authentication => :plain
 }
-ApplicationMailer::Base.delivery_method = :smtp
+ApplicationMailer.delivery_method = :smtp
