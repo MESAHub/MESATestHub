@@ -1,9 +1,9 @@
 class MorningMailer < ApplicationMailer
-  include SendGrid
+  # include SendGrid
 
-  def initialize
-    @client = SendGrid::API.new(api_key: ENV['SENDGRID_API_KEY']).client
-  end
+  # def initialize
+  #   @client = SendGrid::API.new(api_key: ENV['SENDGRID_API_KEY']).client
+  # end
 
   def default_url_options
     if Rails.env.production?
@@ -13,6 +13,173 @@ class MorningMailer < ApplicationMailer
     else
       { host: 'http://localhost:3000' }
     end
+  end
+
+  # same as 2, but using basic smtp; no sendgrid secret sauce
+  def morning_email_3
+    # improves on old method by calculating slow/inefficient cases by looking
+    # at performance relative to average _and_ sandard deviations.
+    
+    # first gather data from database; bail if there are no failure in the last
+    # 24 hours
+    start_date = 1.day.ago
+    @versions_tested = Version.tested_between(start_date, DateTime.now)
+    @versions_tested.sort_by! { |version| -version.number }
+    @version_data = {}
+    depth = 100
+    runtime_threshold = 4
+    memory_threshold = 4
+    @versions_tested.each do |version|
+      res = {
+        version: version,
+        status: case version.status
+        when 3 then :mixed
+        when 2 then :checksums
+        when 1 then :failing
+        when 0 then :passing
+        else
+          :other          
+        end,
+        link: version_url(version.number),
+        case_count: version.test_case_versions.count,
+        computer_counts: { total: version.computers_count },
+        failing_cases: version.test_case_versions.where(status: 1).to_a,
+        checksum_cases: version.test_case_versions.where(status: 2).to_a,
+        mixed_cases: version.test_case_versions.where(status: 3).to_a,
+        case_links: {},
+        pass_counts: {},
+        fail_counts: {},
+        checksum_counts: {},
+        # get test cases that ran anomolously slow or inefficiently
+        trouble_cases: version.problem_test_case_versions(
+          depth: depth,
+          memory_threshold: memory_threshold,
+          runtime_threshold: runtime_threshold)
+      }
+
+      # get all passing test cases that have memory or speed issues and
+      # organize them by name so we can walk through the list later
+      res[:problematic_passing] = (res[:trouble_cases].keys).sort do |tcv1, tcv2|
+        tcv1.test_case.name <=> tcv2.test_case.name
+      end.uniq
+
+      # get useful search query links for trouble cases that show data from
+      # which average and standard deviation are taken from:
+      res[:trouble_cases].keys.each do |tcv|
+        test_case_name = tcv.test_case.name
+        if res[:trouble_cases][tcv][:runtime]
+          res[:trouble_cases][tcv][:runtime].each_pair do |runtime_type, runtime_hash|
+            # walk through computers and assign link for each
+            #
+            runtime_hash.each_pair do |computer, computer_hash|
+              # create url that creates the relevant search query and assign it
+              # into the computer_hash
+              current = computer_hash[:instance]
+              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+                'test_instances/search?'
+              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+              computer_hash[:url] += {query_text: [
+                "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
+                "computer: #{computer.name}",
+                "threads: #{current.omp_num_threads}",
+                "compiler: #{current.compiler}",
+                "compiler_version: #{current.compiler_version}",
+                "test_case: #{test_case_name}",
+                "passed: true",
+              ].join('; ')}.to_query
+            end
+          end
+        end
+        if res[:trouble_cases][tcv][:memory]
+          res[:trouble_cases][tcv][:memory].each_pair do |run_type, run_type_hash|
+            run_type_hash.each_pair do |computer, computer_hash|
+              # use search api to create link showing all more efficient test
+              # instances in last `depth` revisions
+              current = computer_hash[:instance]
+              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+                'test_instances/search?'
+              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+              computer_hash[:url] += {query_text: [
+                "version: #{current.mesa_version - depth}-#{current.mesa_version - 1}",
+                "computer: #{computer.name}",
+                "threads: #{current.omp_num_threads}",
+                "compiler: #{current.compiler}",
+                "compiler_version: #{current.compiler_version}",
+                "test_case: #{test_case_name}",
+                "passed: true",
+              ].join('; ')}.to_query
+            end
+          end
+        end
+      end
+
+      version.test_case_versions.each do |tcv|
+        res[:computer_counts][tcv] = tcv.computer_count
+        if tcv.status >= 2
+          res[:checksum_counts][tcv] = tcv.unique_checksum_count
+        end
+        if tcv.status >= 3
+          res[:pass_counts][tcv] = tcv.test_instances.where(passed: true).count
+          res[:fail_counts][tcv] = tcv.test_instances.where(passed: false).count
+        end
+        res[:case_links][tcv] = test_case_version_url(
+          version.number, tcv.test_case.name
+        )
+      end
+      @version_data[version] = res
+    end
+    @make_green = "style='color: rgb(0, 153, 51)'".html_safe
+    @make_yellow = "style= 'color: rgb(255, 153, 0)'".html_safe
+    @make_blue = "style= 'color: rgb(78, 114, 219)'".html_safe
+    @make_red = "style='color: rgb(204, 0, 0)'".html_safe
+
+    # gather sender, recipient(s), subject, and body before composing email
+    # from = Email.new(email: 'mesa-developers@lists.mesastar.org')
+    # to = Email.new(email: 'mesa-developers@lists.mesastar.org')
+    # # to = Email.new(email: 'wolfwm@uwec.edu', name: 'Bill Wolf')
+    # subject = "MesaTestHub Report #{Date.today}"
+    # html_content = ApplicationController.render(
+    #   template: 'morning_mailer/morning_email_2.html.erb',
+    #   layout: 'mailer',
+    #   assigns: { version_data: @version_data,
+    #              versions_tested: @versions_tested,
+    #              make_red: @make_red,
+    #              make_yellow: @make_yellow,
+    #              make_green: @make_green,
+    #              make_blue: @make_blue,
+    #              root_url: root_url
+    #            }
+    # )
+    # text_content = ApplicationController.render(
+    #   template: 'morning_mailer/morning_email.text.erb',
+    #   layout: 'mailer',
+    #   assigns: { failing_versions: @failing_versions,
+    #              passing_versions: @passing_versions,
+    #              mixed_versions: @mixed_versions,
+    #              failing_cases: @failing_cases, mixed_cases: @mixed_cases,
+    #              fail_counts: @fail_counts, pass_counts: @pass_counts,
+    #              computer_counts: @computer_counts, case_counts: @case_counts,
+    #              host: @host, root_url: root_url, version_links: @version_links,
+    #              case_links: @case_links, checksum_cases: @checksum_cases,
+    #              mixed_checksums_versions: @mixed_checksums_versions,
+    #              checksum_counts: @checksum_counts }
+    # )
+
+    # compose e-mail
+    # email = Mail.new
+    # email.from = from
+    # email.subject = subject
+    # per = Personalization.new
+    # per.add_to(to)
+    # email.add_personalization(per)
+
+    # due to SendGrid weirdness, plain text MUST come first or it won't send
+    # email.add_content(Content.new(type: 'text/plain', value: text_content))
+    # email.add_content(Content.new(type: 'text/html', value: html_content))
+
+    # send the message
+    mail(to: 'mesa-developers@lists.mesastar.org',
+         subject: "MesaTestHub Report #{Date.today}")
   end
 
   def morning_email_2
@@ -67,50 +234,29 @@ class MorningMailer < ApplicationMailer
       res[:trouble_cases].keys.each do |tcv|
         test_case_name = tcv.test_case.name
         if res[:trouble_cases][tcv][:runtime]
-          to_delete = []
           res[:trouble_cases][tcv][:runtime].each_pair do |runtime_type, runtime_hash|
             # walk through computers and assign link for each
-            # remove if there aren't more than 2 computers (hard coded and
-            # kludgy for now); mark them now, delete later to avoid deleting
-            # while in a loop
-            if runtime_hash.length < 2
-              to_delete << runtime_type
-            else
-              runtime_hash.each_pair do |computer, computer_hash|
-                # create url that creates the relevant search query and assign it
-                # into the computer_hash
-                current = computer_hash[:instance]
-                computer_hash[:url] = 'https://testhub.mesastar.org/' + 
-                  'test_instances/search?'
-                computer_hash[:url] += {utf8: '✓'}.to_query + '&'
-                computer_hash[:url] += {query_text: [
-                  "version: #{current.mesa_version-depth}-#{current.mesa_version}",
-                  "computer: #{computer.name}",
-                  "threads: #{current.omp_num_threads}",
-                  "compiler: #{current.compiler}",
-                  "compiler_version: #{current.compiler_version}",
-                  "test_case: #{test_case_name}",
-                  "passed: true",
-                  ].join('; ')}.to_query
-              end
-            end
-            # delete runtime types with not enough computers
-            to_delete.each do |runtime_type|
-              res[:trouble_cases][tcv][:runtime].delete(runtime_type)
-            end
-            # remove from hash if there are no bad runtime types anymore
-            if res[:trouble_cases][tcv][:runtime].empty?
-              res[:trouble_cases][tcv].delete(:runtime)
-              # remove whole test case version if there's no problem at all
-              # anymore, including memory
-              if res[:trouble_cases][tcv].empty?
-                res[:trouble_cases].delete(tcv)
-              end
+            #
+            runtime_hash.each_pair do |computer, computer_hash|
+              # create url that creates the relevant search query and assign it
+              # into the computer_hash
+              current = computer_hash[:instance]
+              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+                'test_instances/search?'
+              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+              computer_hash[:url] += {query_text: [
+                "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
+                "computer: #{computer.name}",
+                "threads: #{current.omp_num_threads}",
+                "compiler: #{current.compiler}",
+                "compiler_version: #{current.compiler_version}",
+                "test_case: #{test_case_name}",
+                "passed: true",
+              ].join('; ')}.to_query
             end
           end
         end
-
-        if res[:trouble_cases][tcv] && res[:trouble_cases][tcv][:memory]
+        if res[:trouble_cases][tcv][:memory]
           res[:trouble_cases][tcv][:memory].each_pair do |run_type, run_type_hash|
             run_type_hash.each_pair do |computer, computer_hash|
               # use search api to create link showing all more efficient test
@@ -120,7 +266,7 @@ class MorningMailer < ApplicationMailer
                 'test_instances/search?'
               computer_hash[:url] += {utf8: '✓'}.to_query + '&'
               computer_hash[:url] += {query_text: [
-                "version: #{current.mesa_version - depth}-#{current.mesa_version}",
+                "version: #{current.mesa_version - depth}-#{current.mesa_version - 1}",
                 "computer: #{computer.name}",
                 "threads: #{current.omp_num_threads}",
                 "compiler: #{current.compiler}",
@@ -154,15 +300,10 @@ class MorningMailer < ApplicationMailer
     @make_red = "style='color: rgb(204, 0, 0)'".html_safe
 
     # gather sender, recipient(s), subject, and body before composing email
-    sender = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    # recipients = [Email.new(email: 'p7r3d3c7y5u1u9e8@mesadevelopers.slack.com',
-    #                         name: 'MESA Developers'),
-    #               Email.new(email: 'mesa-developers@lists.mesastar.org',
-    #                         name: 'MESA Developers')]
-    recipients = Email.new(email: 'mesa-developers@lists.mesastar.org',
-                           name: 'MESA Developers')
+    from = Email.new(email: 'mesa-developers@lists.mesastar.org')
+    to = Email.new(email: 'mesa-developers@lists.mesastar.org')
     # to = Email.new(email: 'wolfwm@uwec.edu', name: 'Bill Wolf')
-    email_subject = "MesaTestHub Report #{Date.today}"
+    subject = "MesaTestHub Report #{Date.today}"
     html_content = ApplicationController.render(
       template: 'morning_mailer/morning_email_2.html.erb',
       layout: 'mailer',
@@ -192,17 +333,11 @@ class MorningMailer < ApplicationMailer
 
     # compose e-mail
     email = Mail.new
-    email.from = sender
-    email.subject = email_subject
+    email.from = from
+    email.subject = subject
     per = Personalization.new
-    per.add_to(recipients)
+    per.add_to(to)
     email.add_personalization(per)
-
-    # email = Mail.new do
-    #   from sender
-    #   subject email_subject
-    #   to recipients
-    # end
 
     # due to SendGrid weirdness, plain text MUST come first or it won't send
     # email.add_content(Content.new(type: 'text/plain', value: text_content))
@@ -419,7 +554,7 @@ class MorningMailer < ApplicationMailer
 
     # gather sender, recipient(s), subject, and body before composing email
     from = Email.new(email: 'mesa-developers@lists.mesastar.org')
-    to = Email.new(email: ['mesa-developers@lists.mesastar.org', 'p7r3d3c7y5u1u9e8@mesadevelopers.slack.com'])
+    to = Email.new(email: 'mesa-developers@lists.mesastar.org')
     # to = Email.new(email: 'wmwolf@asu.edu', name: 'Bill Wolf')
     subject = "MesaTestHub Report #{Date.today}"
     html_content = ApplicationController.render(

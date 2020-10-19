@@ -554,14 +554,14 @@ class TestInstance < ApplicationRecord
 
   # make test_data easier to access as if they were attributes
   def method_missing(method_name, *args, &block)
-    if test_case.data_names.include? method_name.to_s
-      data(method_name.to_s)
-    elsif (test_case.data_names.include? method_name.to_s.chomp('=') &&
-           args.length > 0)
-      set_data(method_name.to_s.chomp('='), args[0])
-    else
+    # if test_case.data_names.include? method_name.to_s
+    #   data(method_name.to_s)
+    # elsif (test_case.data_names.include? method_name.to_s.chomp('=') &&
+    #        args.length > 0)
+    #   set_data(method_name.to_s.chomp('='), args[0])
+    # else
       super(method_name, *args, &block)
-    end
+    # end
   end
     
 end

@@ -1,0 +1,119 @@
+<% @versions_tested.each do |version| %>
+  <% data = @version_data[version] %>
+  <h3>
+    <% if data[:status] == :passing %>
+      <a clicktracking=off href=<%= data[:link] %> <%=@make_green%>>
+    <% elsif data[:status] == :mixed %>
+      <a clicktracking=off href=<%= data[:link] %> <%=@make_yellow%>>
+    <% elsif data[:status] == :checksums %>
+      <a clicktracking=off href=<%= data[:link] %> <%=@make_blue%>>
+    <% elsif data[:status] == :failing %>
+      <a clicktracking=off href=<%= data[:link] %> <%=@make_red%>>
+    <% else %>
+      <a clicktracking=off href=<%= data[:link] %>>
+    <%end%>
+      <%= version %>
+    </a> (<%= "#{data[:computer_counts][:total]} " + "computer".pluralize(data[:computer_counts][:total])%> tested to date)
+  </h3>
+  <ul>
+    <li> <b> Author: </b> <%= version.author %> </li>
+    <li> <b> Commit Message: </b> <%= version.log %> </li>
+    <li> <%= data[:case_count] %> cases submitted </li>
+    <% data[:mixed_cases].each do |tcv| %>
+      <li>
+        <samp> 
+          <a <%=@make_yellow%> clicktracking=off href=<%= data[:case_links][tcv] %>>
+            <%= tcv.test_case.name %>
+          </a> 
+        </samp> (<b>Failures: </b> <%= data[:fail_counts][tcv].to_s %>; <b> Successes: </b> <%= data[:pass_counts][tcv].to_s%>)
+      </li>
+    <%end%>
+    <% data[:checksum_cases].each do |tcv| %>
+      <li>
+        <samp> 
+          <a <%=@make_blue%> clicktracking=off href=<%= data[:case_links][tcv] %>>
+            <%= tcv.test_case.name %>
+          </a> 
+        </samp> (<%= data[:computer_counts][tcv].to_s + ' ' + 'computer'.pluralize(data[:computer_counts][tcv])%>; multiple distinct checksums)
+      </li>
+    <%end%>
+    <% data[:failing_cases].each do |tcv| %>
+      <li>
+        <samp> 
+          <a <%=@make_red%> clicktracking=off href=<%= data[:case_links][tcv] %>>
+            <%= tcv.test_case.name %>
+          </a> 
+        </samp> (<%= data[:computer_counts][tcv].to_s + ' ' + 'computer'.pluralize(data[:computer_counts][tcv])%>)
+      </li>
+    <%end%>
+    <% data[:trouble_cases].keys.each do |tcv| %>
+      <li>
+        <samp>
+          <a <%=@make_green%> clicktracking=off href=<%= data[:case_links][tcv]%>>
+            <%= tcv.test_case.name %>
+          </a>
+        </samp>
+        (<%= data[:computer_counts][tcv].to_s + ' ' + 'computer'.pluralize(data[:computer_counts][tcv])%> tested)
+        <% if data[:trouble_cases][tcv][:runtime] %>
+          <% if data[:trouble_cases][tcv][:memory] %>
+            (runtime and memory usage increases)
+          <% else %>
+            (runtime increase)
+          <% end %>
+        <% else %>
+          (memory usage increase)
+        <% end %>
+        <ul>
+          <% if data[:trouble_cases][tcv][:runtime] %>
+            <% data[:trouble_cases][tcv][:runtime].each_pair do |runtime_type, runtime_hash| %>
+              <li> The following computers show increased <%= runtime_type %> runtimes:
+                <ul>
+                  <% runtime_hash.each_pair do |computer, computer_hash| %>
+                    <li> 
+                      <a clicktracking=off href=<%= computer_hash[:url] %>>
+                        <%= computer.name %>
+                      </a>:
+                      <span <%= @make_red %>>
+                        <%= computer_hash[:time] %> sec
+                      </span>
+                      (&mu; = <%=sprintf("%.1f", computer_hash[:avg])%> sec, &sigma; = <%=sprintf("%.2f", computer_hash[:std])%> sec)
+                    </li>
+                  <% end %>
+                </ul>
+              </li>
+            <% end %>
+          <% end %>
+          <% if data[:trouble_cases][tcv][:memory] %>
+            <% data[:trouble_cases][tcv][:memory].each_pair do |run_type, run_type_hash| %>
+              <li> The following computers show increased <%= run_type %> memory usage:
+                <ul>
+                  <% run_type_hash.each_pair do |computer, computer_hash| %>
+                    <li> 
+                      <a clicktracking=off href=<%= computer_hash[:url] %>>
+                        <%= computer.name %>
+                      </a>:
+                      <span <%= @make_red %>>
+                        <%= sprintf('%.1f', computer_hash[:usage]/1e6)%> GB
+                      </span>
+                      (&mu; = <%=sprintf('%.1f', computer_hash[:avg]/1e6)%> GB, &sigma; = <%=sprintf("%.2f",computer_hash[:std]/1e6)%> GB)
+                    </li>
+                  <% end %>
+                </ul>
+              </li>
+            <% end %>
+          <% end %>
+        </ul>
+      </li>
+    <% end %>
+  </ul>
+<%end%>
+
+<% if @versions_tested.empty? %>
+  <p>
+    No tests were run in the last 24 hours. This e-mail serves to let you know
+    that everything is running fine. Visit 
+    <a clicktracking=off href=<%=@root_url%>> MESA Test Hub </a>
+    for more details.
+  </p>
+<% end %>
+
