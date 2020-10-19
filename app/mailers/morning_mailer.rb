@@ -18,7 +18,7 @@ class MorningMailer < ApplicationMailer
   # same as 2, but using basic smtp; no sendgrid secret sauce
   def morning_email_3
     # improves on old method by calculating slow/inefficient cases by looking
-    # at performance relative to average _and_ sandard deviations.
+    # at performance relative to average _and_ standard deviations.
     
     # first gather data from database; bail if there are no failure in the last
     # 24 hours
