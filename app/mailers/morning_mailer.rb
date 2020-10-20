@@ -178,7 +178,7 @@ class MorningMailer < ApplicationMailer
     # email.add_content(Content.new(type: 'text/html', value: html_content))
 
     # send the message
-    mail(to: 'mesa-developers@lists.mesastar.org',
+    mail(to: 'mesa-developers@lists.mesastar.org,p7r3d3c7y5u1u9e8@mesadevelopers.slack.com',
          subject: "MesaTestHub Report #{Date.today}")
   end
 
