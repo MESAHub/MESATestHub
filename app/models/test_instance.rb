@@ -6,7 +6,9 @@ class TestInstance < ApplicationRecord
     'skip' => 'Skipped'
   }
 
-  @@failure_types = {
+  @@failure_types = Hash.new('Unknown')
+
+  @@failure_types.merge!({
     'run_test_string' => 'Test String',
     'final_model' => 'Final Model',
     'run_checksum' => 'Run Checksum',
@@ -15,7 +17,7 @@ class TestInstance < ApplicationRecord
     'photo_checksum' => 'Photo Checkusm',
     'photo_diff' => 'Photo Diff',
     'compilation' => 'Compilation'
-  }
+  })
 
   @@compilers = %w[gfortran ifort SDK]
 
