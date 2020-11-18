@@ -166,6 +166,8 @@
                         -val = instance.get_inlist_data(inlist, column)
                         -if val.nil?
                           –
+                        -elsif ['steps', 'retries', 'redos'].include? column
+                          = format('%i', val)
                         -else
                           = format('%0.3g', val)
   .row
