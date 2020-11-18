@@ -143,7 +143,9 @@
                   %td.align-middle.column-status{class: instance.passed ? 'text-success' : 'text-danger'}=instance.passage_status
                   -# %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
                   %td.align-middle.column-date{class: @default_column_visibility['date'] ? '' : 'd-none'}=format_time(instance.created_at)
-                  %td.align-middle.column-runtime{class: @default_column_visibility['runtime'] ? '' : 'd-none'}=instance.runtime_minutes.to_s
+                  %td.align-middle.column-runtime{class: @default_column_visibility['runtime'] ? '' : 'd-none'}
+                    -if instance.runtime_minutes
+                      =format('%.2f', instance.runtime_minutes)
                   %td.align-middle.column-ram{class: @default_column_visibility['ram'] ? '' : 'd-none'}=format("%.2f", instance.rn_mem_GB) + ' GB'
                   %td.align-middle.column-checksum.text-monospace{class: @default_column_visibility['checksum'] ? '' : 'd-none'}=instance.checksum[(-7..-1)] if instance.checksum
                   %td.align-middle.column-restart_photo.text-monospace{class: @default_column_visibility['restart_photo'] ? '' : 'd-none'}
