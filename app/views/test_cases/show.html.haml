@@ -165,8 +165,8 @@
                       %td.align-middle{class: "column-#{inlist.sub('.', 'p')}-#{column}#{@inlist_column_visibility[inlist][column] ? '' : ' d-none'}"}
                         -val = instance.get_inlist_data(inlist, column)
                         -if val.nil?
-                          –
-                        -elsif ['steps', 'retries', 'redos'].include? column
+                          = ""
+                        -elsif %w[steps retries redos solver_iterations solver_calls_made solver_calls_failed].include? column.strip
                           = format('%i', val)
                         -else
                           = format('%0.3g', val)
