@@ -20,118 +20,139 @@ class MorningMailer < ApplicationMailer
     # improves on old method by calculating slow/inefficient cases by looking
     # at performance relative to average _and_ sandard deviations.
     
-    # first gather data from database; bail if there are no failure in the last
-    # 24 hours
+    # Gather all the commits, agnostic of what branch(es) they belong to
+    # sort them all in order of most recent to oldest
     start_date = 1.day.ago
-    @versions_tested = Version.tested_between(start_date, DateTime.now)
-    @versions_tested.sort_by! { |version| -version.number }
-    @version_data = {}
-    depth = 100
-    runtime_threshold = 4
-    memory_threshold = 4
-    @versions_tested.each do |version|
+    commit_ids = TestInstance.where(created_at: start_date..DateTime.now).
+      pluck(:commit_id).uniq
+    @commits_tested = Commit.includes(test_case_commits: :test_case).find(commit_ids)
+    @commits_tested.sort! { |a, b| -(a.commit_time <=> b.commit_time)}
+    
+    # Assign commits to their various branches. A commit might belong to more
+    # than one branch, and that's okay; it won't result in duplicate db hits
+    # since they're already loaded
+    branch_ids = BranchMembership.where(commit_id: commit_ids).
+      pluck(:branch_id).uniq
+    @branch_data = {}
+    branch_ids.each do |branch_id|
+      this_branch = Branch.includes(:commits).find(branch_id)
+      # sorting is the same as @commits_tested, but we only include commits
+      # that are part of the branch. 
+      @branch_data[this_branch] = @commits_tested.select do |commit|
+        this_branch.commits.include? commit
+      end
+    end
+
+    @commit_data = {}
+    # depth = 100
+    # runtime_threshold = 4
+    # memory_threshold = 4
+
+
+    @commits_tested.each do |commit|
+      test_case_commits = commit.test_case_commits.to_a
       res = {
-        version: version,
-        status: case version.status
+        status: case commit.status
         when 3 then :mixed
         when 2 then :checksums
         when 1 then :failing
         when 0 then :passing
         else
-          :other          
+          :other    
         end,
-        link: version_url(version.number),
-        case_count: version.test_case_versions.count,
-        computer_counts: { total: version.computers_count },
-        failing_cases: version.test_case_versions.where(status: 1).to_a,
-        checksum_cases: version.test_case_versions.where(status: 2).to_a,
-        mixed_cases: version.test_case_versions.where(status: 3).to_a,
-        case_links: {},
+        tested_count: commit.passed_count + commit.failed_count + commit.mixed_count + commit.checksum_count,
+        computer_counts: { total: commit.computer_count },
+        failing_cases: test_case_commits.select { |tcc| tcc.status == 1 },
+        checksum_cases: test_case_commits.select { |tcc| tcc.status == 2 },
+        mixed_cases: test_case_commits.select { |tcc| tcc.status == 3 },
+        # case_links: {},
         pass_counts: {},
         fail_counts: {},
-        checksum_counts: {},
+        checksum_counts: {}
+      } #,
         # get test cases that ran anomolously slow or inefficiently
-        trouble_cases: version.problem_test_case_versions(
-          depth: depth,
-          memory_threshold: memory_threshold,
-          runtime_threshold: runtime_threshold)
-      }
+        # trouble_cases: commit.problem_test_case_versions(
+        #   depth: depth,
+        #   memory_threshold: memory_threshold,
+        #   runtime_threshold: runtime_threshold)
+      # }
 
       # get all passing test cases that have memory or speed issues and
       # organize them by name so we can walk through the list later
-      res[:problematic_passing] = (res[:trouble_cases].keys).sort do |tcv1, tcv2|
-        tcv1.test_case.name <=> tcv2.test_case.name
-      end.uniq
+      # res[:problematic_passing] = (res[:trouble_cases].keys).sort do |tcv1, tcv2|
+      #   tcv1.test_case.name <=> tcv2.test_case.name
+      # end.uniq
 
       # get useful search query links for trouble cases that show data from
       # which average and standard deviation are taken from:
-      res[:trouble_cases].keys.each do |tcv|
-        test_case_name = tcv.test_case.name
-        if res[:trouble_cases][tcv][:runtime]
-          res[:trouble_cases][tcv][:runtime].each_pair do |runtime_type, runtime_hash|
-            # walk through computers and assign link for each
-            #
-            runtime_hash.each_pair do |computer, computer_hash|
-              # create url that creates the relevant search query and assign it
-              # into the computer_hash
-              current = computer_hash[:instance]
-              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
-                'test_instances/search?'
-              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
-              computer_hash[:url] += {query_text: [
-                "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
-                "computer: #{computer.name}",
-                "threads: #{current.omp_num_threads}",
-                "compiler: #{current.compiler}",
-                "compiler_version: #{current.compiler_version}",
-                "test_case: #{test_case_name}",
-                "passed: true",
-              ].join('; ')}.to_query
-            end
-          end
-        end
-        if res[:trouble_cases][tcv][:memory]
-          res[:trouble_cases][tcv][:memory].each_pair do |run_type, run_type_hash|
-            run_type_hash.each_pair do |computer, computer_hash|
-              # use search api to create link showing all more efficient test
-              # instances in last `depth` revisions
-              current = computer_hash[:instance]
-              computer_hash[:url] = 'https://testhub.mesastar.org/' + 
-                'test_instances/search?'
-              computer_hash[:url] += {utf8: '✓'}.to_query + '&'
-              computer_hash[:url] += {query_text: [
-                "version: #{current.mesa_version - depth}-#{current.mesa_version - 1}",
-                "computer: #{computer.name}",
-                "threads: #{current.omp_num_threads}",
-                "compiler: #{current.compiler}",
-                "compiler_version: #{current.compiler_version}",
-                "test_case: #{test_case_name}",
-                "passed: true",
-              ].join('; ')}.to_query
-            end
-          end
-        end
-      end
+      # res[:trouble_cases].keys.each do |tcv|
+      #   test_case_name = tcv.test_case.name
+      #   if res[:trouble_cases][tcv][:runtime]
+      #     res[:trouble_cases][tcv][:runtime].each_pair do |runtime_type, runtime_hash|
+      #       # walk through computers and assign link for each
+      #       #
+      #       runtime_hash.each_pair do |computer, computer_hash|
+      #         # create url that creates the relevant search query and assign it
+      #         # into the computer_hash
+      #         current = computer_hash[:instance]
+      #         computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+      #           'test_instances/search?'
+      #         computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+      #         computer_hash[:url] += {query_text: [
+      #           "version: #{current.mesa_version-depth}-#{current.mesa_version - 1}",
+      #           "computer: #{computer.name}",
+      #           "threads: #{current.omp_num_threads}",
+      #           "compiler: #{current.compiler}",
+      #           "compiler_version: #{current.compiler_version}",
+      #           "test_case: #{test_case_name}",
+      #           "passed: true",
+      #         ].join('; ')}.to_query
+      #       end
+      #     end
+      #   end
+      #   if res[:trouble_cases][tcv][:memory]
+      #     res[:trouble_cases][tcv][:memory].each_pair do |run_type, run_type_hash|
+      #       run_type_hash.each_pair do |computer, computer_hash|
+      #         # use search api to create link showing all more efficient test
+      #         # instances in last `depth` revisions
+      #         current = computer_hash[:instance]
+      #         computer_hash[:url] = 'https://testhub.mesastar.org/' + 
+      #           'test_instances/search?'
+      #         computer_hash[:url] += {utf8: '✓'}.to_query + '&'
+      #         computer_hash[:url] += {query_text: [
+      #           "version: #{current.mesa_version - depth}-#{current.mesa_version - 1}",
+      #           "computer: #{computer.name}",
+      #           "threads: #{current.omp_num_threads}",
+      #           "compiler: #{current.compiler}",
+      #           "compiler_version: #{current.compiler_version}",
+      #           "test_case: #{test_case_name}",
+      #           "passed: true",
+      #         ].join('; ')}.to_query
+      #       end
+      #     end
+      #   end
+      # end
 
-      version.test_case_versions.each do |tcv|
-        res[:computer_counts][tcv] = tcv.computer_count
-        if tcv.status >= 2
-          res[:checksum_counts][tcv] = tcv.unique_checksum_count
+      test_case_commits.each do |tcc|
+        res[:computer_counts][tcc] = tcc.computer_count
+        res[:checksum_counts][tcc] = tcc.unique_checksum_count if tcc.status >= 2
+        if tcc.status >= 3
+          res[:pass_counts][tcc] = tcc.test_instances.where(passed: true).count
+          res[:fail_counts][tcc] = tcc.test_instances.where(passed: false).count
         end
-        if tcv.status >= 3
-          res[:pass_counts][tcv] = tcv.test_instances.where(passed: true).count
-          res[:fail_counts][tcv] = tcv.test_instances.where(passed: false).count
-        end
-        res[:case_links][tcv] = test_case_version_url(
-          version.number, tcv.test_case.name
-        )
+        # skipping links for now, since they will be branch-dependent
+        # res[:case_links][tcc] = test_case_commit_url(
+        #   commit.sha, tcc.test_case.name
+        # )
       end
-      @version_data[version] = res
+      @commit_data[commit] = res
     end
     @make_green = "style='color: rgb(0, 153, 51)'".html_safe
     @make_yellow = "style= 'color: rgb(255, 153, 0)'".html_safe
     @make_blue = "style= 'color: rgb(78, 114, 219)'".html_safe
     @make_red = "style='color: rgb(204, 0, 0)'".html_safe
+    @make_cyan = "style='color: rgb(79, 159, 181)'".html_safe
+
 
     # gather sender, recipient(s), subject, and body before composing email
     # from = Email.new(email: 'mesa-developers@lists.mesastar.org')
@@ -178,7 +199,9 @@ class MorningMailer < ApplicationMailer
     # email.add_content(Content.new(type: 'text/html', value: html_content))
 
     # send the message
-    mail(to: 'mesa-developers@lists.mesastar.org',
+    # mail(to: 'mesa-developers@lists.mesastar.org',
+    #      subject: "MesaTestHub Report #{Date.today}")
+    mail(to: 'wolfwm@uwec.edu',
          subject: "MesaTestHub Report #{Date.today}")
   end
 
@@ -298,6 +321,7 @@ class MorningMailer < ApplicationMailer
     @make_yellow = "style= 'color: rgb(255, 153, 0)'".html_safe
     @make_blue = "style= 'color: rgb(78, 114, 219)'".html_safe
     @make_red = "style='color: rgb(204, 0, 0)'".html_safe
+    @make_cyan = "style='color: rgb(79, 159, 181)'".html_safe
 
     # gather sender, recipient(s), subject, and body before composing email
     from = Email.new(email: 'mesa-developers@lists.mesastar.org')
