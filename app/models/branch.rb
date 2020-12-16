@@ -42,7 +42,7 @@ class Branch < ApplicationRecord
       branch.head = head_commit
       # branch is merged if its head commit has children. Otherwise, it is the
       # latest commit (a true head commit)
-      branch.merged = (head_commit.children.count > 0)
+      branch.merged = (head_commit.children.count > 0) && branch.name != 'main'
       branch.save
     end
 
