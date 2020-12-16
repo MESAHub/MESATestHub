@@ -6,7 +6,7 @@ class ApplicationRecord < ActiveRecord::Base
   ####################
   @@client = Octokit::Client.new(access_token: ENV['GIT_TOKEN'])
   @@client.auto_paginate = true
-  @@repo_path = 'MESAHub/mesa-sandbox-lfs'
+  @@repo_path = 'MESAHub/mesa'
 
 
   def self.api
@@ -20,7 +20,7 @@ class ApplicationRecord < ActiveRecord::Base
     @@repo_path
   end
 
-  @@api_root = 'https://api.github.com/repos/MESAHub/mesa-sandbox-lfs/'
+  @@api_root = 'https://api.github.com/repos/MESAHub/mesa/'
 
   def self.api_raw_call(full_path, **params)
     uri = URI(full_path)

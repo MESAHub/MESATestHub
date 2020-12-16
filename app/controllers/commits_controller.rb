@@ -165,7 +165,7 @@ class CommitsController < ApplicationController
   def index
     @unmerged_branches = Branch.unmerged
     @merged_branches = Branch.merged
-    @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.master
+    @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.main
     @commits = @branch.commits.includes(:test_case_commits).order(commit_time: :desc).page(params[:page])
     # Commit.all_in_branch(
     #   branch: @branch,

@@ -64,9 +64,9 @@ class Branch < ApplicationRecord
     find_by(name: branch_name)
   end
 
-  # access master branch (most useful one, and likely a default)
-  def self.master
-    named('master')
+  # access main branch (most useful one, and likely a default)
+  def self.main
+    named('main')
   end
 
 

@@ -104,7 +104,7 @@ class Commit < ApplicationRecord
       # branches have their branch memberships updated
       Branch.api_update_branches
     else
-      earliest ||= 30.days.before(branch.commits.maximum(:commit_time))
+      earliest ||= 30.days.before(branch.commits.maximum(:commit_time) || Date.today)
       # Avoid asking api for commits since the beginning of time unless we 
       # REALLY want it.
       github_data = if force || Commit.count.zero?
@@ -291,7 +291,7 @@ class Commit < ApplicationRecord
   # get the [Rails] head commit of a particular branch
   # Params:
   # +branch+:: branch for which we want the head node
-  def self.head(branch: Branch.master)
+  def self.head(branch: Branch.main)
     branch.head
   end
 
@@ -372,7 +372,7 @@ class Commit < ApplicationRecord
   # get list of commits that are near in +commit_time+ to this commit. If
   # possible, get +limit+ commits, with equal numbers before and after this
   # commit
-  def nearby_commits(branch: Branch.master, limit: 11)
+  def nearby_commits(branch: Branch.main, limit: 11)
     earliest = branch.commits.order(commit_time: :asc).first.commit_time
     before = branch.commits.where(commit_time: earliest...commit_time).
                             order(commit_time: :desc).limit(limit).reverse.to_a

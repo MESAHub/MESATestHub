@@ -144,7 +144,7 @@ class TestCaseCommit < ApplicationRecord
   # TODO: update all methods below to work with a specified branch, and thus
   # query for the proper depth of commits in that branch
 
-  def relevant_instances_to_depth(depth: 100, branch: Branch.master, force: false)
+  def relevant_instances_to_depth(depth: 100, branch: Branch.main, force: false)
     # search query for all instances of this test case that have been tested
     # by the same computers as this test case commit back +depth+ commit
     # 

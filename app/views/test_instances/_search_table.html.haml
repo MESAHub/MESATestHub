@@ -26,8 +26,8 @@
             - next unless test_instance.commit
             %tr.text-center
               -# %td.align-middle= link_to test_instance.version.number, version_path(test_instance.version.number)
-              %td.align-middle= link_to test_instance.commit.short_sha, commit_path(sha: test_instance.commit.short_sha, branch: :master), class: 'btn btn-outline-primary text-monospace'
-              %td.align-middle= link_to test_instance.test_case.name, test_case_commit_path(branch: :master, module: test_instance.test_case.module, test_case: test_instance.test_case.name, sha: test_instance.commit.short_sha)
+              %td.align-middle= link_to test_instance.commit.short_sha, commit_path(sha: test_instance.commit.short_sha, branch: :main), class: 'btn btn-outline-primary text-monospace'
+              %td.align-middle= link_to test_instance.test_case.name, test_case_commit_path(branch: :main, module: test_instance.test_case.module, test_case: test_instance.test_case.name, sha: test_instance.commit.short_sha)
               %td.align-middle
                 -if test_instance.passed
                   %span.text-success= test_instance.passage_status
