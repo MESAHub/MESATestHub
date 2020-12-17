@@ -92,7 +92,7 @@ class Branch < ApplicationRecord
       not_in = branch_commit_ids - already_in
       BranchMembership.create(
         not_in.map do |commit_id|
-          {commit_id: commit_id, branch_id: other_branch.id}
+          { commit_id: commit_id, branch_id: other_branch.id }
         end)
     end
   end
@@ -101,7 +101,7 @@ class Branch < ApplicationRecord
     res = commits.find_by(parents_count: 0)
     # make sure we actually found the root commit
     unless res == Commit.root
-      recursive_assign_root 
+      recursive_assign_root(root: res)
       res = commits.find_by(parents_count: 0)
     end
     res
@@ -109,13 +109,15 @@ class Branch < ApplicationRecord
 
   # make sure the root of a branch is the true root of the entire repo
   # this is bad for the database since it could require repeated 
-  def recursive_assign_root(root: nil)
-    root ||= self.root
-    return if root == Commit.root
-    self.root.parents.each do |parent|
+  def recursive_assign_root(current_root: nil)
+    current_root ||= commits.find_by(parents_count: 0) || head
+    return if current_root == Commit.root
+
+    current_root.parents.each do |parent|
       next if commits.include? parent
+
       BranchMembership.create(branch_id: id, commit_id: parent.id)
-      recursive_assign_root(root: parent)
+      recursive_assign_root(current_root: parent)
     end
   end
 

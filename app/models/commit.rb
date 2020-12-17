@@ -40,7 +40,14 @@ class Commit < ApplicationRecord
   # done AFTER this
   
   def self.api_commits(**params)
-    api.commits(repo_path, **params)
+    begin
+      data = api.commits(repo_path, **params)
+    rescue Octokit::NotFound
+      return nil
+    else
+      data
+    end
+
   end
 
   def self.api_create(sha: nil, update_parents: false, **params)
@@ -112,6 +119,7 @@ class Commit < ApplicationRecord
                     else
                       api_commits(sha: branch.name, since: earliest)
                     end
+      return unless github_data
 
       # Prevent abusive calls to database to the beginning of time by only
       # looking at new commits in this branch. Note, this allows commits
@@ -168,6 +176,7 @@ class Commit < ApplicationRecord
       Branch.api_update_branches
     else
       api_payload ||= api_commits(sha: branch.name)
+      return unless api_payload
       # database ids for all commits in the branch that are in the database
       # Note: does not account for whether all commits are actually present in
       # database
