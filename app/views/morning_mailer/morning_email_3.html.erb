@@ -3,7 +3,7 @@
   <% @branch_data[branch].each do |commit| %>
     <h3>
       <% data = @commit_data[commit] %>
-      <samp><% this_link = commit_url(branch.name, commit.short_sha) %></samp>
+      <% this_link = commit_url(branch.name, commit.short_sha) %>
       <% if data[:status] == :passing %>
         <a clicktracking=off href=<%= this_link %> <%=@make_green%>>
       <% elsif data[:status] == :mixed %>
@@ -15,7 +15,7 @@
       <% else %>
         <a clicktracking=off href=<%= this_link %> <%=@make_cyan%>>
       <% end %>
-        <%= commit.short_sha %>
+        <samp><%= commit.short_sha %></samp>
       </a> (<%= "#{commit.computer_count} " + "computer".pluralize(commit.computer_count)%> tested to date; <%= commit.complete_computer_count %> complete)
     </h3>
     <ul>
