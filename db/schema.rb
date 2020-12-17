@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2020_08_09_000558) do
+ActiveRecord::Schema.define(version: 2020_12_17_170203) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -199,6 +199,7 @@ ActiveRecord::Schema.define(version: 2020_08_09_000558) do
     t.string "restart_checksum"
     t.string "restart_photo"
     t.boolean "run_optional"
+    t.boolean "fpe_checks"
     t.index ["commit_id"], name: "index_test_instances_on_commit_id"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
     t.index ["mesa_version"], name: "index_test_instances_on_mesa_version"
