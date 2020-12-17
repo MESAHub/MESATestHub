@@ -119,7 +119,7 @@ class TestCasesController < ApplicationController
                   if cookies[:commit_end]
                     Date.parse(cookies[:commit_end])
                   else
-                    Date.today
+                    DateTime.now.tomorrow.to_date
                   end
                 else
                   Date.parse(test_case_params[:end_date])
