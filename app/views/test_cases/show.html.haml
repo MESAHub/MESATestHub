@@ -141,8 +141,8 @@
                       %a.btn.btn-sm{href: test_case_commit_path(branch: params[:branch], test_case: params[:test_case], module: @test_case.module, sha: instance.commit.short_sha), class: @btn_classes[instance.test_case_commit.status]}
                         %span.text-reset.text-monospace=instance.commit.short_sha
                   %td.align-middle.column-status{class: instance.passed ? 'text-success' : 'text-danger'}
-                    =fa_icon 'wrench' if instance.fpe_checks
-                    =fa_icon 'plus-square' if instance.run_optional
+                    =fa_icon('wrench', title: 'FPE Checks') if instance.fpe_checks
+                    =fa_icon('plus-square', title: 'Run Optional') if instance.run_optional
                     =instance.passage_status
                   -# %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
                   %td.align-middle.column-date{class: @default_column_visibility['date'] ? '' : 'd-none'}=format_time(instance.created_at)
