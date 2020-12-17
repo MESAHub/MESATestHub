@@ -3,7 +3,7 @@
   <% @branch_data[branch].each do |commit| %>
     <h3>
       <% data = @commit_data[commit] %>
-      <% this_link = commit_url(branch.name, commit.short_sha) %>
+      <samp><% this_link = commit_url(branch.name, commit.short_sha) %></samp>
       <% if data[:status] == :passing %>
         <a clicktracking=off href=<%= this_link %> <%=@make_green%>>
       <% elsif data[:status] == :mixed %>
@@ -21,7 +21,7 @@
     <ul>
       <li> <b> Author: </b> <%= commit.author %> </li>
       <li> <b> Commit Message: </b> <%= commit.message %> </li>
-      <li> <%= data[:tested_count] %>/<%= commit.test_case_count %> cases submitted </li>
+      <li> <%= data[:tested_count] %>/<%= commit.test_case_count %> cases tested </li>
       <% data[:mixed_cases].each do |tcc| %>
         <li>
           <samp> 

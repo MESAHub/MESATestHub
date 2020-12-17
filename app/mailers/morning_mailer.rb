@@ -84,9 +84,7 @@ class MorningMailer < ApplicationMailer
     @make_cyan = "style='color: rgb(79, 159, 181)'".html_safe
 
     # send the message
-    # mail(to: 'mesa-developers@lists.mesastar.org',
-    #      subject: "MesaTestHub Report #{Date.today}")
-    mail(to: 'wolfwm@uwec.edu',
+    mail(to: 'mesa-developers@lists.mesastar.org, p7r3d3c7y5u1u9e8@mesadevelopers.slack.com',
          subject: "MesaTestHub Report #{Date.today}")
   end
 
