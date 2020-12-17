@@ -6,7 +6,7 @@
   .col-6.col-md-5.text-right
     .dropdown
       %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
-        %span.text-muted Branch:
+        =fa_icon 'code-fork'
         %samp#selected-branch= @selected_branch
       .dropdown-menu
         - @branches.each do |branch|
@@ -14,7 +14,7 @@
   .col-6.col-md-5
     .dropdown
       %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle#commit-selector{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
-        %span.h5.text-muted Commit:
+        =fa_icon 'dot-circle-o'
         %span.h5.text-monospace=@commit
       .dropdown-menu.dropdown-menu-right.py-0.my-0{'aria-labelledby': 'commit-selector'}
         %ul.list-group.list-group-flush

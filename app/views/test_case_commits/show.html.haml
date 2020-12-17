@@ -6,8 +6,8 @@
         %i.fa.fa-step-backward.text-reset
   .col-6.col-md-5.text-right
     .dropdown
-      %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
-        %span.text-muted Branch:
+      %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}  
+        =fa_icon 'code-fork'
         %samp#selected-branch= @selected_branch
       .dropdown-menu
         - @branches.each do |branch|
@@ -15,7 +15,7 @@
   .col-6.col-md-5
     .dropdown
       %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle#commit-selector{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
-        %span.h5.text-muted Commit:
+        =fa_icon 'dot-circle-o'
         %span.h5.text-monospace=@commit
       .dropdown-menu.dropdown-menu-right.py-0.my-0{'aria-labelledby': 'commit-selector'}
         %ul.list-group.list-group-flush
@@ -171,14 +171,18 @@
             -@test_case_commit.test_instances.each do |instance|
               -# %tr{class: @test_instance_classes[instance] + " clickable-row", "data-href": test_case_test_instance_path(@test_case, instance)}
               %tr
-                %td.column-status{class: instance.passed ? 'text-success' : 'text-danger'}=instance.passage_status
+                %td.column-status{class: instance.passed ? 'text-success' : 'text-danger'}
+                  =fa_icon 'wrench' if instance.fpe_checks
+                  =fa_icon 'plus-square' if instance.run_optional
+                  =instance.passage_status
                 %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
                 %td.column-date.d-none=format_time(instance.created_at)
                 %td.column-runtime
                   -if instance.runtime_minutes
                     =format('%.2f', instance.runtime_minutes) + ' m'
                 %td.column-ram.d-none=format("%.2f", instance.rn_mem_GB || 0) + ' GB'
-                %td.column-checksum=instance.checksum[(-7..-1)] if instance.checksum
+                %td.column-checksum
+                  %samp=instance.checksum[(-7..-1)] if instance.checksum
                 %td.column-threads.d-none=instance.omp_num_threads
                 %td.column-spec.d-none=instance.computer_specification
                 %td.column-steps=instance.steps

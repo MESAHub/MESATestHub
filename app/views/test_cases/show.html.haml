@@ -24,7 +24,7 @@
         on
         .btn-group
           %button.btn.btn-outline-primary.btn-lg.dropdown-toggle#branch-select{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
-            %span.small.text-muted Branch:
+            =fa_icon 'code-fork'
             %samp= @branch
           .dropdown-menu{'aria-labelledby' => 'branch-select'}
             - @unmerged_branches.each do |branch|

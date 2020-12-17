@@ -88,8 +88,10 @@ class TestCaseCommit < ApplicationRecord
 
   def unique_checksums
     # all non-empty, non-nill checksums from submissions to this test case for
-    # this commit
-    self.test_instances.pluck(:checksum).uniq.reject(&:nil?).reject(&:empty?)
+    # this commit. Also ignore instances that ran optional inlists, since
+    # they are not necessarily expected to have identical checksums
+    self.test_instances.where.not(run_optional: true).pluck(:checksum).uniq
+      .reject(&:nil?).reject(&:empty?)
   end
 
   def update_checksum_count
