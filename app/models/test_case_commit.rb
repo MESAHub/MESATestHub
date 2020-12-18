@@ -90,8 +90,15 @@ class TestCaseCommit < ApplicationRecord
     # all non-empty, non-nill checksums from submissions to this test case for
     # this commit. Also ignore instances that ran optional inlists, since
     # they are not necessarily expected to have identical checksums
-    self.test_instances.where.not(run_optional: true).pluck(:checksum).uniq
-      .reject(&:nil?).reject(&:empty?)
+    
+    # check to see if things are loaded. Gross, but this happens on the
+    # most common resource (commit#show), which eager-loads tons of stuff
+    # so this avoides unnecessary hits to the database.
+    if test_instances.loaded?
+      test_instances.reject(&:run_optional).map(&:checksum)
+    else
+      test_instances.where.not(run_optional: true).pluck(:checksum)
+    end.uniq.reject(&:nil?).reject(&:empty?)
   end
 
   def update_checksum_count

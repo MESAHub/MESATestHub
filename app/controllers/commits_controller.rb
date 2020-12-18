@@ -2,9 +2,7 @@ class CommitsController < ApplicationController
   before_action :set_commit, only: :show
 
   def show
-    @test_case_commits = @commit.test_case_commits.includes(
-      :test_case, test_instances: [:computer, instance_inlists: :inlist_data])
-    @test_case_commits = @test_case_commits.to_a.sort_by do |tcc|
+    @test_case_commits = @commit.test_case_commits.to_a.sort_by do |tcc|
       tcc.test_case.name
     end
 
@@ -37,14 +35,13 @@ class CommitsController < ApplicationController
     @nearby_commits = @nearby_commits[start_i..stop_i]
     loc = @nearby_commits.pluck(:id).index(@commit.id)
 
-    # we've reversed nearby commits, so the "next" one is later in time, and 
-    # thus EARLIER in the array. Clunky, but I think it works in practice
     @next_commit = @nearby_commits[loc - 1] if loc.positive?
 
     if loc < @nearby_commits.length - 1
       @previous_commit = @nearby_commits[loc + 1]
     end
 
+    # get nice colors in the commit dropdown
     @commit_classes = {}
     @btn_classes = {}
     @nearby_commits.each do |nearby_commit|
@@ -65,7 +62,6 @@ class CommitsController < ApplicationController
                                       'btn-info'
                                     end
     end
-
 
     @others = @test_case_commits.select { |tcc| !(0..3).include? tcc.status }
     @mixed = @test_case_commits.select { |tcc| tcc.status == 3 }
@@ -247,6 +243,6 @@ class CommitsController < ApplicationController
   private
 
   def set_commit
-    @commit = parse_sha(includes: {test_case_commits: :test_instances})
+    @commit = parse_sha(includes: {test_case_commits: [:test_case, {test_instances: [:computer, instance_inlists: :inlist_data]}]})
   end
 end
