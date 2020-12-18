@@ -279,13 +279,16 @@ class Commit < ApplicationRecord
   # GENERAL USE AND SEARCHING/SORTING #
   #####################################
   
-  def self.parse_sha(sha)
+  def self.parse_sha(sha, includes: nil)
     if sha.downcase == 'head'
-      Commit.head
+      Commit.head unless includes
+      Commit.head(includes: includes)
     elsif sha.length == 7
-      Commit.find_by(short_sha: sha)
+      Commit.find_by(short_sha: sha) unless includes
+      Commit.includes(includes).find_by(short_sha: sha)
     else
-      Commit.find_by(sha: sha)
+      Commit.find_by(sha: sha) unless includes
+      Commit.includes(includes).find_by(sha: sha)
     end
   end
 
@@ -303,8 +306,9 @@ class Commit < ApplicationRecord
   # get the [Rails] head commit of a particular branch
   # Params:
   # +branch+:: branch for which we want the head node
-  def self.head(branch: Branch.main)
-    branch.head
+  def self.head(branch: Branch.main, includes: nil)
+    branch.head unless includes
+    Commit.includes(includes).find(branch.head_id)
   end
 
   ####################

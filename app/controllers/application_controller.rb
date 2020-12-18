@@ -36,7 +36,7 @@ class ApplicationController < ActionController::Base
   end
 
   def parse_sha(includes: nil)
-    Commit.parse_sha(params[:sha])
+    Commit.parse_sha(params[:sha], includes: includes)
   end
 
   helper_method :current_user

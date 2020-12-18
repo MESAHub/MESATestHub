@@ -215,6 +215,6 @@ class CommitsController < ApplicationController
   private
 
   def set_commit
-    @commit = parse_sha
+    @commit = parse_sha(includes: {test_case_commits: :test_instances})
   end
 end
