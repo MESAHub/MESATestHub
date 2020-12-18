@@ -14,22 +14,34 @@ class TestCaseCommitsController < ApplicationController
     # at current commit in time in the branch. That is, if this is the head
     # commit, get ten last commits. If this is the first commit of a branch,
     # get the next ten. If it is in the middle, get five on either side.
-    @nearby_tccs = TestCaseCommit.includes(:commit).where(
-      commit: @commit.nearby_commits(branch: @selected_branch, limit: 7),
-      test_case: @test_case_commit.test_case
-    ).order('commits.commit_time desc')
-    @nearby_commits = @nearby_tccs.map(&:commit)
+    commit_shas = Commit.api_commits(
+      sha: @selected_branch.head.sha,
+      before: 10.days.after(@commit.commit_time),
+      after: 10.days.before(@commit.commit_time)
+    ).map { |c| c[:sha] }
+    @nearby_commits = @selected_branch.commits.where(sha: commit_shas).to_a
+      .sort! { |a, b| commit_shas.index(a.sha) <=> commit_shas.index(b.sha) }      
+
     @next_commit, @previous_commit = nil, nil
+
+    loc = @nearby_commits.pluck(:id).index(@commit.id)
+    start_i = [0, loc - 2].max
+    stop_i = [@nearby_commits.length - 1, loc + 2].min
+    @nearby_commits = @nearby_commits[start_i..stop_i]
     loc = @nearby_commits.pluck(:id).index(@commit.id)
 
     # we've reversed nearby commits, so the "next" one is later in time, and 
     # thus EARLIER in the array. Clunky, but I think it works in practice
     if loc > 0
-      @next_commit = @nearby_commits[loc - 1]
+    @next_commit = @nearby_commits[loc - 1]
     end
     if loc < @nearby_commits.length - 1
       @previous_commit = @nearby_commits[loc + 1]
     end
+
+    @nearby_tccs = TestCaseCommit.includes(:commit).where(
+      commit: @nearby_commits, test_case: @test_case_commit.test_case
+    ).to_a.sort! { |a, b| @nearby_commits.index(a.commit) <=> @nearby_commits.index(b.commit)}
 
     # used for shading commit selector options according to passage status of
     # THIS test
