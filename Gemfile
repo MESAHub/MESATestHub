@@ -32,6 +32,7 @@ gem 'barista'
 gem 'font-awesome-rails'
 # Git stuff
 gem 'octokit', "~> 4.0"
+gem 'faraday-http-cache'
 gem 'github_webhook', '~> 1.1'
 
 group :development, :test do

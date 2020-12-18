@@ -21,10 +21,19 @@
       %span.badge.badge-primary Mult. Checksums
       %span.badge.badge-secondary Computers
       %span.badge.badge-dark Completed Computers
-.row.mb-5
+.row.mb-3
   .col
     %p
-      %i= page_entries_info @commits
+      %b
+        %i
+          Viewing Commits
+          =@start_num
+          through
+          =@stop_num
+          of
+          =@num_commits
+
+    -#   %i= page_entries_info @commits
     %ul.list-group.list-group-flush
       - @commits.each do |commit|
         %li.list-group-item.list-group-item-action{class: @row_classes[commit]}
@@ -59,6 +68,18 @@
                 %span.badge.badge-dark= commit.complete_computer_count
           .d-flex.w-100
             %p.mb-0.mt-2{class: 'collapse', id: "msg_#{commit.short_sha}"}= commit.message_rest
-.row
-  .col
-    = paginate @commits
+
+.row.mb-3.mt-0
+  .col.text-center.mt-0
+    .btn-group.mt-0
+      - if @page > 1
+        %a{href: commits_path(page:1), class:'mx-1'}
+          %button{class: 'btn btn-lg btn-outline-primary'} First
+        %a{href: commits_path(page: @page - 1), class:'mx-1'}
+          %button{class: 'btn btn-lg btn-outline-primary'} Previous
+      - if @page < @num_pages
+        %a{href: commits_path(page: @page + 1), class:'mx-1'}
+          %button{class: 'btn btn-lg btn-outline-primary'} Next
+        %a{href: commits_path(page: @num_pages ), class:'mx-1'}
+          %button{class: 'btn btn-lg btn-outline-primary'} Last
+-#     = paginate @commits

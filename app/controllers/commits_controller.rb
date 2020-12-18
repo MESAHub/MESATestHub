@@ -163,10 +163,26 @@ class CommitsController < ApplicationController
   end
 
   def index
+    @page_length = 25
     @unmerged_branches = Branch.unmerged
     @merged_branches = Branch.merged
     @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.main
-    @commits = @branch.commits.includes(:test_case_commits).order(commit_time: :desc).page(params[:page])
+    commit_shas = Commit.api_commits(sha: params[:start_sha] || @branch.head.sha).map { |c| c[:sha] }
+    
+    @num_commits = commit_shas.length
+
+    # how many pages are there? Which page are we on? Are we REALLY on that page?
+    @page = params[:page] || 1
+    @page = @page.to_i
+    @num_pages = @num_commits / @page_length + 1
+    @page = @num_pages if @page > @num_pages
+    @start_num = 1 + (@page - 1) * @page_length
+    @stop_num = @page_length * @page
+    
+    subset = commit_shas[@page_length * (@page - 1), @page_length]
+    @commits = Commit.includes(:test_case_commits).where(sha: subset).to_a
+      .sort! { |a, b| subset.index(a.sha) <=> subset.index(b.sha) }      
+    # @commits = @branch.commits.includes(:test_case_commits).order(commit_time: :desc).page(params[:page])
     # Commit.all_in_branch(
     #   branch: @branch,
     #   includes: :test_case_commits,

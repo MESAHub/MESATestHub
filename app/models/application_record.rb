@@ -4,6 +4,16 @@ class ApplicationRecord < ActiveRecord::Base
   ####################
   # GITHUB API STUFF #
   ####################
+  
+  # middleware stack stuff stolen shamelessly from octokit readme:
+  # https://github.com/octokit/octokit.rb#caching
+  stack = Faraday::RackBuilder.new do |builder|
+    builder.use Faraday::HttpCache, serializer: Marshal, shared_cache: false
+    builder.use Octokit::Response::RaiseError
+    builder.adapter Faraday.default_adapter
+  end
+  Octokit.middleware = stack
+
   @@client = Octokit::Client.new(access_token: ENV['GIT_TOKEN'])
   @@client.auto_paginate = true
   @@repo_path = 'MESAHub/mesa'
