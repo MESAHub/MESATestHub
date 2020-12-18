@@ -21,10 +21,22 @@ class CommitsController < ApplicationController
     # at current commit in time in the branch. That is, if this is the head
     # commit, get ten last commits. If this is the first commit of a branch,
     # get the next ten. If it is in the middle, get five on either side.
-    @nearby_commits = @commit.nearby_commits(branch: @selected_branch, limit: 7).reverse.reject(&:nil?)
+    commit_shas = Commit.api_commits(
+      sha: @selected_branch.head.sha,
+      before: 10.days.after(@commit.commit_time),
+      after: 10.days.before(@commit.commit_time)
+    ).map { |c| c[:sha] }
+    @nearby_commits = @selected_branch.commits.where(sha: commit_shas).to_a
+      .sort! { |a, b| commit_shas.index(a.sha) <=> commit_shas.index(b.sha) }      
 
     @next_commit, @previous_commit = nil, nil
+
     loc = @nearby_commits.pluck(:id).index(@commit.id)
+    start_i = [0, loc - 2].max
+    stop_i = [@nearby_commits.length - 1, loc + 2].min
+    @nearby_commits = @nearby_commits[start_i..stop_i]
+    loc = @nearby_commits.pluck(:id).index(@commit.id)
+
     # we've reversed nearby commits, so the "next" one is later in time, and 
     # thus EARLIER in the array. Clunky, but I think it works in practice
     if loc > 0
@@ -167,7 +179,7 @@ class CommitsController < ApplicationController
     @unmerged_branches = Branch.unmerged
     @merged_branches = Branch.merged
     @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.main
-    commit_shas = Commit.api_commits(sha: params[:start_sha] || @branch.head.sha).map { |c| c[:sha] }
+    commit_shas = Commit.api_commits(sha: @branch.head.sha).map { |c| c[:sha] }
     
     @num_commits = commit_shas.length
 
