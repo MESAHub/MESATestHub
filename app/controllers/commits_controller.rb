@@ -39,11 +39,31 @@ class CommitsController < ApplicationController
 
     # we've reversed nearby commits, so the "next" one is later in time, and 
     # thus EARLIER in the array. Clunky, but I think it works in practice
-    if loc > 0
-    @next_commit = @nearby_commits[loc - 1]
-    end
+    @next_commit = @nearby_commits[loc - 1] if loc.positive?
+
     if loc < @nearby_commits.length - 1
       @previous_commit = @nearby_commits[loc + 1]
+    end
+
+    @commit_classes = {}
+    @btn_classes = {}
+    @nearby_commits.each do |nearby_commit|
+      @commit_classes[nearby_commit] = case nearby_commit.status
+                                       when 3 then 'list-group-item-warning'
+                                       when 2 then 'list-group-item-primary'
+                                       when 1 then 'list-group-item-danger'
+                                       when 0 then 'list-group-item-success'
+                                       else
+                                         'list-group-item-info'
+                                       end
+      @btn_classes[nearby_commit] = case nearby_commit.status
+                                    when 3 then 'btn-warning'
+                                    when 2 then 'btn-primary'
+                                    when 1 then 'btn-danger'
+                                    when 0 then 'btn-success'
+                                    else
+                                      'btn-info'
+                                    end
     end
 
 

@@ -19,7 +19,7 @@
       .dropdown-menu.dropdown-menu-right.py-0.my-0{'aria-labelledby': 'commit-selector'}
         %ul.list-group.list-group-flush
           -@nearby_commits.each do |commit|
-            %li.list-group-item.list-group-item-action.dropdown-item{class: commit == @commit ? 'active' : ''}
+            %li.list-group-item.list-group-item-action.dropdown-item{class: commit == @commit ? 'active' : @commit_classes[commit]}
               .d-flex.w-100.justify-content-between
                 
                 %h5.font-weight-bold.d-none.d-md-inline
@@ -31,7 +31,8 @@
                   -else
                     =commit.message_first_line
                 %a.stretched-link.text-reset{href: commit_path(branch: @selected_branch.name, sha: commit.short_sha)}
-                  %span.h5.text-monospace.text-primary=commit.short_sha
+                  %button.btn.ml-2{class: @btn_classes[commit]}
+                    %span.h5.text-monospace=commit.short_sha
               .d-flex.w-100
                 %p.mb-0
                   %span.font-weight-bold= commit.author
