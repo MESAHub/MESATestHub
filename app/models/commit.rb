@@ -119,6 +119,9 @@ class Commit < ApplicationRecord
                     else
                       api_commits(sha: branch.name, since: earliest)
                     end
+      # if github doesn't know about branch, mark it as merged, as it was
+      # probably deleted on the github side
+      branch.update_attributes(merged: true) if github_data.nil?
       return unless github_data
 
       # Prevent abusive calls to database to the beginning of time by only
