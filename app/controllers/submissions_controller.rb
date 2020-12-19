@@ -73,7 +73,7 @@ class SubmissionsController < ApplicationController
       { test_instances: [{ instance_inlists: :inlist_data }, :test_case] },
       { commit: :branches }
     ).find(params[:id])
-    @branch = if @submission.branches.include? Branch.main
+    @branch = if @submission.commit.branches.include? Branch.main
                 Branch.main
               else
                 @submission.branches[0]

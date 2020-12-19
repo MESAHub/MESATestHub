@@ -20,9 +20,9 @@ class ApplicationRecord < ActiveRecord::Base
 
 
   def self.api
-    puts '###################'
-    puts "making an api call!"
-    puts '###################'
+    # puts '###################'
+    # puts "making an api call!"
+    # puts '###################'
     @@client
   end
 
