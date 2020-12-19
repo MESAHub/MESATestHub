@@ -69,8 +69,15 @@ class SubmissionsController < ApplicationController
 
   def show
     @submission = Submission.includes(
-      {test_instances: [{instance_inlists: :inlist_data}, :test_case]},
-       :user, :computer).find(params[:id])
+      :user, :computer,
+      { test_instances: [{ instance_inlists: :inlist_data }, :test_case] },
+      { commit: :branches }
+    ).find(params[:id])
+    @branch = if @submission.branches.include? Branch.main
+                Branch.main
+              else
+                @submission.branches[0]
+              end
     @computer = @submission.computer
     if params[:computer] && params[:computer] != @computer.name
       flash[:danger] = "That submission doesn't belong to computer "\
