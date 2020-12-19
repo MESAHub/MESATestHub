@@ -3,6 +3,7 @@ Rails.application.configure do
 
   # better logging data
   config.lograge.enabled = true
+  config.lograge.ignore_actions = ['Commit#show']
 
   # Code is not reloaded between requests.
   config.cache_classes = true

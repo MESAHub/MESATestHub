@@ -73,10 +73,11 @@ class SubmissionsController < ApplicationController
       { test_instances: [{ instance_inlists: :inlist_data }, :test_case] },
       { commit: :branches }
     ).find(params[:id])
-    @branch = if @submission.commit.branches.include? Branch.main
+    @commit = @submission.commit
+    @branch = if @commit.branches.include? Branch.main
                 Branch.main
               else
-                @submission.branches[0]
+                @commit.branches[0]
               end
     @computer = @submission.computer
     if params[:computer] && params[:computer] != @computer.name
