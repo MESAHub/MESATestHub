@@ -43,6 +43,15 @@ class MorningMailer < ApplicationMailer
       end
     end
 
+    # make sure the main is the first branch displayed, if at all
+    @ordered_branches = @branch_data.keys
+    main_loc = @ordered_branches.map(&:id).index(Branch.main.id)
+    if main_loc
+      @ordered_branches.insert(
+        0, @ordered_branches.delete(@ordered_branches[main_loc])
+      )
+    end
+
     @commit_data = {}
 
     @commits_tested.each do |commit|
@@ -68,7 +77,7 @@ class MorningMailer < ApplicationMailer
 
       test_case_commits.each do |tcc|
         res[:computer_counts][tcc] = tcc.computer_count
-        res[:checksum_counts][tcc] = tcc.unique_checksum_count if tcc.status >= 2
+        res[:checksum_counts][tcc] = tcc.checksum_count if tcc.status >= 2
         if tcc.status >= 3
           res[:pass_counts][tcc] = tcc.test_instances.where(passed: true).count
           res[:fail_counts][tcc] = tcc.test_instances.where(passed: false).count
