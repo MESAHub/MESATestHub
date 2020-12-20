@@ -24,6 +24,10 @@ class CommitsController < ApplicationController
       before: 10.days.after(@commit.commit_time),
       after: 10.days.before(@commit.commit_time)
     ).map { |c| c[:sha] }
+    loc = commit_shas.index(@commit.sha)
+    start = [loc - 2, 0].max
+    stop = [loc + 2, commit_shas.length - 1].min
+    commit_shas = commit_shas[(start..stop)]
     @nearby_commits = @selected_branch.commits.where(sha: commit_shas).to_a
       .sort! { |a, b| commit_shas.index(a.sha) <=> commit_shas.index(b.sha) }      
 
