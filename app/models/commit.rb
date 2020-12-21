@@ -336,7 +336,11 @@ class Commit < ApplicationRecord
   #####################################
   
   def self.parse_sha(sha, includes: nil)
-    if sha.downcase == 'head'
+    if sha.downcase == 'auto'
+      # no pull requests? just pretend like we asked for head
+      parse_sha(sha, includes: includes) if Branch.main.pull_requests.empty?
+      Branch.main.pull_requests.includes(includes).order(:commit_time).first
+    elsif sha.downcase == 'head'
       Commit.head unless includes
       Commit.head(includes: includes)
     elsif sha.length == 7

@@ -74,8 +74,12 @@
         %i.fa.fa-step-forward.text-reset
 .row.mt-5.mb-0
   .col
-    %h4 
-      Commit Data for
+    %h4
+      - if @commit.pull_request 
+        %b.text-success Pull Request Data
+      - else
+        Commit Data
+      for
       %span.text-monospace.text-primary= @commit
 .row.mt-0
   .col-lg-6.col-md-7

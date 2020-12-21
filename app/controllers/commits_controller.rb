@@ -208,16 +208,11 @@ class CommitsController < ApplicationController
     subset = commit_shas[@page_length * (@page - 1), @page_length]
     @commits = Commit.includes(:test_case_commits).where(sha: subset).to_a
       .sort! { |a, b| subset.index(a.sha) <=> subset.index(b.sha) }      
-    # @commits = @branch.commits.includes(:test_case_commits).order(commit_time: :desc).page(params[:page])
-    # Commit.all_in_branch(
-    #   branch: @branch,
-    #   includes: :test_case_commits,
-    #   page: params[:page]
-    # )
+    @pull_requests = @branch.pull_requests
 
     @row_classes = {}
     @btn_classes = {}
-    @commits.each do |commit|
+    (@commits + @pull_requests).each do |commit|
       @row_classes[commit] = case commit.status
       when 3 then 'list-group-item-warning'
       when 2 then 'list-group-item-primary'
