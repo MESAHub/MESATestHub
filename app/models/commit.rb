@@ -334,7 +334,7 @@ class Commit < ApplicationRecord
   #####################################
   # GENERAL USE AND SEARCHING/SORTING #
   #####################################
-  
+
   def self.parse_sha(sha, includes: nil)
     if sha.downcase == 'auto'
       # no pull requests? just pretend like we asked for head
@@ -394,7 +394,7 @@ class Commit < ApplicationRecord
     # note, we don't explicitly deal with children relations, since parent
     # relations implicitly take care of it. They would be set whenever this
     # is done to the children
-    # 
+    #
     # TODO: MAKE IT SO BULK PARENT ASSIGNMENTS DON'T CALL API UNTIL ALL ARE DONE
     # MAYBE HUNT FOR ORPHANS LATER?
     to_create = []

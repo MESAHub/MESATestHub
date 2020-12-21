@@ -10,6 +10,10 @@ class GithubWebhooksController < ApplicationController
     Commit.push_update(payload)
   end
 
+  def github_pull_request
+    Commit.api_update_pulls
+  end
+
   private
 
   def webhook_secret(payload)
