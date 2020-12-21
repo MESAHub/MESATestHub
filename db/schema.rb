@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2020_12_17_170203) do
+ActiveRecord::Schema.define(version: 2020_12_21_205332) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -61,6 +61,8 @@ ActiveRecord::Schema.define(version: 2020_12_17_170203) do
     t.integer "status", default: 0
     t.integer "children_count", default: 0
     t.integer "parents_count", default: 0
+    t.boolean "pull_request", default: false
+    t.boolean "open"
     t.index ["sha"], name: "index_commits_on_sha", unique: true
     t.index ["short_sha"], name: "index_commits_on_short_sha", unique: true
   end
@@ -129,6 +131,8 @@ ActiveRecord::Schema.define(version: 2020_12_17_170203) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "checksum_count", default: 0
+    t.integer "passed_count", default: 0
+    t.integer "failed_count", default: 0
     t.index ["commit_id"], name: "index_test_case_commits_on_commit_id"
     t.index ["test_case_id"], name: "index_test_case_commits_on_test_case_id"
   end

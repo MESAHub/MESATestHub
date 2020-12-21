@@ -8,7 +8,7 @@ class TestCaseCommit < ApplicationRecord
   has_many :computers, through: :test_instances
 
   validates_presence_of :status, :submission_count, :commit_id, :test_case_id,
-    :checksum_count
+                        :checksum_count
 
   @@status_decoder = {
     -1 => :untested,
@@ -68,6 +68,8 @@ class TestCaseCommit < ApplicationRecord
     update_submission_count
     update_computer_count
     update_checksum_count
+    update_passed_count
+    update_failed_count
     update_status
     update_last_tested
     save
@@ -105,6 +107,30 @@ class TestCaseCommit < ApplicationRecord
     # updates, but does not save, the number of unique checksums that computers
     # have submitted for this test case for this commit
     self.checksum_count = unique_checksums.count
+  end
+
+  def passing_instances
+    if test_instances.loaded?
+      test_instances.select(&:passed)
+    else
+      test_instances.where(passed: true)
+    end
+  end
+
+  def update_passed_count
+    self.passed_count = passing_instances.count
+  end
+
+  def failing_instances
+    if test_instances.loaded?
+      test_instances.reject(&:passed)
+    else
+      test_instances.where(passed: false)
+    end
+  end
+
+  def update_failed_count
+    self.failed_count = failing_instances.count
   end
 
   def update_last_tested

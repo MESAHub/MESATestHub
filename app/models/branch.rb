@@ -69,7 +69,9 @@ class Branch < ApplicationRecord
     named('main')
   end
 
-
+  def pull_requests
+    commits.where(pull_request: true, open: true)
+  end
 
   # update branch membership for all commits in branches
   def update_membership

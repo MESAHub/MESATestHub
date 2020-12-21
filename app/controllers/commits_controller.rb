@@ -2,7 +2,7 @@ class CommitsController < ApplicationController
   before_action :set_commit, only: :show
 
   def show
-    @test_case_commits = @commit.test_case_commits.to_a.sort_by do |tcc|
+    @test_case_commits = @commit.test_case_commits.includes(:test_case).sort_by do |tcc|
       tcc.test_case.name
     end
 
@@ -14,17 +14,21 @@ class CommitsController < ApplicationController
     end
     @branches = [@selected_branch, @other_branches].flatten
 
+    @pull_requests = @selected_branch.pull_requests
+
     # Get array of commits made in the same branch around the same time of this
     # commit. For now, get no more than seven commits, ideally centered
     # at current commit in time in the branch. That is, if this is the head
     # commit, get ten last commits. If this is the first commit of a branch,
     # get the next ten. If it is in the middle, get five on either side.
+
+    @center = @commit.pull_request ? @selected_branch.head : @commit    
     commit_shas = Commit.api_commits(
       sha: @selected_branch.head.sha,
-      before: 10.days.after(@commit.commit_time),
-      after: 10.days.before(@commit.commit_time)
+      before: 10.days.after(@center.commit_time),
+      after: 10.days.before(@center.commit_time)
     ).map { |c| c[:sha] }
-    loc = commit_shas.index(@commit.sha)
+    loc = commit_shas.index(@center.sha)
     start = [loc - 2, 0].max
     stop = [loc + 2, commit_shas.length - 1].min
     commit_shas = commit_shas[(start..stop)]
@@ -33,22 +37,14 @@ class CommitsController < ApplicationController
 
     @next_commit, @previous_commit = nil, nil
 
-    loc = @nearby_commits.pluck(:id).index(@commit.id)
-    start_i = [0, loc - 2].max
-    stop_i = [@nearby_commits.length - 1, loc + 2].min
-    @nearby_commits = @nearby_commits[start_i..stop_i]
-    loc = @nearby_commits.pluck(:id).index(@commit.id)
-
+    loc = @nearby_commits.pluck(:id).index(@center.id)
     @next_commit = @nearby_commits[loc - 1] if loc.positive?
-
-    if loc < @nearby_commits.length - 1
-      @previous_commit = @nearby_commits[loc + 1]
-    end
+    @previous_commit = @nearby_commits[loc + 1] if loc < @nearby_commits.length - 1
 
     # get nice colors in the commit dropdown
     @commit_classes = {}
     @btn_classes = {}
-    @nearby_commits.each do |nearby_commit|
+    (@nearby_commits + @pull_requests).each do |nearby_commit|
       @commit_classes[nearby_commit] = case nearby_commit.status
                                        when 3 then 'list-group-item-warning'
                                        when 2 then 'list-group-item-primary'
@@ -90,10 +86,8 @@ class CommitsController < ApplicationController
     @failure_types = {}
     @checksum_groups = {}
     @test_case_commits.each do |tcc|
-      unique_checksums = tcc.test_instances.map { |ti| ti.checksum }.uniq
-      unique_checksums.reject! { |checksum| checksum.nil? || checksum.empty? }
-
-      if unique_checksums.count > 1
+      if tcc.checksum_count > 1
+        unique_checksums = tcc.unique_checksums
         @checksum_groups[tcc] = {}
         unique_checksums.each do |checksum|
           # more than one checksum? group computers, sorted by name, as values
@@ -107,22 +101,22 @@ class CommitsController < ApplicationController
         end
       end
 
-      @failing_instances[tcc] = tcc.test_instances.select { |ti| !ti.passed }
-      if @failing_instances[tcc].count.positive?
+      if tcc.failed_count.positive?
+        @failing_instances[tcc] = tcc.test_instances.select { |ti| !ti.passed }
         @failure_types[tcc] = {}
         # create hash that has failure types as keys and arrays of computers,
         # sorted by name, as values
         @failing_instances[tcc].pluck(:failure_type).uniq.each do |failure_type|
           @failure_types[tcc][failure_type] = @failing_instances[tcc].select do |ti|
             ti.failure_type == failure_type
-          end.map { |ti| ti.computer }
+          end.map(&:computer)
         end
       end
       @counts[tcc] = {}
       @counts[tcc][:computers] = tcc.computer_count
-      @counts[tcc][:passes] = tcc.test_instances.count { |ti| ti.passed }
-      @counts[tcc][:failures] = @failing_instances[tcc].count
-      @counts[tcc][:checksums] = tcc.unique_checksums.count
+      @counts[tcc][:passes] = tcc.passed_count
+      @counts[tcc][:failures] = tcc.failed_count
+      @counts[tcc][:checksums] = tcc.checksum_count
     end
 
     @commit_status = case @commit.status
