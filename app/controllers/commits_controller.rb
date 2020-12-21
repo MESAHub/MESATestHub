@@ -22,7 +22,7 @@ class CommitsController < ApplicationController
     # commit, get ten last commits. If this is the first commit of a branch,
     # get the next ten. If it is in the middle, get five on either side.
 
-    @center = @commit.pull_request ? @selected_branch.head : @commit    
+    @center = @commit.pull_request ? @selected_branch.head : @commit  
     commit_shas = Commit.api_commits(
       sha: @selected_branch.head.sha,
       before: 10.days.after(@center.commit_time),

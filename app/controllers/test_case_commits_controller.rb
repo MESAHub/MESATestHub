@@ -9,28 +9,37 @@ class TestCaseCommitsController < ApplicationController
     end
     @branches = [@selected_branch, @other_branches].flatten
 
+    @pull_requests = @selected_branch.pull_requests
+    @pull_request_tccs = {}
+    @pull_requests.each do |pr|
+      @pull_request_tccs[pr] = TestCaseCommit.includes(
+        test_instances: { instance_inlists: :inlist_data }
+      ).find_by(commit: pr, test_case: @test_case)
+    end
+
     # Get array of commits made in the same branch around the same time of this
     # commit. For now, get no more than seven commits, ideally centered
     # at current commit in time in the branch. That is, if this is the head
     # commit, get ten last commits. If this is the first commit of a branch,
     # get the next ten. If it is in the middle, get five on either side.
+    @center = @commit.pull_request ? @selected_branch.head : @commit
     commit_shas = Commit.api_commits(
       sha: @selected_branch.head.sha,
-      before: 10.days.after(@commit.commit_time),
-      after: 10.days.before(@commit.commit_time)
+      before: 10.days.after(@center.commit_time),
+      after: 10.days.before(@center.commit_time)
     ).map { |c| c[:sha] }
     @nearby_commits = @selected_branch.commits.where(sha: commit_shas).to_a
-      .sort! { |a, b| commit_shas.index(a.sha) <=> commit_shas.index(b.sha) }      
+      .sort! { |a, b| commit_shas.index(a.sha) <=> commit_shas.index(b.sha) }     
 
     @next_commit, @previous_commit = nil, nil
 
-    loc = @nearby_commits.pluck(:id).index(@commit.id)
+    loc = @nearby_commits.pluck(:id).index(@center.id)
     start_i = [0, loc - 2].max
     stop_i = [@nearby_commits.length - 1, loc + 2].min
     @nearby_commits = @nearby_commits[start_i..stop_i]
-    loc = @nearby_commits.pluck(:id).index(@commit.id)
+    loc = @nearby_commits.pluck(:id).index(@center.id)
 
-    # we've reversed nearby commits, so the "next" one is later in time, and 
+    # we've reversed nearby commits, so the "next" one is later in time, and
     # thus EARLIER in the array. Clunky, but I think it works in practice
     if loc > 0
     @next_commit = @nearby_commits[loc - 1]
@@ -46,7 +55,8 @@ class TestCaseCommitsController < ApplicationController
     # used for shading commit selector options according to passage status of
     # THIS test
     @commit_classes = {}
-    @nearby_tccs.each do |tcc|
+    @btn_classes = {}
+    (@nearby_tccs + @pull_request_tccs.values).each do |tcc|
       @commit_classes[tcc.commit] = case tcc.status
       when 0 then 'list-group-item-success'
       when 1 then 'list-group-item-danger'
@@ -55,6 +65,15 @@ class TestCaseCommitsController < ApplicationController
       else
         'list-group-item-info'
       end
+      @btn_classes[tcc.commit] = case tcc.status
+      when 0 then 'btn-success'
+      when 1 then 'btn-danger'
+      when 2 then 'btn-primary'
+      when 3 then 'btn-warning'
+      else
+        'btn-info'
+      end
+
     end
 
     # other test case commits for this commit

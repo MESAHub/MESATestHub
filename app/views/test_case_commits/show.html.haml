@@ -18,6 +18,34 @@
         =fa_icon 'dot-circle-o'
         %span.h5.text-monospace=@commit
       .dropdown-menu.dropdown-menu-right.py-0.my-0{'aria-labelledby': 'commit-selector'}
+        - unless @pull_requests.empty?
+          %h4.font-weight-bold.my-3.ml-3 Open Pull Requests
+          %ul.list-group.list-group-flush.mb-4
+            -@pull_requests.each do |pr|
+              %li.list-group-item.list-group-item-action.dropdown-item{class: pr == @commit ? 'active' : @commit_classes[pr]}
+                .d-flex.w-100.justify-content-between
+                  
+                  %h5.font-weight-bold.d-none.d-md-inline
+                    -if pr.message_first_line.length > 50
+                      -short_msg = pr.message_first_line
+                      -while short_msg.length > 50
+                        -short_msg = short_msg.split(' ')[(0...-1)].join(' ')
+                      =(short_msg + '&#8230;').html_safe
+                    -else
+                      =pr.message_first_line
+                  %a.stretched-link.text-reset{href: test_case_commit_path(branch: params[:branch], sha: pr.short_sha, test_case: params[:test_case], module: params[:module])}
+                    %button.btn.ml-2{class: @btn_classes[pr]}
+                      %span.h5.text-monospace=pr.short_sha
+                .d-flex.w-100
+                  %p.mb-0
+                    %span.font-weight-bold= pr.author
+                    %span
+                      commited on 
+                      =pr.commit_time.strftime('%B %d %Y')
+          %h4.font-weight-bold.my-3.ml-3
+            Commits on
+            %samp=@selected_branch.name
+
         %ul.list-group.list-group-flush
           -@nearby_commits.each do |commit|
             %li.list-group-item.list-group-item-action.dropdown-item{class: @commit_classes[commit] + (commit == @commit ? 'active' : '')}
@@ -32,7 +60,8 @@
                   -else
                     =commit.message_first_line
                 %a.stretched-link.text-reset{href: test_case_commit_path(branch: params[:branch], sha: commit.short_sha, test_case: params[:test_case], module: params[:module])}
-                  %span.h5.text-monospace.text-primary=commit.short_sha
+                  %button.btn.ml-2{class: @btn_classes[commit]}
+                    %span.h5.text-monospace=commit.short_sha
               .d-flex.w-100
                 %p.mb-0
                   %span.font-weight-bold= commit.author
