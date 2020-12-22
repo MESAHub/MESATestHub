@@ -10,7 +10,7 @@ class GithubWebhooksController < ApplicationController
     Commit.push_update(payload)
   end
 
-  def github_pull_request
+  def github_pull_request(payload)
     Commit.api_update_pulls
   end
 
