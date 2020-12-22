@@ -5,4 +5,4 @@ end
 json.computer do
   json.partial! "computers/computer", computer: @submission.computer
 end
-json.url submission_url(submission, format: :json)
+json.url computer_submission_url(computer: @submission.computer.name, id: @submission.id, format: :json)
