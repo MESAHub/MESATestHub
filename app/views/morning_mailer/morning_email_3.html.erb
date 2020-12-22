@@ -54,6 +54,62 @@
   <% end %>
 <% end %>
 
+<% @branch_data.keys.select { |branch| branch.name != 'main' }.each do |branch| %>
+  <h2> <samp><%= branch.name %></samp></h2>
+  <% @branch_data[branch].each do |commit| %>
+    <h3>
+      <% data = @commit_data[commit] %>
+      <% this_link = commit_url(branch.name, commit.short_sha) %>
+      <% if data[:status] == :passing %>
+        <a clicktracking=off href=<%= this_link %> <%=@make_green%>>
+      <% elsif data[:status] == :mixed %>
+        <a clicktracking=off href=<%= this_link %> <%=@make_yellow%>>
+      <% elsif data[:status] == :checksums %>
+        <a clicktracking=off href=<%= this_link %> <%=@make_blue%>>
+      <% elsif data[:status] == :failing %>
+        <a clicktracking=off href=<%= this_link %> <%=@make_red%>>
+      <% else %>
+        <a clicktracking=off href=<%= this_link %> <%=@make_cyan%>>
+      <% end %>
+        <samp><%= commit.short_sha %></samp>
+      </a> (<%= "#{commit.computer_count} " + "computer".pluralize(commit.computer_count)%> tested to date; <%= commit.complete_computer_count %> complete)
+    </h3>
+    <ul>
+      <li> <b> Author: </b> <%= commit.author %> </li>
+      <li> <b> Commit Message: </b> <%= commit.message %> </li>
+      <li> <%= data[:tested_count] %>/<%= commit.test_case_count %> cases tested </li>
+      <% data[:mixed_cases].each do |tcc| %>
+        <li>
+          <samp> 
+            <a <%=@make_yellow%> clicktracking=off href=<%= test_case_commit_url(branch.name, commit.short_sha, tcc.test_case.module, tcc.test_case.name) %>>
+              <%= tcc.test_case.name %>
+            </a> 
+          </samp> (<b>Failures: </b> <%= data[:fail_counts][tcc].to_s %>; <b> Successes: </b> <%= data[:pass_counts][tcc].to_s%>)
+        </li>
+      <% end %>
+      <% data[:checksum_cases].each do |tcc| %>
+        <li>
+          <samp> 
+            <a <%=@make_blue%> clicktracking=off href=<%= test_case_commit_url(branch.name, commit.short_sha, tcc.test_case.module, tcc.test_case.name) %>>
+              <%= tcc.test_case.name %>
+            </a> 
+          </samp> (<%= data[:computer_counts][tcc].to_s + ' ' + 'computer'.pluralize(data[:computer_counts][tcc])%>; multiple distinct checksums)
+        </li>
+      <% end %>
+      <% data[:failing_cases].each do |tcc| %>
+        <li>
+          <samp> 
+            <a <%=@make_red%> clicktracking=off href=<%= test_case_commit_url(branch.name, commit.short_sha, tcc.test_case.module, tcc.test_case.name) %>>
+              <%= tcc.test_case.name %>
+            </a> 
+          </samp> (<%= data[:computer_counts][tcc].to_s + ' ' + 'computer'.pluralize(data[:computer_counts][tcc])%>)
+        </li>
+      <% end %>
+    </ul>
+
+  <% end %>
+<% end %>
+
 <% if @commits_tested.empty? %>
   <p>
     No tests were run in the last 24 hours. This e-mail serves to let you know
