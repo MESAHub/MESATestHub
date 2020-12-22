@@ -153,6 +153,12 @@ class ComputersController < ApplicationController
             redirect_to user_computers_path(user)
           end
           format.json do
+            # THIS IS EGREGIOUS AND IS A HACK TO HOPEFULLY KEEP THINGS UP TO
+            # DATE SINCE GITHUB DOESN'T ALWAYS CREATE USEFUL MERGE REFS IN TIME
+            # FOR OTHER API CALLS TO PICK THEM UP. THIS SHOULD BE PATCHED AND
+            # REMOVED!
+            Commit.api_update_pulls
+
             # send back the all clear
             render json: {
               valid: true,
