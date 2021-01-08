@@ -3,12 +3,12 @@ class Commit < ApplicationRecord
   # Git structure
   has_many :branch_memberships, dependent: :destroy
   has_many :branches, through: :branch_memberships
-  has_many :parent_relations, class_name: 'CommitRelation',
-           foreign_key: :parent_id, dependent: :destroy
-  has_many :child_relations, class_name: 'CommitRelation',
-           foreign_key: :child_id, dependent: :destroy
-  has_many :children, through: :parent_relations
-  has_many :parents, through: :child_relations
+  # has_many :parent_relations, class_name: 'CommitRelation',
+           # foreign_key: :parent_id, dependent: :destroy
+  # has_many :child_relations, class_name: 'CommitRelation',
+           # foreign_key: :child_id, dependent: :destroy
+  # has_many :children, through: :parent_relations
+  # has_many :parents, through: :child_relations
 
   # from parsing do1_test_source in tested modules
   has_many :test_case_commits, dependent: :destroy
@@ -125,7 +125,7 @@ class Commit < ApplicationRecord
              else
                new(sha: github_hash[:sha])
              end
-    commit.update(api_hash_from_github(github_hash))
+    commit.update(hash_from_github(github_hash))
 
     # now establish branch membership
     if branch.is_a? Branch
@@ -154,17 +154,20 @@ class Commit < ApplicationRecord
     if branch.nil?
       # make sure we know about every branch
       Branch.api_update_branch_names
-      
+
       # do main method for each branch
       Branch.all.each do |this_branch|
         api_update_tree(branch: this_branch, force: force, earliest: earliest)
       end
+
+      api_update_pulls
 
       # Somewhat redundant, as it re-establishes branch names, but also
       # updates head commits and determines whether each branch is merged or
       # not. Crucially, this makes sure that older commits in newly-merged
       # branches have their branch memberships updated
       Branch.api_update_branches
+
     else
       earliest ||= 30.days.before(branch.commits.maximum(:commit_time) || Date.today)
       # Avoid asking api for commits since the beginning of time unless we 
@@ -176,8 +179,10 @@ class Commit < ApplicationRecord
                     end
       # if github doesn't know about branch, mark it as merged, as it was
       # probably deleted on the github side
-      branch.update_attributes(merged: true) if github_data.nil?
-      return unless github_data
+      if github_data.nil?
+        branch.update_attributes(merged: true) 
+        return unless github_data
+      end
 
       # Prevent abusive calls to database to the beginning of time by only
       # looking at new commits in this branch. Note, this allows commits
@@ -191,20 +196,52 @@ class Commit < ApplicationRecord
         github_data.select! { |github_hash| to_add.include? github_hash[:sha] }
       end
 
-      Commit.transaction do
-        # initialize and/or update commits with basic data and branch
-        # memberships, but don't do parent/child relationships yet (relations
-        # might not exist, and we get to recursive api hell in a handbasket)
-        commits = github_data.map do |github_hash|
-          create_or_update_from_github_hash(github_hash: github_hash,
-                                            branch: branch,
-                                            update_parents: false)
-        end
+      return if github_data.empty?
+
+      # initialize and/or update commits with basic data and branch
+      # memberships, but don't do parent/child relationships yet (relations
+      # might not exist, and we get to recursive api hell in a handbasket)
+      commit_hashes_to_insert = github_data.map do |github_hash|
+        hash_from_github(github_hash)
+      end
+
+      # use upsert because records may already exist, but may just lack branch
+      # memberships
+      ids = Commit.upsert_all(commit_hashes_to_insert,
+                              returning: [:id], unique_by: :sha)
+
+      ids = ids.map { |hash| hash["id"] }
+
+      puts "\n\n\n"
+      puts '#' * 30
+      puts ids
+      puts '#' * 30
+      puts "\n\n\n"
+
+      # add branch memberships. Just use insert_all since we know they
+      # shouldn't exist yet
+      # ids = Commit.where(sha: github_data.pluck(:sha)).pluck(:id)
+      membership_hashes_to_insert = ids.map do |commit_id|
+        {
+          branch_id: branch.id,
+          commit_id: commit_id
+        }
+      end
+
+      BranchMembership.insert_all(membership_hashes_to_insert)
+
+        # commits = github_data.each do |github_hash|
+
+        #   hashes_to_insert << hash_from_github
+        #   create_or_update_from_github_hash(github_hash: github_hash,
+        #                                     branch: branch,
+        #                                     update_parents: false)
+        # end
         # all commits should exist now, so we can safely set up parent/child
         # relations
-        github_data.zip(commits).each do |github_hash, commit|
-          commit.api_update_parents(github_hash[:parents])
-        end
+        # github_data.zip(commits).each do |github_hash, commit|
+        #   commit.api_update_parents(github_hash[:parents])
+        # end
 
         # still need to update branch ownership if this branch was merged into
         # another (this branch's commits already belong to this branch, but if,
@@ -213,9 +250,7 @@ class Commit < ApplicationRecord
         # take care of this in a separate call. If this method is called with
         # no specific branch, you get this automatically. A +force+ call will
         # also handle this, since every single commit gets touched with that.
-      end
     end
-    api_update_pulls
     nil
   end
 
@@ -254,7 +289,7 @@ class Commit < ApplicationRecord
     end
   end
 
-  def self.api_hash_from_github(github_hash)
+  def self.hash_from_github(github_hash)
     # convert hash from a github api_request representing a commit to 
     # a hash ready to be inserted into the database
     # +github_hash+ a hash for one commit resulting from a github webhook
@@ -387,44 +422,44 @@ class Commit < ApplicationRecord
 
   # set parents from api data. Might call api if parents don't exist in
   # database already
-  def api_update_parents(parent_hashes)
-    # associations
-    #
-    # first link to parents, if any
-    # note, we don't explicitly deal with children relations, since parent
-    # relations implicitly take care of it. They would be set whenever this
-    # is done to the children
-    #
-    # TODO: MAKE IT SO BULK PARENT ASSIGNMENTS DON'T CALL API UNTIL ALL ARE DONE
-    # MAYBE HUNT FOR ORPHANS LATER?
-    to_create = []
-    created = {}
-    parent_hashes.each do |parent_hash|
-      # if parent doesn't exist, create a dummy with right sha that will
-      # hopefully be filled in later
-      if Commit.exists?(sha: parent_hash[:sha])
-        created[parent_hash[:sha]] = Commit.find_by(sha: parent_hash[:sha])
-      else
-        to_create << parent_hash[:sha]
-      end
-    end
+  # def api_update_parents(parent_hashes)
+  #   # associations
+  #   #
+  #   # first link to parents, if any
+  #   # note, we don't explicitly deal with children relations, since parent
+  #   # relations implicitly take care of it. They would be set whenever this
+  #   # is done to the children
+  #   #
+  #   # TODO: MAKE IT SO BULK PARENT ASSIGNMENTS DON'T CALL API UNTIL ALL ARE DONE
+  #   # MAYBE HUNT FOR ORPHANS LATER?
+  #   to_create = []
+  #   created = {}
+  #   parent_hashes.each do |parent_hash|
+  #     # if parent doesn't exist, create a dummy with right sha that will
+  #     # hopefully be filled in later
+  #     if Commit.exists?(sha: parent_hash[:sha])
+  #       created[parent_hash[:sha]] = Commit.find_by(sha: parent_hash[:sha])
+  #     else
+  #       to_create << parent_hash[:sha]
+  #     end
+  #   end
 
-    # missing parents get created afterwards. This will recursively 
-    # create parents of parents in an inefficient manner, but since we don't
-    # have the parent data in bulk, we're just sticking with this.
-    to_create.each do |sha|
-      created[sha] = Commit.api_create(sha: sha, update_parents: true)
-    end
+  #   # missing parents get created afterwards. This will recursively 
+  #   # create parents of parents in an inefficient manner, but since we don't
+  #   # have the parent data in bulk, we're just sticking with this.
+  #   to_create.each do |sha|
+  #     created[sha] = Commit.api_create(sha: sha, update_parents: true)
+  #   end
 
-    created.each do |sha, new_parent|
-      # link the two in a commit relation
-      unless CommitRelation.exists?(parent: new_parent, child: self)
-        CommitRelation.create(parent: new_parent, child: self)
-      end
-    end
+  #   created.each do |sha, new_parent|
+  #     # link the two in a commit relation
+  #     unless CommitRelation.exists?(parent: new_parent, child: self)
+  #       CommitRelation.create(parent: new_parent, child: self)
+  #     end
+  #   end
 
 
-  end
+  # end
 
   # use GitHub api to pull `do1_test_source` for each module and set up
   # test case commits if they don't exist

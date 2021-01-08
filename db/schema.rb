@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2021_01_07_211933) do
+ActiveRecord::Schema.define(version: 2021_01_08_020518) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -26,16 +26,16 @@ ActiveRecord::Schema.define(version: 2021_01_07_211933) do
     t.string "name", null: false
     t.boolean "merged", default: false
     t.bigint "head_id"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
+    t.datetime "created_at", default: -> { "now()" }, null: false
+    t.datetime "updated_at", default: -> { "now()" }, null: false
     t.index ["name"], name: "index_branches_on_name", unique: true
   end
 
   create_table "commit_relations", force: :cascade do |t|
     t.bigint "child_id"
     t.bigint "parent_id"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
+    t.datetime "created_at", default: -> { "now()" }, null: false
+    t.datetime "updated_at", default: -> { "now()" }, null: false
     t.index ["child_id"], name: "index_commit_relations_on_child_id"
     t.index ["parent_id"], name: "index_commit_relations_on_parent_id"
   end
@@ -46,8 +46,8 @@ ActiveRecord::Schema.define(version: 2021_01_07_211933) do
     t.string "author_email", null: false
     t.text "message", null: false
     t.datetime "commit_time", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
+    t.datetime "created_at", default: -> { "now()" }, null: false
+    t.datetime "updated_at", default: -> { "now()" }, null: false
     t.string "short_sha"
     t.string "github_url"
     t.integer "test_case_count", default: 0
@@ -72,8 +72,8 @@ ActiveRecord::Schema.define(version: 2021_01_07_211933) do
     t.string "platform"
     t.string "processor"
     t.integer "ram_gb"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
+    t.datetime "created_at", default: -> { "now()" }, null: false
+    t.datetime "updated_at", default: -> { "now()" }, null: false
     t.bigint "user_id"
     t.index ["name"], name: "index_computers_on_name", unique: true
     t.index ["user_id"], name: "index_computers_on_user_id"
@@ -83,8 +83,8 @@ ActiveRecord::Schema.define(version: 2021_01_07_211933) do
     t.string "name"
     t.float "val"
     t.bigint "instance_inlist_id"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
+    t.datetime "created_at", default: -> { "now()" }, null: false
+    t.datetime "updated_at", default: -> { "now()" }, null: false
     t.index ["instance_inlist_id"], name: "index_inlist_data_on_instance_inlist_id"
   end
 
@@ -94,8 +94,8 @@ ActiveRecord::Schema.define(version: 2021_01_07_211933) do
     t.integer "retries"
     t.integer "steps"
     t.bigint "test_instance_id"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
+    t.datetime "created_at", default: -> { "now()" }, null: false
+    t.datetime "updated_at", default: -> { "now()" }, null: false
     t.integer "solver_calls_failed"
     t.integer "solver_iterations"
     t.integer "solver_calls_made"
@@ -109,8 +109,8 @@ ActiveRecord::Schema.define(version: 2021_01_07_211933) do
     t.boolean "entire"
     t.bigint "commit_id"
     t.bigint "computer_id"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
+    t.datetime "created_at", default: -> { "now()" }, null: false
+    t.datetime "updated_at", default: -> { "now()" }, null: false
     t.boolean "empty", default: false
     t.string "compiler"
     t.string "compiler_version"
@@ -128,8 +128,8 @@ ActiveRecord::Schema.define(version: 2021_01_07_211933) do
     t.datetime "last_tested"
     t.bigint "commit_id", null: false
     t.bigint "test_case_id", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
+    t.datetime "created_at", default: -> { "now()" }, null: false
+    t.datetime "updated_at", default: -> { "now()" }, null: false
     t.integer "checksum_count", default: 0
     t.integer "passed_count", default: 0
     t.integer "failed_count", default: 0
@@ -154,8 +154,8 @@ ActiveRecord::Schema.define(version: 2021_01_07_211933) do
     t.string "name", null: false
     t.integer "version_added"
     t.text "description"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
+    t.datetime "created_at", default: -> { "now()" }, null: false
+    t.datetime "updated_at", default: -> { "now()" }, null: false
     t.string "module"
     t.bigint "version_id"
     t.index ["name", "module"], name: "index_test_cases_on_name_and_module"
@@ -171,8 +171,8 @@ ActiveRecord::Schema.define(version: 2021_01_07_211933) do
     t.boolean "passed", null: false
     t.bigint "computer_id", null: false
     t.bigint "test_case_id", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
+    t.datetime "created_at", default: -> { "now()" }, null: false
+    t.datetime "updated_at", default: -> { "now()" }, null: false
     t.string "success_type"
     t.string "failure_type"
     t.bigint "version_id"
@@ -217,8 +217,8 @@ ActiveRecord::Schema.define(version: 2021_01_07_211933) do
     t.string "name"
     t.string "password_digest"
     t.boolean "admin"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
+    t.datetime "created_at", default: -> { "now()" }, null: false
+    t.datetime "updated_at", default: -> { "now()" }, null: false
     t.string "time_zone", default: "Pacific Time (US & Canada)"
     t.index ["email"], name: "index_users_on_email", unique: true
   end

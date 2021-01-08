@@ -14,11 +14,37 @@ class Branch < ApplicationRecord
   end
 
   def self.api_update_branch_names(**params)
-    api_branches(**params).each do |branch_hash|
-      unless Branch.exists?(name: branch_hash[:name])
-        Branch.create(name: branch_hash[:name])
-      end
+    github_branch_names = api_branches(**params).map(&:name)
+    existing_branch_names = Branch.all.pluck(:name)
+
+    # batch insert of new branches
+    to_add = github_branch_names - existing_branch_names
+    branch_hashes_to_insert = to_add.map { |b_name| { name: b_name } }
+    unless branch_hashes_to_insert.empty?
+      Branch.insert_all(branch_hashes_to_insert)
     end
+
+    # delete orphaned branches
+    to_delete = Branch.where(name: existing_branch_names - github_branch_names)
+
+    # using destroy_all would be simpler, but much more time-consuming, as 
+    # it would need to issue a delete statement for each affected branch
+    # membership. Instead, we delete the branch memberships first, and then
+    # kill the branches themseleves with delete_all, which is closer to the
+    # database, and requires more babysitting (branch memberships are dependent
+    # on branches, so they should die when the branch dies)
+    to_delete.each do |branch|
+      branch.branch_memberships.delete_all
+    end
+    to_delete.delete_all
+
+
+
+    # api_branches(**params).each do |branch_hash|
+    #   unless Branch.exists?(name: branch_hash[:name])
+    #     Branch.create(name: branch_hash[:name])
+    #   end
+    # end
   end
 
   # use github api to instantiate missing branches, update their head commits,
@@ -40,14 +66,11 @@ class Branch < ApplicationRecord
                       Commit.api_create(sha: branch_hash[:commit][:sha])
                     end
       branch.head = head_commit
-      # branch is merged if its head commit has children. Otherwise, it is the
-      # latest commit (a true head commit)
-      branch.merged = (head_commit.children.count > 0) && branch.name != 'main'
       branch.save
     end
 
     # make sure each branch extends back to the root commit
-    Branch.all.each { |branch| branch.recursive_assign_root }
+    # Branch.all.each { |branch| branch.recursive_assign_root }
 
     # make sure that all commits in a merged branch belong to at least the
     # branches that its head node belongs to
@@ -77,7 +100,7 @@ class Branch < ApplicationRecord
   def update_membership
     # first make sure that all the proper commits in this branch are stored
     # in this branch.
-    recursive_assign_root
+    # recursive_assign_root
 
     # Now make sure that all commits are parts of each of the branches that the
     # head commit belongs to. Go through each branch besides this one present
