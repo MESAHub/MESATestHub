@@ -228,7 +228,7 @@
         %li.list-group-item.list-group-item-action.list-group-item-info
           .d-flex.w-100.justify-content-between
             %h5
-              %span.text-monospace=link_to tcc.test_case.name, test_case_commit_path(branch: params[:branch], sha: params[:sha], test_case: tcc.test_case.name, module: tcc.test_case.module), class: 'stretched-link text-reset no-hover'
+              %span.text-monospace=link_to tcc.test_case.name, test_case_commit_path(branch: params[:branch], sha: @commit.short_sha, test_case: tcc.test_case.name, module: tcc.test_case.module), class: 'stretched-link text-reset no-hover'
               %span.small.muted
                 =surround '(', ')' do
                   %span.text-monospace=tcc.test_case.module
