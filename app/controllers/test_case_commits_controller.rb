@@ -28,6 +28,11 @@ class TestCaseCommitsController < ApplicationController
       before: 10.days.after(@center.commit_time),
       after: 10.days.before(@center.commit_time)
     ).map { |c| c[:sha] }
+    loc = commit_shas.index(@center.sha)
+    start_i = [0, loc - 2].max
+    stop_i = [commit_shas.length - 1, loc + 2].min
+    commit_shas = commit_shas[(start_i..stop_i)]
+
     @nearby_commits = @selected_branch.commits.where(sha: commit_shas).to_a
       .sort! { |a, b| commit_shas.index(a.sha) <=> commit_shas.index(b.sha) }     
 
@@ -150,17 +155,17 @@ class TestCaseCommitsController < ApplicationController
   end
 
   private
-  # Use callbacks to share common setup or constraints between actions.
 
+  # Use callbacks to share common setup or constraints between actions.
   def set_test_case_commit
-    @commit = parse_sha(includes: {test_case_commits: :test_case})
+    @commit = parse_sha(includes: { test_case_commits: :test_case })
     @test_case = TestCase.find_by(name: params[:test_case], module: params[:module])
     @test_case_commit = TestCaseCommit.includes(
-      test_instances: {instance_inlists: :inlist_data}
-      ).find_by(commit: @commit, test_case: @test_case)
+      test_instances: { instance_inlists: :inlist_data, computer: :user }
+    ).find_by(commit: @commit, test_case: @test_case)
   end
 
-  # get a bootstrap text class and an appropriate string to convert integer 
+  # get a bootstrap text class and an appropriate string to convert integer
   # passing status to useful web output
 
   def passing_status_and_class
