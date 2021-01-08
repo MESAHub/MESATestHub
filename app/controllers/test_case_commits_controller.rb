@@ -40,9 +40,7 @@ class TestCaseCommitsController < ApplicationController
 
     # we've reversed nearby commits, so the "next" one is later in time, and
     # thus EARLIER in the array. Clunky, but I think it works in practice
-    if loc > 0
-    @next_commit = @nearby_commits[loc - 1]
-    end
+    @next_commit = @nearby_commits[loc - 1] if loc > 0
     if loc < @nearby_commits.length - 1
       @previous_commit = @nearby_commits[loc + 1]
     end
