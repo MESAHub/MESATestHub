@@ -98,6 +98,25 @@ class Branch < ApplicationRecord
     commits.where(pull_request: true, open: true)
   end
 
+  # ordered commits (most recent first; according to GitHub API ordering)
+  # within some window around a particular commit, assumed to be in the branch
+  def nearby_commits(commit, window = 2)
+    center = commit.pull_request ? head : commit
+    commit_shas = Commit.api_commits(
+      sha: head.sha,
+      before: 10.days.after(center.commit_time),
+      after: 10.days.before(center.commit_time)
+    ).map { |c| c[:sha] }
+    loc = commit_shas.index(center.sha)
+    start_i = [0, loc - window].max
+    stop_i = [commit_shas.length - 1, loc + window].min
+    commit_shas = commit_shas[(start_i..stop_i)]
+
+    commits.where(sha: commit_shas).to_a.sort! do |a, b|
+      commit_shas.index(a.sha) <=> commit_shas.index(b.sha)
+    end
+  end
+
   # update branch membership for all commits in branches
   def update_membership
     # first make sure that all the proper commits in this branch are stored

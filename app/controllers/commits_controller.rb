@@ -23,17 +23,7 @@ class CommitsController < ApplicationController
     # get the next ten. If it is in the middle, get five on either side.
 
     @center = @commit.pull_request ? @selected_branch.head : @commit  
-    commit_shas = Commit.api_commits(
-      sha: @selected_branch.head.sha,
-      before: 10.days.after(@center.commit_time),
-      after: 10.days.before(@center.commit_time)
-    ).map { |c| c[:sha] }
-    loc = commit_shas.index(@center.sha)
-    start = [loc - 2, 0].max
-    stop = [loc + 2, commit_shas.length - 1].min
-    commit_shas = commit_shas[(start..stop)]
-    @nearby_commits = @selected_branch.commits.where(sha: commit_shas).to_a
-      .sort! { |a, b| commit_shas.index(a.sha) <=> commit_shas.index(b.sha) }      
+    @nearby_commits = @selected_branch.nearby_commits(@commit)
 
     @next_commit, @previous_commit = nil, nil
 
