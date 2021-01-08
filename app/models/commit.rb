@@ -40,6 +40,9 @@ class Commit < ApplicationRecord
   # done AFTER this
   
   def self.api_commits(**params)
+    # puts '######################'
+    # puts 'API retrieving commits'
+    # puts '#######################'
     begin
       data = api.commits(repo_path, **params)
     rescue Octokit::NotFound
@@ -64,7 +67,7 @@ class Commit < ApplicationRecord
     # get all open pull request commits that were not found by the api call
     # and close them
     Commit.where(pull_request: true, open: true)
-          .where.not(sha: shas).each { |c| c.update_attributes(open: false) }
+          .where.not(sha: shas).each { |c| c.update(open: false) }
 
     # get shas that need to be created
     new_shas = shas - Commit.where(pull_request: true, sha: shas).pluck(:sha)
@@ -94,7 +97,7 @@ class Commit < ApplicationRecord
     # mark each as an open pull request, all at once
     update_hash = {}
     new_pulls.each do |pull|
-      puts "sha: #{pull.sha}"
+      # puts "sha: #{pull.sha}"
       update_hash[pull.id] = {
         pull_request: true,
         open: true,
@@ -150,14 +153,15 @@ class Commit < ApplicationRecord
   # +force+ if true, gather all commits from api and create them all or update
   #   them if they already exist. Otherwise only gather commits from api from
   #   30 days before the most recent commit, and only create missing commits
-  def self.api_update_tree(branch: nil, force: false, earliest: nil)
+  def self.api_update_tree(branch: nil, force: false, days_before: 2)
     if branch.nil?
       # make sure we know about every branch
       Branch.api_update_branch_names
 
       # do main method for each branch
       Branch.all.each do |this_branch|
-        api_update_tree(branch: this_branch, force: force, earliest: earliest)
+        api_update_tree(branch: this_branch, force: force,
+                        days_before: days_before)
       end
 
       api_update_pulls
@@ -169,7 +173,7 @@ class Commit < ApplicationRecord
       Branch.api_update_branches
 
     else
-      earliest ||= 30.days.before(branch.commits.maximum(:commit_time) || Date.today)
+      earliest ||= days_before.days.before(branch.commits.maximum(:commit_time) || Date.today)
       # Avoid asking api for commits since the beginning of time unless we 
       # REALLY want it.
       github_data = if force || Commit.count.zero?
@@ -180,7 +184,7 @@ class Commit < ApplicationRecord
       # if github doesn't know about branch, mark it as merged, as it was
       # probably deleted on the github side
       if github_data.nil?
-        branch.update_attributes(merged: true) 
+        branch.update(merged: true) 
         return unless github_data
       end
 
@@ -192,6 +196,17 @@ class Commit < ApplicationRecord
         github_shas = github_data.pluck(:sha)
         db_shas = branch.commits.pluck(:sha)
 
+        # adaptively look further back in time if we haven't found any commits
+        # that already exist for a branch we already did have commits from
+        # (second condition to prevent infinite loop for new branch).
+        # Arbitrarily cap lookback time to 250 days so we escape an infinite if
+        # all hell breaks loose
+        existing_shas = db_shas - github_shas
+        if existing_shas.empty? & !db_shas.empty? & (days_before < 250)
+          puts("didn't find existing commits; searching back #{days_before * 5} days now")
+          return api_update_tree(branch: branch, force: force,
+                                 days_before: 5 * days_before)
+        end
         to_add = github_shas - db_shas
         github_data.select! { |github_hash| to_add.include? github_hash[:sha] }
       end
@@ -210,13 +225,7 @@ class Commit < ApplicationRecord
       ids = Commit.upsert_all(commit_hashes_to_insert,
                               returning: [:id], unique_by: :sha)
 
-      ids = ids.map { |hash| hash["id"] }
-
-      puts "\n\n\n"
-      puts '#' * 30
-      puts ids
-      puts '#' * 30
-      puts "\n\n\n"
+      ids = ids.map { |commit_hash| commit_hash['id'] }
 
       # add branch memberships. Just use insert_all since we know they
       # shouldn't exist yet
@@ -229,6 +238,57 @@ class Commit < ApplicationRecord
       end
 
       BranchMembership.insert_all(membership_hashes_to_insert)
+
+      # Populate test case commits for each new commit that doesn't have any
+      commits_to_populate = Commit.where(id: ids, test_case_count: 0)
+      # this will translate from a module and test case name to a database id
+      tc_name_to_id = {}
+      # this will have hashes that will be inserted directly into the database
+      tccs_to_insert = []
+      TestCase.modules.each do |mod|
+        tc_name_to_id[mod] = {}
+      end
+
+      TestCase.select(:id, :name, :module).each do |tc|
+        tc_name_to_id[tc.module][tc.name] = tc.id
+      end
+
+      commits_to_populate.each do |commit|
+        test_case_count = 0
+        # grab test cases present in proper do1_test_source file from github
+        commit.api_test_cases.each do |mod, test_cases|
+          test_case_count += test_cases.count
+          test_cases.each do |tc_name|
+            # create the test case if it doesn't exist and add to the
+            # id translator hash INVOLVES A DATABASE CALL, but really not much
+            # of an issue since test cases are so rarely created
+            unless tc_name_to_id[mod].keys.include? tc_name
+              tc = TestCase.create(name: tc_name, module: mod)
+              tc_name_to_id[mod][tc.name] = tc.id
+            end
+
+            tccs_to_insert << { commit_id: commit.id,
+                                test_case_id: tc_name_to_id[mod][tc_name] }
+          end
+        end
+        # set relevant scalars. Other default values should be sufficient to
+        # stand in instead of full blown update_scalars. INVOLVES A DATABASE
+        # CALL, but only one per commit that is both new to the branch and has
+        # no existing test case commits. Could potentially be replaced with an
+        # upsert for further optimization.
+        commit.test_case_count = test_case_count
+        commit.untested_count = test_case_count
+        commit.status = -1
+      end
+
+      # use upsert so that the update_scalars callback doesn't fire (it will
+      # register 0 cases )
+      unless commits_to_populate.empty?
+        Commit.upsert_all(commits_to_populate.map(&:attributes))
+      end
+
+      # all hashes now exist in tccs_to_insert, so do batch insert
+      TestCaseCommit.insert_all(tccs_to_insert)
 
         # commits = github_data.each do |github_hash|
 
@@ -361,9 +421,10 @@ class Commit < ApplicationRecord
 
   def self.push_update(payload)
     earliest = 1.hour.before(payload[:commits].pluck(:timestamp).map do |str|
-      DateTime.parse(str) 
+      DateTime.parse(str)
     end.sort.first)
-    api_update_tree(earliest: earliest)
+    days_before = [Date.today - earliest.to_date, 2].max
+    api_update_tree(days_before: days_before)
   end
 
   #####################################
@@ -475,6 +536,8 @@ class Commit < ApplicationRecord
         contents.split("\n").each do |line|
           if /^\s*do_one\s+(\S+)/ =~ line
             cases_present[mod] << $1
+          elsif /^\s*return\s*$/ =~ line
+            break
           end
         end
       rescue Octokit::NotFound

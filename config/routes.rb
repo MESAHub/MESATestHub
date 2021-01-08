@@ -39,7 +39,7 @@ Rails.application.routes.draw do
   get '/:branch/commits/:sha', to: 'commits#show', as: 'commit'
   get '/:branch/commits', to: 'commits#index', as: 'commits'
 
-  root to: 'commits#show', sha: 'auto', branch: 'main'
+  root to: 'commits#show', sha: 'head', branch: 'main'
 
   # searching test_instances (should work for remote JSON requests)
   get '/test_instances/search', to: 'test_instances#search', as: 'search_instances'

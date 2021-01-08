@@ -10,6 +10,9 @@ class Branch < ApplicationRecord
   # use github api to create an array of hashes that contain data about all
   # known branches
   def self.api_branches(**params)
+    # puts '#######################'
+    # puts 'API retrieving branches'
+    # puts '#######################'
     api.branches(@@repo_path, **params)
   end
 
@@ -33,11 +36,12 @@ class Branch < ApplicationRecord
     # kill the branches themseleves with delete_all, which is closer to the
     # database, and requires more babysitting (branch memberships are dependent
     # on branches, so they should die when the branch dies)
-    to_delete.each do |branch|
-      branch.branch_memberships.delete_all
+    unless to_delete.empty?
+      to_delete.each do |branch|
+        branch.branch_memberships.delete_all
+      end
+      to_delete.delete_all
     end
-    to_delete.delete_all
-
 
 
     # api_branches(**params).each do |branch_hash|
@@ -74,9 +78,7 @@ class Branch < ApplicationRecord
 
     # make sure that all commits in a merged branch belong to at least the
     # branches that its head node belongs to
-    Branch.merged.each do |branch|
-      branch.update_membership
-    end
+    Branch.merged.each { |branch| branch.update_membership }
     nil
   end
 
@@ -112,13 +114,16 @@ class Branch < ApplicationRecord
     other_branches.each do |other_branch|
       already_in = other_branch.commits.pluck(:id)
 
-      # find commit ids that are in this branch, but are missing in the 
+      # find commit ids that are in this branch, but are missing in the
       # other branch that it was merged into. Create all needed memberships
       not_in = branch_commit_ids - already_in
-      BranchMembership.create(
-        not_in.map do |commit_id|
-          { commit_id: commit_id, branch_id: other_branch.id }
-        end)
+      memberships_to_insert = not_in.map do |commit_id|
+        { commit_id: commit_id, branch_id: other_branch.id }
+      end
+
+      unless memberships_to_insert.empty?
+        BranchMembership.upsert(memberships_to_insert)
+      end
     end
   end
 

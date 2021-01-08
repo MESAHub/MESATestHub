@@ -1,5 +1,5 @@
 %span.h5.text-monospace
-  =link_to tcc.test_case.name, test_case_commit_path(sha: params[:sha], test_case: tcc.test_case.name, module: tcc.test_case.module), class: 'stretched-link text-reset no-hover'
+  =link_to tcc.test_case.name, test_case_commit_path(sha: tcc.commit.short_sha, test_case: tcc.test_case.name, module: tcc.test_case.module), class: 'stretched-link text-reset no-hover'
   %span.small.muted="(#{tcc.test_case.module})"
 %p.text-right.mb-0
   -if @counts[tcc][:computers] > 0
