@@ -285,10 +285,10 @@ class Commit < ApplicationRecord
       # register 0 cases )
       unless commits_to_populate.empty?
         Commit.upsert_all(commits_to_populate.map(&:attributes))
+        # all hashes now exist in tccs_to_insert, so do batch insert
+        TestCaseCommit.insert_all(tccs_to_insert)
       end
 
-      # all hashes now exist in tccs_to_insert, so do batch insert
-      TestCaseCommit.insert_all(tccs_to_insert)
 
         # commits = github_data.each do |github_hash|
 
