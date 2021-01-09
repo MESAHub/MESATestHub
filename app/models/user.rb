@@ -9,9 +9,7 @@ class User < ApplicationRecord
   # do checks on password to make sure it is long enough when we change, but
   # doesn't complain when it is left blank and unchanged during an edit
   validates :password, presence: { on: create }, length: { minimum: 8 },
-    :if => :password_digest_changed?
-
-  # validates :password, length: { in: 6..32 }
+            :if => :password_digest_changed?
 
   has_secure_password
 
