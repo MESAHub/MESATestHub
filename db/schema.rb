@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2021_01_08_020518) do
+ActiveRecord::Schema.define(version: 2021_01_11_230856) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -137,33 +137,17 @@ ActiveRecord::Schema.define(version: 2021_01_08_020518) do
     t.index ["test_case_id"], name: "index_test_case_commits_on_test_case_id"
   end
 
-  create_table "test_case_versions", force: :cascade do |t|
-    t.bigint "version_id", null: false
-    t.bigint "test_case_id", null: false
-    t.integer "status", default: -1, null: false
-    t.integer "submission_count", default: 0, null: false
-    t.integer "computer_count", default: 0, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.datetime "last_tested"
-    t.index ["test_case_id"], name: "index_test_case_versions_on_test_case_id"
-    t.index ["version_id"], name: "index_test_case_versions_on_version_id"
-  end
-
   create_table "test_cases", force: :cascade do |t|
     t.string "name", null: false
-    t.integer "version_added"
     t.text "description"
     t.datetime "created_at", default: -> { "now()" }, null: false
     t.datetime "updated_at", default: -> { "now()" }, null: false
     t.string "module"
-    t.bigint "version_id"
     t.index ["name", "module"], name: "index_test_cases_on_name_and_module"
   end
 
   create_table "test_instances", force: :cascade do |t|
     t.integer "runtime_seconds"
-    t.integer "mesa_version"
     t.integer "omp_num_threads"
     t.string "compiler"
     t.string "compiler_version"
@@ -175,13 +159,11 @@ ActiveRecord::Schema.define(version: 2021_01_08_020518) do
     t.datetime "updated_at", default: -> { "now()" }, null: false
     t.string "success_type"
     t.string "failure_type"
-    t.bigint "version_id"
     t.integer "steps"
     t.integer "retries"
     t.integer "backups"
     t.text "summary_text"
     t.integer "diff", default: 2
-    t.bigint "test_case_version_id"
     t.string "checksum"
     t.string "computer_name"
     t.string "computer_specification"
@@ -206,7 +188,6 @@ ActiveRecord::Schema.define(version: 2021_01_08_020518) do
     t.boolean "fpe_checks"
     t.index ["commit_id"], name: "index_test_instances_on_commit_id"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
-    t.index ["mesa_version"], name: "index_test_instances_on_mesa_version"
     t.index ["submission_id"], name: "index_test_instances_on_submission_id"
     t.index ["test_case_commit_id"], name: "index_test_instances_on_test_case_commit_id"
     t.index ["test_case_id"], name: "index_test_instances_on_test_case_id"
@@ -223,18 +204,6 @@ ActiveRecord::Schema.define(version: 2021_01_08_020518) do
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
-  create_table "versions", force: :cascade do |t|
-    t.integer "number", null: false
-    t.string "author"
-    t.text "log"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.integer "compilation_status"
-    t.integer "compile_success_count", default: 0
-    t.integer "compile_fail_count", default: 0
-    t.index ["number"], name: "index_versions_on_number", unique: true
-  end
-
   add_foreign_key "branches", "commits", column: "head_id"
   add_foreign_key "commit_relations", "commits", column: "child_id"
   add_foreign_key "commit_relations", "commits", column: "parent_id"
@@ -244,11 +213,6 @@ ActiveRecord::Schema.define(version: 2021_01_08_020518) do
   add_foreign_key "submissions", "computers"
   add_foreign_key "test_case_commits", "commits"
   add_foreign_key "test_case_commits", "test_cases"
-  add_foreign_key "test_case_versions", "test_cases"
-  add_foreign_key "test_case_versions", "versions"
-  add_foreign_key "test_cases", "versions"
   add_foreign_key "test_instances", "computers"
-  add_foreign_key "test_instances", "test_case_versions"
   add_foreign_key "test_instances", "test_cases"
-  add_foreign_key "test_instances", "versions"
 end
