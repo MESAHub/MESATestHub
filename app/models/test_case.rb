@@ -79,8 +79,18 @@ class TestCase < ApplicationRecord
   # for tight space when we need the name
   def short_name
     return name if name.length <= 20
-    name[0,17] + '...'
+
+    "#{name[0, 17]}..."
   end
+
+  def <=>(other)
+    res = TestCase.modules.index(self.module) <=> 
+          TestCase.modules.index(other.module)
+    return res unless res.zero?
+
+    self.name <=> other.name
+  end
+
 
   def find_test_case_commits(search_params, start_date, end_date)
     # start with search just on dates; can chain other things before we hit
@@ -127,7 +137,6 @@ class TestCase < ApplicationRecord
         'commits.commit_time DESC, test_case_commits.created_at DESC'
       end
     end
-
 
     test_case_commits.includes(:commit,
       test_instances: {instance_inlists: :inlist_data}).

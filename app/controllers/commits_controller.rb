@@ -2,9 +2,7 @@ class CommitsController < ApplicationController
   before_action :set_commit, only: :show
 
   def show
-    @test_case_commits = @commit.test_case_commits.includes(:test_case).sort_by do |tcc|
-      tcc.test_case.name
-    end
+    @test_case_commits = [@problem_tccs, @skimpy_tccs].flatten.sort_by(&:test_case)
 
     # populate branch/commit selection menus
     # get all branches that contain this commit, this will be first dropdown
@@ -92,7 +90,7 @@ class CommitsController < ApplicationController
       end
 
       if tcc.failed_count.positive?
-        @failing_instances[tcc] = tcc.test_instances.select { |ti| !ti.passed }
+        @failing_instances[tcc] = tcc.test_instances.reject(&:passed)
         @failure_types[tcc] = {}
         # create hash that has failure types as keys and arrays of computers,
         # sorted by name, as values
@@ -226,6 +224,27 @@ class CommitsController < ApplicationController
   private
 
   def set_commit
-    @commit = parse_sha(includes: {test_case_commits: [:test_case, {test_instances: [:computer, instance_inlists: :inlist_data]}]})
+    # @commit = parse_sha(includes: {test_case_commits: [:test_case, {test_instances: [:computer, instance_inlists: :inlist_data]}]})
+    @commit = parse_sha
+
+    # avoid polling db for tons of instances and instance data if they passed
+    # or haven't been tested. Results in an extra call, but avoiding a dragnet
+    # of instance data is worth it (I think)
+    #
+    # First get test cases that are failing, have multiple checksums, or are
+    # mixed, for which we will need more information
+    @problem_tccs = @commit.test_case_commits.includes(
+      :test_case,
+      { test_instances: [:computer, { instance_inlists: :inlist_data }] }
+    ).where.not(status: -1..0).to_a
+    puts '#########################'
+    puts "Loaded #{@problem_tccs.length} problem cases"
+    puts '#########################'
+    @skimpy_tccs = @commit.test_case_commits.includes(:test_case)
+      .where(status: -1..0).to_a
+    puts '#########################'
+    puts "Loaded #{@skimpy_tccs.length} skimpy cases"
+    puts '#########################'
+
   end
 end
