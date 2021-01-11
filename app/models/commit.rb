@@ -709,10 +709,16 @@ class Commit < ApplicationRecord
   # first 80 characters of the first line of the message
   # if first line exceeds 80 characters, chop off last word and add an ellipsis
   # remainder will be accessible via +message_rest+
-  def message_first_line
+  def message_first_line(max_len = 70)
     first_line = message.split("\n").first
-    return first_line if first_line.length < 80
-    first_line.split(' ')[(0...-1)].join(' ')
+    return first_line if first_line.length < max_len
+
+    res = ''
+    first_line.split(/\s+/).each do |word|
+      return "#{res}..." if "#{res} #{word}...".length > max_len
+
+      res = "#{res} #{word}"
+    end
   end
 
   # the latter part of the message not captured by +message_first+

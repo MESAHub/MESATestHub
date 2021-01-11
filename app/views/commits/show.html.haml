@@ -25,13 +25,7 @@
                 .d-flex.w-100.justify-content-between
                   
                   %h5.font-weight-bold.d-none.d-md-inline
-                    -if commit.message_first_line.length > 50
-                      -short_msg = commit.message_first_line
-                      -while short_msg.length > 50
-                        -short_msg = short_msg.split(' ')[(0...-1)].join(' ')
-                      =(short_msg + '&#8230;').html_safe
-                    -else
-                      =commit.message_first_line
+                    =commit.message_first_line(50)
                   %a.stretched-link.text-reset{href: commit_path(branch: @selected_branch.name, sha: commit.short_sha)}
                     %button.btn.ml-2{class: @btn_classes[commit]}
                       %span.h5.text-monospace=commit.short_sha
@@ -51,13 +45,7 @@
               .d-flex.w-100.justify-content-between
                 
                 %h5.font-weight-bold.d-none.d-md-inline
-                  -if commit.message_first_line.length > 50
-                    -short_msg = commit.message_first_line
-                    -while short_msg.length > 50
-                      -short_msg = short_msg.split(' ')[(0...-1)].join(' ')
-                    =(short_msg + '&#8230;').html_safe
-                  -else
-                    =commit.message_first_line
+                  =commit.message_first_line(50)
                 %a.stretched-link.text-reset{href: commit_path(branch: @selected_branch.name, sha: commit.short_sha)}
                   %button.btn.ml-2{class: @btn_classes[commit]}
                     %span.h5.text-monospace=commit.short_sha

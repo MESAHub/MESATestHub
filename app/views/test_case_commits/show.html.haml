@@ -26,13 +26,7 @@
                 .d-flex.w-100.justify-content-between
                   
                   %h5.font-weight-bold.d-none.d-md-inline
-                    -if pr.message_first_line.length > 50
-                      -short_msg = pr.message_first_line
-                      -while short_msg.length > 50
-                        -short_msg = short_msg.split(' ')[(0...-1)].join(' ')
-                      =(short_msg + '&#8230;').html_safe
-                    -else
-                      =pr.message_first_line
+                    =pr.message_first_line(50)
                   %a.stretched-link.text-reset{href: test_case_commit_path(branch: params[:branch], sha: pr.short_sha, test_case: params[:test_case], module: params[:module])}
                     %button.btn.ml-2{class: @btn_classes[pr]}
                       %span.h5.text-monospace=pr.short_sha
@@ -52,13 +46,7 @@
               .d-flex.w-100.justify-content-between
                 
                 %h5.font-weight-bold.d-none.d-md-inline
-                  -if commit.message_first_line.length > 50
-                    -short_msg = commit.message_first_line
-                    -while short_msg.length > 50
-                      -short_msg = short_msg.split(' ')[(0...-1)].join(' ')
-                    =(short_msg + '&#8230;').html_safe
-                  -else
-                    =commit.message_first_line
+                  =commit.message_first_line(50)
                 %a.stretched-link.text-reset{href: test_case_commit_path(branch: params[:branch], sha: commit.short_sha, test_case: params[:test_case], module: params[:module])}
                   %button.btn.ml-2{class: @btn_classes[commit]}
                     %span.h5.text-monospace=commit.short_sha
