@@ -232,12 +232,12 @@ class TestCase < ApplicationRecord
         end
       end
     end
-    test_instances.
-      includes(:commit, :test_case_commit, :inlist_data,
-               {instance_inlists: :inlist_data, computer: :user}).
-      where(query).
-      order(sort_query).
-      page(search_params[:page] || 1)
+    test_instances
+      .includes(:commit, :test_case_commit, :inlist_data,
+                { instance_inlists: :inlist_data, computer: :user })
+      .where(query)
+      .order(sort_query)
+      .page(search_params[:page] || 1)
   end
 
   def sorted_computers(branch, start_date, end_date)
