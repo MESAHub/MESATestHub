@@ -69,10 +69,8 @@ ToggleMissing =
       $('#missing').on 'shown.bs.collapse', ->
         $('html,body').animate({scrollTop: $('#missing').offset().top})
 
-
-
-
 $ ->
   $('[data-toggle="tooltip"]').tooltip()
   TogglePassing.setup()
   ToggleMissing.setup()
+  
