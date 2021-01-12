@@ -6,7 +6,7 @@ class CommitsController < ApplicationController
 
     # populate branch/commit selection menus
     # get all branches that contain this commit, this will be first dropdown
-    @selected_branch = Branch.named(params[:branch])
+    @selected_branch = Branch.includes(:head).named(params[:branch])
     @other_branches = @commit.branches.reject do |branch|
       branch == @selected_branch
     end
@@ -178,9 +178,16 @@ class CommitsController < ApplicationController
 
   def index
     @page_length = 25
-    @unmerged_branches = Branch.unmerged
-    @merged_branches = Branch.merged
-    @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.main
+    @branches = Branch.all
+    @unmerged_branches = @branches.reject(&:merged)
+    @merged_branches = @branches.select(&:merged)
+    @branch_names = @branches.map(&:name)
+    @branch = if @branch_names.include? params[:branch]
+                @branches[@branch_names.index(params[:branch])]
+              else
+                @branches[@branch_names.index('main')]
+              end
+    # @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.main
     commit_shas = Commit.api_commits(sha: @branch.head.sha).map { |c| c[:sha] }
     
     @num_commits = commit_shas.length
@@ -194,7 +201,7 @@ class CommitsController < ApplicationController
     @stop_num = @page_length * @page
     
     subset = commit_shas[@page_length * (@page - 1), @page_length]
-    @commits = Commit.includes(:test_case_commits).where(sha: subset).to_a
+    @commits = Commit.where(sha: subset).to_a
       .sort! { |a, b| subset.index(a.sha) <=> subset.index(b.sha) }      
     @pull_requests = @branch.pull_requests
 
@@ -225,7 +232,7 @@ class CommitsController < ApplicationController
 
   def set_commit
     # @commit = parse_sha(includes: {test_case_commits: [:test_case, {test_instances: [:computer, instance_inlists: :inlist_data]}]})
-    @commit = parse_sha
+    @commit = parse_sha(includes: :branches)
 
     # avoid polling db for tons of instances and instance data if they passed
     # or haven't been tested. Results in an extra call, but avoiding a dragnet
@@ -237,14 +244,7 @@ class CommitsController < ApplicationController
       :test_case,
       { test_instances: [:computer, { instance_inlists: :inlist_data }] }
     ).where.not(status: -1..0).to_a
-    puts '#########################'
-    puts "Loaded #{@problem_tccs.length} problem cases"
-    puts '#########################'
     @skimpy_tccs = @commit.test_case_commits.includes(:test_case)
-      .where(status: -1..0).to_a
-    puts '#########################'
-    puts "Loaded #{@skimpy_tccs.length} skimpy cases"
-    puts '#########################'
-
+                          .where(status: -1..0).to_a
   end
 end

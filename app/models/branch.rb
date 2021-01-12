@@ -104,8 +104,8 @@ class Branch < ApplicationRecord
     center = commit.pull_request ? head : commit
     commit_shas = Commit.api_commits(
       sha: head.sha,
-      before: 10.days.after(center.commit_time),
-      after: 10.days.before(center.commit_time)
+      before: 5.days.after(center.commit_time),
+      after: 5.days.before(center.commit_time)
     ).map { |c| c[:sha] }
     loc = commit_shas.index(center.sha)
     start_i = [0, loc - window].max
