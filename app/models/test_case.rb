@@ -142,16 +142,14 @@ class TestCase < ApplicationRecord
       test_instances: {instance_inlists: :inlist_data}).
       where(query).
       order(sort_query).
-      page(search_params[:page])
+      page(search_params[:page] || 1)
   end
 
   def find_instances(search_params, start_date, end_date)
     # build this up and then execute only once or twice
     valid_commit_ids = Branch.named(search_params[:branch]).commits.where(
       commit_time: start_date..end_date).pluck(:id)
-    query = {
-      commit_id: valid_commit_ids
-      }
+    query = { commit_id: valid_commit_ids }
 
     return nil if test_instances.joins(:commit).where(query).count == 0
 
@@ -235,10 +233,11 @@ class TestCase < ApplicationRecord
       end
     end
     test_instances.
-      includes(:commit, :instance_inlists, :inlist_data, computer: :user).
+      includes(:commit, :test_case_commit, :inlist_data,
+               {instance_inlists: :inlist_data, computer: :user}).
       where(query).
       order(sort_query).
-      page(search_params[:page])
+      page(search_params[:page] || 1)
   end
 
   def sorted_computers(branch, start_date, end_date)

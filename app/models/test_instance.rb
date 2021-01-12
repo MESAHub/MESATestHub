@@ -32,7 +32,7 @@ class TestInstance < ApplicationRecord
   has_many :instance_inlists, dependent: :destroy
   has_many :inlist_data, through: :instance_inlists
 
-  paginates_per 100
+  paginates_per 50
 
   validates_presence_of :computer_id, :test_case_id, :compiler
   validates_inclusion_of :success_type, in: @@success_types.keys,

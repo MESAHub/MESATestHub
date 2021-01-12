@@ -77,7 +77,6 @@ class TestCasesController < ApplicationController
       end
     end
 
-
     if test_case_params[:history_type] == 'show_summaries'
       prepare_summaries
     else
@@ -487,7 +486,7 @@ class TestCasesController < ApplicationController
   end
 
   def test_case_params
-    params.permit(:branch, :module, :test_case, :history_type, :utf8,
+    params.permit(:branch, :commit, :module, :test_case, :history_type, :utf8,
                   :computers, :start_date, :end_date, :sort_query, :sort_order,
                   :page, :status)
   end
