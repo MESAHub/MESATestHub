@@ -15,13 +15,6 @@ class UsersController < ApplicationController
 
   def show
     @computers = @user.computers
-    @test_instances = @user.test_instances.order(
-      mesa_version: :desc, created_at: :desc
-    ).limit(20)
-    @test_instance_classes = {}
-    @test_instances.each do |instance| 
-      @test_instance_classes[instance] = instance.passed ? 'table-success' : 'table-danger'
-    end
   end
 
   def create
