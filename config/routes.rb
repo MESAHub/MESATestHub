@@ -41,7 +41,7 @@ Rails.application.routes.draw do
   get '/:branch/commits', to: 'commits#index', as: 'commits'
 
   # for API access to nearby commits/pull requests for a branch/commit
-  get '/nearby_commits.json', to: 'commits#nearby_commits'
+  get '/commits/nearby_commits.json', to: 'commits#nearby_commits'
 
   root to: 'commits#show', sha: 'head', branch: 'main'
 

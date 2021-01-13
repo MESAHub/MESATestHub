@@ -75,7 +75,7 @@ NearbyCommits =
   commit_sha: ''
   branch: ''
   retrieve_commits: ->
-    $.get({url: 'http://localhost:3000/nearby_commits.json', contentType: 'application/json', dataType: 'json', data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha}, success: (returned_data) ->
+    $.get({url: 'https://testhub.mesastar.org/commits/nearby_commits.json', contentType: 'application/json', dataType: 'json', data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha}, success: (returned_data) ->
       NearbyCommits.pull_requests = returned_data.pull_requests
       NearbyCommits.commits = returned_data.commits
       if NearbyCommits.pull_requests && NearbyCommits.pull_requests.length > 0  
