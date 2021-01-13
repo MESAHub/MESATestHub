@@ -108,7 +108,7 @@ NearbyCommits =
       prev_commit = NearbyCommits.commits[loc + 1]
       $([
         "<a class='btn btn-outline-primary btn-lg btn-block' href='#{prev_commit.url}'>",
-        "  <i class='fa fa-step-forward text-reset'></i>",
+        "  <i class='fa fa-step-backward text-reset'></i>",
         "</a>"
       ].join("\n")).hide().appendTo('#prev-btn').fadeIn(200)
 

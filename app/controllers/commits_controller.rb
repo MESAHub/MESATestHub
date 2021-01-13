@@ -201,7 +201,7 @@ class CommitsController < ApplicationController
     @stop_num = @page_length * @page
     
     subset = commit_shas[@page_length * (@page - 1), @page_length]
-    @commits = Commit.i.where(sha: subset).to_a
+    @commits = Commit.where(sha: subset).to_a
       .sort! { |a, b| subset.index(a.sha) <=> subset.index(b.sha) }      
     @pull_requests = @branch.pull_requests
 
