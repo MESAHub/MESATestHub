@@ -75,12 +75,9 @@ NearbyCommits =
   commit_sha: ''
   branch: ''
   retrieve_commits: ->
-    console.log('retrieving commits')
     $.get({url: 'http://localhost:3000/nearby_commits.json', contentType: 'application/json', dataType: 'json', data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha}, success: (returned_data) ->
-      console.log('successfully retrieved commits')
       NearbyCommits.pull_requests = returned_data.pull_requests
       NearbyCommits.commits = returned_data.commits
-      console.log("got data for #{NearbyCommits.commits.length} commits")
       if NearbyCommits.pull_requests && NearbyCommits.pull_requests.length > 0  
         NearbyCommits.add_pull_requests()
       if NearbyCommits.commits && NearbyCommits.commits.length > 0
@@ -88,7 +85,6 @@ NearbyCommits =
     })
 
   add_pull_requests: ->
-    console.log('about to add pull requests')
     $("<h4 class='font-weight-bold my-3 ml-3'>Open Pull Requests</h4>").appendTo('#nearby-commit-list')
     $("<ul class='list-group list-group-flush mb-4' id='pull-requests'></ul>").appendTo('#nearby-commit-list')
     NearbyCommits.add_commit_list(NearbyCommits.pull_requests, '#pull-requests')
@@ -96,9 +92,27 @@ NearbyCommits =
       $("<h4 class='font-weight-bold my-3 ml-3'>Recent Commits</h4>").appendTo('#nearby-commit-list')    
 
   add_commits: ->
-    console.log('about to add commits')
     $("<ul class='list-group list-group-flush' id='commits'></ul>").appendTo('#nearby-commit-list')
     NearbyCommits.add_commit_list(NearbyCommits.commits, '#commits')
+    # deal with previous and next buttons
+    shas = (commit.short_sha for commit in NearbyCommits.commits)
+    loc = shas.indexOf(NearbyCommits.commit_sha)
+    if loc > 0
+      next_commit = NearbyCommits.commits[loc - 1]
+      $([
+        "<a class='btn btn-outline-primary btn-lg btn-block' href='#{next_commit.url}'>",
+        "  <i class='fa fa-step-forward text-reset'></i>",
+        "</a>"
+      ].join("\n")).hide().appendTo('#next-btn').fadeIn(200)
+    if loc < (shas.length - 1)
+      prev_commit = NearbyCommits.commits[loc + 1]
+      $([
+        "<a class='btn btn-outline-primary btn-lg btn-block' href='#{prev_commit.url}'>",
+        "  <i class='fa fa-step-forward text-reset'></i>",
+        "</a>"
+      ].join("\n")).hide().appendTo('#prev-btn').fadeIn(200)
+
+    
 
 
   add_commit_list: (commit_list, html_list) ->

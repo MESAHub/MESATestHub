@@ -1,5 +1,5 @@
 .row
-  .col-sm-1.d-none.d-md-block
+  .col-sm-1.d-none.d-md-block#prev-btn
     -if @previous_commit
       %a.btn.btn-outline-primary.btn-lg.btn-block{href: commit_path(branch: @selected_branch.name, sha: @previous_commit.short_sha)}
         %i.fa.fa-step-backward.text-reset
@@ -56,7 +56,7 @@
         -#             commited on 
         -#             =commit.commit_time.strftime('%B %d %Y')
 
-  .col-1.d-none.d-md-block
+  .col-1.d-none.d-md-block#next-btn
     -if @next_commit
       %a.btn.btn-outline-primary.btn-lg.btn-block{href: commit_path(branch: @selected_branch.name, sha: @next_commit.short_sha)}
         %i.fa.fa-step-forward.text-reset
