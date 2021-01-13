@@ -159,7 +159,7 @@ NearbyCommits =
         ].join("\n")).appendTo(html_list)
 
   setup: ->
-    if $('#nearby-commit-center')
+    if $('#nearby-commit-center').length
       NearbyCommits.branch = $('#selected-branch').html()
       NearbyCommits.commit_sha = $('#nearby-commit-center').html()
       NearbyCommits.retrieve_commits()
