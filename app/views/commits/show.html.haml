@@ -15,46 +15,46 @@
     .dropdown
       %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle#commit-selector{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
         =fa_icon 'dot-circle-o'
-        %span.h5.text-monospace=@commit
-      .dropdown-menu.dropdown-menu-right.py-0.my-0{'aria-labelledby': 'commit-selector'}
-        - unless @pull_requests.empty?
-          %h4.font-weight-bold.my-3.ml-3 Open Pull Requests
-          %ul.list-group.list-group-flush.mb-4
-            -@pull_requests.each do |commit|
-              %li.list-group-item.list-group-item-action.dropdown-item{class: commit == @commit ? 'active' : @commit_classes[commit]}
-                .d-flex.w-100.justify-content-between
+        %span.h5.text-monospace#nearby-commit-center=@commit
+      .dropdown-menu.dropdown-menu-right.py-0.my-0#nearby-commit-list{'aria-labelledby': 'commit-selector'}
+        -# - unless @pull_requests.empty?
+        -#   %h4.font-weight-bold.my-3.ml-3 Open Pull Requests
+        -#   %ul.list-group.list-group-flush.mb-4
+        -#     -@pull_requests.each do |commit|
+        -#       %li.list-group-item.list-group-item-action.dropdown-item{class: commit == @commit ? 'active' : @commit_classes[commit]}
+        -#         .d-flex.w-100.justify-content-between
                   
-                  %h5.font-weight-bold.d-none.d-md-inline
-                    =commit.message_first_line(50)
-                  %a.stretched-link.text-reset{href: commit_path(branch: @selected_branch.name, sha: commit.short_sha)}
-                    %button.btn.ml-2{class: @btn_classes[commit]}
-                      %span.h5.text-monospace=commit.short_sha
-                .d-flex.w-100
-                  %p.mb-0
-                    %span.font-weight-bold= commit.author
-                    %span
-                      commited on 
-                      =commit.commit_time.strftime('%B %d %Y')
-          %h4.font-weight-bold.my-3.ml-3
-            Commits on
-            %samp=@selected_branch.name
+        -#           %h5.font-weight-bold.d-none.d-md-inline
+        -#             =commit.message_first_line(50)
+        -#           %a.stretched-link.text-reset{href: commit_path(branch: @selected_branch.name, sha: commit.short_sha)}
+        -#             %button.btn.ml-2{class: @btn_classes[commit]}
+        -#               %span.h5.text-monospace=commit.short_sha
+        -#         .d-flex.w-100
+        -#           %p.mb-0
+        -#             %span.font-weight-bold= commit.author
+        -#             %span
+        -#               commited on 
+        -#               =commit.commit_time.strftime('%B %d %Y')
+        -#   %h4.font-weight-bold.my-3.ml-3
+        -#     Commits on
+        -#     %samp=@selected_branch.name
 
-        %ul.list-group.list-group-flush
-          -@nearby_commits.each do |commit|
-            %li.list-group-item.list-group-item-action.dropdown-item{class: commit == @commit ? 'active' : @commit_classes[commit]}
-              .d-flex.w-100.justify-content-between
+        -# %ul.list-group.list-group-flush
+        -#   -@nearby_commits.each do |commit|
+        -#     %li.list-group-item.list-group-item-action.dropdown-item{class: commit == @commit ? 'active' : @commit_classes[commit]}
+        -#       .d-flex.w-100.justify-content-between
                 
-                %h5.font-weight-bold.d-none.d-md-inline
-                  =commit.message_first_line(50)
-                %a.stretched-link.text-reset{href: commit_path(branch: @selected_branch.name, sha: commit.short_sha)}
-                  %button.btn.ml-2{class: @btn_classes[commit]}
-                    %span.h5.text-monospace=commit.short_sha
-              .d-flex.w-100
-                %p.mb-0
-                  %span.font-weight-bold= commit.author
-                  %span
-                    commited on 
-                    =commit.commit_time.strftime('%B %d %Y')
+        -#         %h5.font-weight-bold.d-none.d-md-inline
+        -#           =commit.message_first_line(50)
+        -#         %a.stretched-link.text-reset{href: commit_path(branch: @selected_branch.name, sha: commit.short_sha)}
+        -#           %button.btn.ml-2{class: @btn_classes[commit]}
+        -#             %span.h5.text-monospace=commit.short_sha
+        -#       .d-flex.w-100
+        -#         %p.mb-0
+        -#           %span.font-weight-bold= commit.author
+        -#           %span
+        -#             commited on 
+        -#             =commit.commit_time.strftime('%B %d %Y')
 
   .col-1.d-none.d-md-block
     -if @next_commit

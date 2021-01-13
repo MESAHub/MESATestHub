@@ -722,13 +722,13 @@ class Commit < ApplicationRecord
   end
 
   # the latter part of the message not captured by +message_first+
-  def message_rest
+  def message_rest(max_len = 70)
     # if its a short message in one line, we shouldn't have anything left over
-    return nil if message_first_line == message
+    return nil if message_first_line(max_len) == message
 
     # determine where rest starts by looking at length of first line, but
     # dropping any ellipsis
-    start = message_first_line.chomp('...').length
+    start = message_first_line(max_len).chomp('...').length
     res = message[(start..-1)].strip
     return nil if res.empty?
     

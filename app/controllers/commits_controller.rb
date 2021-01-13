@@ -15,41 +15,41 @@ class CommitsController < ApplicationController
     @pull_requests = @selected_branch.pull_requests
 
     # Get array of commits made in the same branch around the same time of this
-    # commit. For now, get no more than seven commits, ideally centered
+    # commit. For now, get no more than five commits, ideally centered
     # at current commit in time in the branch. That is, if this is the head
     # commit, get ten last commits. If this is the first commit of a branch,
     # get the next ten. If it is in the middle, get five on either side.
 
     @center = @commit.pull_request ? @selected_branch.head : @commit  
-    @nearby_commits = @selected_branch.nearby_commits(@commit)
-
     @next_commit, @previous_commit = nil, nil
+    # @nearby_commits = @selected_branch.nearby_commits(@commit)
 
-    loc = @nearby_commits.pluck(:id).index(@center.id)
-    @next_commit = @nearby_commits[loc - 1] if loc.positive?
-    @previous_commit = @nearby_commits[loc + 1] if loc < @nearby_commits.length - 1
 
-    # get nice colors in the commit dropdown
-    @commit_classes = {}
-    @btn_classes = {}
-    (@nearby_commits + @pull_requests).each do |nearby_commit|
-      @commit_classes[nearby_commit] = case nearby_commit.status
-                                       when 3 then 'list-group-item-warning'
-                                       when 2 then 'list-group-item-primary'
-                                       when 1 then 'list-group-item-danger'
-                                       when 0 then 'list-group-item-success'
-                                       else
-                                         'list-group-item-info'
-                                       end
-      @btn_classes[nearby_commit] = case nearby_commit.status
-                                    when 3 then 'btn-warning'
-                                    when 2 then 'btn-primary'
-                                    when 1 then 'btn-danger'
-                                    when 0 then 'btn-success'
-                                    else
-                                      'btn-info'
-                                    end
-    end
+    # loc = @nearby_commits.pluck(:id).index(@center.id)
+    # @next_commit = @nearby_commits[loc - 1] if loc.positive?
+    # @previous_commit = @nearby_commits[loc + 1] if loc < @nearby_commits.length - 1
+
+    # # get nice colors in the commit dropdown
+    # @commit_classes = {}
+    # @btn_classes = {}
+    # (@nearby_commits + @pull_requests).each do |nearby_commit|
+    #   @commit_classes[nearby_commit] = case nearby_commit.status
+    #                                    when 3 then 'list-group-item-warning'
+    #                                    when 2 then 'list-group-item-primary'
+    #                                    when 1 then 'list-group-item-danger'
+    #                                    when 0 then 'list-group-item-success'
+    #                                    else
+    #                                      'list-group-item-info'
+    #                                    end
+    #   @btn_classes[nearby_commit] = case nearby_commit.status
+    #                                 when 3 then 'btn-warning'
+    #                                 when 2 then 'btn-primary'
+    #                                 when 1 then 'btn-danger'
+    #                                 when 0 then 'btn-success'
+    #                                 else
+    #                                   'btn-info'
+    #                                 end
+    # end
 
     @others = @test_case_commits.select { |tcc| !(0..3).include? tcc.status }
     @mixed = @test_case_commits.select { |tcc| tcc.status == 3 }
@@ -201,7 +201,7 @@ class CommitsController < ApplicationController
     @stop_num = @page_length * @page
     
     subset = commit_shas[@page_length * (@page - 1), @page_length]
-    @commits = Commit.where(sha: subset).to_a
+    @commits = Commit.i.where(sha: subset).to_a
       .sort! { |a, b| subset.index(a.sha) <=> subset.index(b.sha) }      
     @pull_requests = @branch.pull_requests
 
@@ -225,6 +225,46 @@ class CommitsController < ApplicationController
         'btn-info'
       end
 
+    end
+  end
+
+  # API call to allow asynchronous loading of nearby commits
+  def nearby_commits
+    branch = Branch.includes(:head).named(params[:branch])
+    this_commit = Commit.parse_sha(params[:sha])
+    commits = branch.nearby_commits(this_commit)
+    pull_requests = branch.pull_requests
+
+    res = {}
+    unless pull_requests.nil? || pull_requests.empty?
+      res[:pull_requests] = pull_requests.map do |commit|
+        {
+          short_sha: commit.short_sha,
+          message_first_line: commit.message_first_line(50),
+          author: commit.author,
+          commit_time: format_time(commit.commit_time),
+          status: commit.status,
+          url: commit_url(branch: branch.name, sha: commit.short_sha)
+        }
+      end
+    end
+
+    unless commits.nil? || commits.empty?
+      res[:commits] = commits.map do |commit|
+        {
+          short_sha: commit.short_sha,
+          message_first_line: commit.message_first_line(50),
+          message_rest: commit.message_rest(50),
+          status: commit.status,
+          url: commit_url(branch: branch.name, sha: commit.short_sha)
+        }
+      end
+    end
+
+    respond_to do |format|
+      format.json do
+        render json: res.to_json
+      end
     end
   end
 

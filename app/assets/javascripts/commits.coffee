@@ -42,7 +42,7 @@ TogglePassing =
         $('html,body').animate({scrollTop: $('#passing').offset().top})
       
 ToggleMissing = 
-  show_missin: false
+  show_missing: false
   setup: ->
     ToggleMissing.show_missing = (getCookie('show-missing') == 'true')
 
@@ -69,8 +69,90 @@ ToggleMissing =
       $('#missing').on 'shown.bs.collapse', ->
         $('html,body').animate({scrollTop: $('#missing').offset().top})
 
+NearbyCommits = 
+  pull_requests: []
+  commits: []
+  commit_sha: ''
+  branch: ''
+  retrieve_commits: ->
+    console.log('retrieving commits')
+    $.get({url: 'http://localhost:3000/nearby_commits.json', contentType: 'application/json', dataType: 'json', data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha}, success: (returned_data) ->
+      console.log('successfully retrieved commits')
+      NearbyCommits.pull_requests = returned_data.pull_requests
+      NearbyCommits.commits = returned_data.commits
+      console.log("got data for #{NearbyCommits.commits.length} commits")
+      if NearbyCommits.pull_requests && NearbyCommits.pull_requests.length > 0  
+        NearbyCommits.add_pull_requests()
+      if NearbyCommits.commits && NearbyCommits.commits.length > 0
+        NearbyCommits.add_commits()
+    })
+
+  add_pull_requests: ->
+    console.log('about to add pull requests')
+    $("<h4 class='font-weight-bold my-3 ml-3'>Open Pull Requests</h4>").appendTo('#nearby-commit-list')
+    $("<ul class='list-group list-group-flush mb-4' id='pull-requests'></ul>").appendTo('#nearby-commit-list')
+    NearbyCommits.add_commit_list(NearbyCommits.pull_requests, '#pull-requests')
+    if NearbyCommits.commits && NearbyCommits.commits.length > 0
+      $("<h4 class='font-weight-bold my-3 ml-3'>Recent Commits</h4>").appendTo('#nearby-commit-list')    
+
+  add_commits: ->
+    console.log('about to add commits')
+    $("<ul class='list-group list-group-flush' id='commits'></ul>").appendTo('#nearby-commit-list')
+    NearbyCommits.add_commit_list(NearbyCommits.commits, '#commits')
+
+
+  add_commit_list: (commit_list, html_list) ->
+    for commit in commit_list
+      do (commit) ->
+        bonus_cls = ''
+        btn_cls = ''
+        if commit.short_sha == $('#nearby-commit-center').text()
+          bonus_cls = 'active'
+          btn_cls = 'btn-secondary'
+        else if commit.status == 3
+          bonus_cls = 'list-group-item-warning'
+          btn_cls = 'btn-warning'
+        else if commit.status == 2
+          bonus_cls = 'list-group-item-primary'
+          btn_cls = 'btn-primary'
+        else if commit.status == 1
+          bonus_cls = 'list-group-item-danger'
+          btn_cls = 'btn-danger'
+        else if commit.status == 0
+          bonus_cls = 'list-group-item-success'
+          btn_cls = 'btn-success'
+        else
+          bonus_cls = 'list-group-item-info'
+          btn_cls = 'btn-info'
+          
+        $([
+          "<li class='list-group-item list-group-item-action dropdown-item #{bonus_cls}''>",
+          "  <div class='d-flex w-100 justify-content-between'>",
+          "    <h5 class='font-weight-bold d-non d-md-inline'>#{commit.message_first_line}</h5>",
+          "    <a class='stretched-link text-reset' href='#{commit.url}'>",
+          "      <button class='btn ml-2 #{btn_cls}'>",
+          "        <span class='h5 text-monospace'>#{commit.short_sha}</span>",
+          "      </button>",
+          "    </a>",
+          "  </div>",
+          "  <div class='d-flex w-100'>",
+          "    <p class='mb-0'>",
+          "      <span class='font-weight-bold'>#{commit.author}</span>",
+          "      <span>committed on #{commit.commit_time}",
+          "    </p>",
+          "  </div>",
+          "</li>"
+        ].join("\n")).appendTo(html_list)
+
+  setup: ->
+    if $('#nearby-commit-center')
+      NearbyCommits.branch = $('#selected-branch').html()
+      NearbyCommits.commit_sha = $('#nearby-commit-center').html()
+      NearbyCommits.retrieve_commits()
+
 $ ->
   $('[data-toggle="tooltip"]').tooltip()
   TogglePassing.setup()
   ToggleMissing.setup()
+  NearbyCommits.setup()
   
