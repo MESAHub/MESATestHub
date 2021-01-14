@@ -102,11 +102,16 @@ class Branch < ApplicationRecord
   # within some window around a particular commit, assumed to be in the branch
   def nearby_commits(commit, window = 2)
     center = commit.pull_request ? head : commit
-    commit_shas = Commit.api_commits(
-      sha: head.sha,
-      before: 5.days.after(center.commit_time),
-      after: 5.days.before(center.commit_time)
+    commit_shas = Commit.api.commits_between(
+      Commit.repo_path,
+      5.days.before(center.commit_time),
+      5.days.after(center.commit_time),
+      name
     ).map { |c| c[:sha] }
+      # sha: head.sha,
+      # before: 5.days.after(center.commit_time),
+      # after: 5.days.before(center.commit_time)
+    # ).map { |c| c[:sha] }
     loc = commit_shas.index(center.sha)
     start_i = [0, loc - window].max
     stop_i = [commit_shas.length - 1, loc + window].min
