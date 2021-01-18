@@ -102,17 +102,23 @@ class Branch < ApplicationRecord
   # within some window around a particular commit, assumed to be in the branch
   def nearby_commits(commit, window = 2)
     center = commit.pull_request ? head : commit
-    commit_shas = Commit.api.commits_between(
-      Commit.repo_path,
-      5.days.before(center.commit_time),
-      5.days.after(center.commit_time),
-      name
-    ).map { |c| c[:sha] }
-      # sha: head.sha,
-      # before: 5.days.after(center.commit_time),
-      # after: 5.days.before(center.commit_time)
-    # ).map { |c| c[:sha] }
-    loc = commit_shas.index(center.sha)
+    time_window = 5
+    loc = nil
+    # commit may not be in the right window. Commit time is time commited, but
+    # not necessarily when it hit the branch (especially for stale pull
+    # requests). There's probably a better way, but for now, just keep 
+    # expanding the window around the commit time until the commit shows up in
+    # the list.
+    until loc
+      commit_shas = Commit.api.commits_between(
+        Commit.repo_path,
+        time_window.days.before(center.commit_time),
+        time_window.days.after(center.commit_time),
+        name
+      ).map { |c| c[:sha] }
+      loc = commit_shas.index(center.sha)
+      time_window *= 2
+    end
     start_i = [0, loc - window].max
     stop_i = [commit_shas.length - 1, loc + window].min
     commit_shas = commit_shas[(start_i..stop_i)]
