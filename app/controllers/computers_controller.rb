@@ -157,7 +157,9 @@ class ComputersController < ApplicationController
             # DATE SINCE GITHUB DOESN'T ALWAYS CREATE USEFUL MERGE REFS IN TIME
             # FOR OTHER API CALLS TO PICK THEM UP. THIS SHOULD BE PATCHED AND
             # REMOVED!
-            Commit.api_update_pulls
+            # 
+            # Temporarily deactivated due to overstepping rate limits.
+            # Commit.api_update_pulls
 
             # send back the all clear
             render json: {
