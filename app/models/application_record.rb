@@ -16,14 +16,16 @@ class ApplicationRecord < ActiveRecord::Base
 
   @@client = Octokit::Client.new(access_token: ENV['GIT_TOKEN'])
   @@client.auto_paginate = true
+
+  @@no_auto_page_client = Octokit::Client.new(access_token: ENV['GIT_TOKEN'])
   @@repo_path = 'MESAHub/mesa'
 
 
-  def self.api
+  def self.api(auto_paginate: true)
     # puts '###################'
     # puts "making an api call!"
     # puts '###################'
-    @@client
+    auto_paginate ? @@client : @@no_auto_page_client
   end
 
   def self.repo_path

@@ -39,12 +39,12 @@ class Commit < ApplicationRecord
   # database. Does NOT assign branches or test case commits. Those must be
   # done AFTER this
   
-  def self.api_commits(**params)
+  def self.api_commits(auto_paginate: true, **params)
     # puts '######################'
     # puts 'API retrieving commits'
     # puts '#######################'
     begin
-      data = api.commits(repo_path, **params)
+      data = api(auto_paginate: auto_paginate).commits(repo_path, **params)
     rescue Octokit::NotFound
       return nil
     else

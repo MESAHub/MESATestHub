@@ -39,3 +39,20 @@ svg {
   width: 1.5rem;
   height: 1.5rem;
 }
+
+.list-group-item-action a:hover {
+  background-color: transparent;
+}
+
+li.page-item.active {
+  border-color: transparent;
+  color: #000
+}
+
+// p {
+//   font-size: 14px;
+// }
+
+// li {
+//   font-size: 14px
+// }

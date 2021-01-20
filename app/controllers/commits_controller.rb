@@ -188,22 +188,98 @@ class CommitsController < ApplicationController
                 @branches[@branch_names.index('main')]
               end
     # @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.main
-    commit_shas = Commit.api_commits(sha: @branch.head.sha).map { |c| c[:sha] }
-    
-    @num_commits = commit_shas.length
 
-    # how many pages are there? Which page are we on? Are we REALLY on that page?
-    @page = params[:page] || 1
-    @page = @page.to_i
-    @num_pages = @num_commits / @page_length + 1
-    @page = @num_pages if @page > @num_pages
-    @start_num = 1 + (@page - 1) * @page_length
-    @stop_num = @page_length * @page
+    # which page of commits do we want?
+    @page = (params[:page] || 1).to_i
+
+    # grab commits for that page (which also includes how many pages there are)
+    commit_shas = Commit.api_commits(
+      auto_paginate: false,
+      sha: @branch.head.sha,
+      per_page: @page_length,
+      page: @page).map { |c| c[:sha] }
     
-    subset = commit_shas[@page_length * (@page - 1), @page_length]
-    @commits = Commit.where(sha: subset).to_a
-      .sort! { |a, b| subset.index(a.sha) <=> subset.index(b.sha) }      
+    # determine number of pages through tortured exploration of the "last" link
+    # provided by the api client
+    @num_pages = if Commit.api(auto_paginate: false).last_response.rels[:last]
+                   link = Commit.api(auto_paginate: false).last_response
+                                .rels[:last].href
+                   m = %r{api.github.com/.*\?page=(?<num_pages>\d+)}.match(link)
+                   m[:num_pages]
+                 else
+                   @page
+                 end.to_i
+    
+    # subset = commit_shas[@page_length * (@page - 1), @page_length]
+    @commits = @branch.commits.where(sha: commit_shas).to_a
+      .sort! { |a, b| commit_shas.index(a.sha) <=> commit_shas.index(b.sha) }      
     @pull_requests = @branch.pull_requests
+
+    @start_num = 1 + (@page - 1) * @page_length
+    @stop_num = @start_num + @commits.length
+
+    # set buttons for pages
+    @page_button_data = []
+    @page_button_data << if @page > 1
+                           {
+                             label: 'First',
+                             href: commits_path(branch: @branch.name, page: 1),
+                             klass: '',
+                             disabled: false
+                           }
+                         else
+                           {
+                             label: 'First',
+                             href: '#',
+                             klass: ' disabled',
+                             disabled: true
+                           }
+                         end
+    1.upto(@num_pages) do |page|
+      next unless (page - @page).abs <= 3
+
+      @page_button_data << case (page - @page).abs
+      when 0
+        {
+          label: page.to_s,
+          href: commits_path(branch: @branch.name, page: page),
+          klass: ' active',
+          disabled: false
+        }
+      when 1..2
+        {
+          label: page.to_s,
+          href: commits_path(branch: @branch.name, page: page),
+          klass: '',
+          disabled: false
+        }
+      when 3
+        {
+          label: '<i class="fa fa-ellipsis-h" aria-hidden="true"></i>'.html_safe,
+          href: '#',
+          klass: ' disabled',
+          disabled: true
+        }
+      end
+
+    end
+
+    # add "Last" button
+    @page_button_data << if @page < @num_pages
+                           {
+                             label: 'Last',
+                             href: commits_path(branch: @branch.name, page: @num_pages),
+                             klass: '',
+                             disabled: false
+                           }
+                         else
+                           {
+                             label: 'Last',
+                             href: '#',
+                             klass: ' disabled',
+                             disabled: true
+                           }
+                         end
 
     @row_classes = {}
     @btn_classes = {}

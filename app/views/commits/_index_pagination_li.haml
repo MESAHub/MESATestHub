@@ -1,0 +1,6 @@
+- @page_button_data.each do |button_data|
+  %li{class: "page-item" + button_data[:klass]}
+    - if button_data[:disabled] || button_data[:label].to_i == @page
+      %span.page-link= button_data[:label]
+    - else
+      %a.page-link{href: button_data[:href]}= button_data[:label]
