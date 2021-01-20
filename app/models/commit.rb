@@ -445,6 +445,7 @@ class Commit < ApplicationRecord
         branch.pull_requests.includes(includes).order(:commit_time).first
       end
     elsif sha.downcase == 'head'
+      puts "Getting head commit of #{branch.name}"
       return branch.get_head unless includes
 
       branch.get_head(includes: includes)
