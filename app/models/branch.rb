@@ -98,18 +98,31 @@ class Branch < ApplicationRecord
     commits.where(pull_request: true, open: true)
   end
 
+  # special getter to allow including associations
+  def get_head(includes: nil)
+    return head unless includes
+
+    Commit.includes(includes).find(head_id)
+  end
+
   # ordered commits (most recent first; according to GitHub API ordering)
   # within some window around a particular commit, assumed to be in the branch
   def nearby_commits(commit, window = 2)
     center = commit.pull_request ? head : commit
-    time_window = 5
+    # number of days to look on either side of the commit's commit time
+    time_window = 10
+
+    # minimum number of commits to make sure we get from the api call
+    min_commits = [10, commits.count].min
     loc = nil
+
+    num_found = 0
     # commit may not be in the right window. Commit time is time commited, but
     # not necessarily when it hit the branch (especially for stale pull
     # requests). There's probably a better way, but for now, just keep 
     # expanding the window around the commit time until the commit shows up in
     # the list.
-    until loc
+    until loc && num_found >= min_commits
       commit_shas = Commit.api.commits_between(
         Commit.repo_path,
         time_window.days.before(center.commit_time),
@@ -117,6 +130,7 @@ class Branch < ApplicationRecord
         name
       ).map { |c| c[:sha] }
       loc = commit_shas.index(center.sha)
+      num_found = commit_shas.length
       time_window *= 2
     end
     start_i = [0, loc - window].max

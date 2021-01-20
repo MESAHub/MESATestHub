@@ -21,7 +21,7 @@ class ApplicationController < ActionController::Base
   end
 
   def format_time(time)
-    I18n.l time.to_time.in_time_zone(time_zone), format: :default
+    I18n.l time.to_time.in_time_zone(time_zone), format: :short
   end
 
   def admin?

@@ -431,22 +431,24 @@ class Commit < ApplicationRecord
   # GENERAL USE AND SEARCHING/SORTING #
   #####################################
 
-  def self.parse_sha(sha, includes: nil)
+  def self.parse_sha(sha, branch: 'main', includes: nil)
+    branch = Branch.named(branch) || Branch.main
     if sha.downcase == 'auto'
       # no pull requests? just pretend like we asked for head
-      if Branch.main.pull_requests.empty?
-        return Commit.head unless includes
+      if branch.pull_requests.empty?
+        return branch.get_head unless includes
 
-        Commit.head(includes: includes)
+        branch.get_head(includes: includes)
       else
-        return Branch.main.pull_requests.order(:commit_time).first unless includes
+        return branch.pull_requests.order(:commit_time).first unless includes
 
-        Branch.main.pull_requests.includes(includes).order(:commit_time).first
+        branch.pull_requests.includes(includes).order(:commit_time).first
       end
     elsif sha.downcase == 'head'
-      return Commit.head unless includes
+      return branch.get_head unless includes
 
-      Commit.head(includes: includes)
+      branch.get_head(includes: includes)
+    # otherwise ignore branch and just fine the actual commit
     elsif sha.length == 7
       return Commit.find_by(short_sha: sha) unless includes
 

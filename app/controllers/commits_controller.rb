@@ -240,9 +240,10 @@ class CommitsController < ApplicationController
       res[:pull_requests] = pull_requests.map do |commit|
         {
           short_sha: commit.short_sha,
-          message_first_line: commit.message_first_line(50),
+          message_first_line: commit.message_first_line(40),
           author: commit.author,
           commit_time: format_time(commit.commit_time),
+          message_rest: commit.message_rest(40),
           status: commit.status,
           url: commit_url(branch: branch.name, sha: commit.short_sha)
         }
@@ -253,8 +254,10 @@ class CommitsController < ApplicationController
       res[:commits] = commits.map do |commit|
         {
           short_sha: commit.short_sha,
-          message_first_line: commit.message_first_line(50),
-          message_rest: commit.message_rest(50),
+          message_first_line: commit.message_first_line(40),
+          author: commit.author,
+          commit_time: format_time(commit.commit_time),
+          message_rest: commit.message_rest(40),
           status: commit.status,
           url: commit_url(branch: branch.name, sha: commit.short_sha)
         }
