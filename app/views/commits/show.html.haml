@@ -83,7 +83,7 @@
         =format_time(@commit.commit_time)
   .col-lg-6.col-md-5
     %h4.font-weight-bold=@commit.message_first_line(100)
-    %blockquote.blockquote= @commit.message_rest(100)
+    %p= @commit.message_rest(100)
 .row.mb-0.mt-0
   .col
     - if @commit.github_url

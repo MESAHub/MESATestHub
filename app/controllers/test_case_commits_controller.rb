@@ -9,51 +9,31 @@ class TestCaseCommitsController < ApplicationController
     end
     @branches = [@selected_branch, @other_branches].flatten
 
-    @pull_requests = @selected_branch.pull_requests
-    @pull_request_tccs = {}
-    @pull_requests.each do |pr|
-      @pull_request_tccs[pr] = TestCaseCommit.includes(
-        test_instances: { instance_inlists: :inlist_data }
-      ).find_by(commit: pr, test_case: @test_case)
-    end
+    # populating test case commit dropdown menu. In the future, might want to
+    # move this to happen via asynchronous request from javascript to speed up
+    # rendering (no need to wait for github api call in determining nearby
+    # commits)
 
-    # Get array of commits made in the same branch around the same time of this
-    # commit. For now, get no more than seven commits, ideally centered
-    # at current commit in time in the branch. That is, if this is the head
-    # commit, get ten last commits. If this is the first commit of a branch,
-    # get the next ten. If it is in the middle, get five on either side.
-    @center = @commit.pull_request ? @selected_branch.head : @commit
-    # commit_shas = Commit.api_commits(
-    #   sha: @selected_branch.head.sha,
-    #   before: 10.days.after(@center.commit_time),
-    #   after: 10.days.before(@center.commit_time)
-    # ).map { |c| c[:sha] }
-    # loc = commit_shas.index(@center.sha)
-    # start_i = [0, loc - 2].max
-    # stop_i = [commit_shas.length - 1, loc + 2].min
-    # commit_shas = commit_shas[(start_i..stop_i)]
+    # get nearby commits for populating dropdown menu
+    # @nearby_commits = @selected_branch.nearby_commits(@commit)
+    @nearby_tccs = @selected_branch.nearby_test_case_commits(@test_case_commit)
 
-    @nearby_commits = @selected_branch.nearby_commits(@commit)
-
-    @next_commit, @previous_commit = nil, nil
-    loc = @nearby_commits.pluck(:id).index(@center.id)
+    @next_tcc, @previous_tcc = nil, nil
+    loc = @nearby_tccs.pluck(:id).index(@test_case_commit.id)
 
     # we've reversed nearby commits, so the "next" one is later in time, and
     # thus EARLIER in the array. Clunky, but I think it works in practice
-    @next_commit = @nearby_commits[loc - 1] if loc > 0
-    if loc < @nearby_commits.length - 1
-      @previous_commit = @nearby_commits[loc + 1]
+    @next_tcc = @nearby_tccs[loc - 1] if loc.positive?
+    if loc < @nearby_tccs.length - 1
+      @previous_tcc = @nearby_tccs[loc + 1]
     end
 
-    @nearby_tccs = TestCaseCommit.includes(:commit).where(
-      commit: @nearby_commits, test_case: @test_case_commit.test_case
-    ).to_a.sort! { |a, b| @nearby_commits.index(a.commit) <=> @nearby_commits.index(b.commit)}
 
     # used for shading commit selector options according to passage status of
     # THIS test
     @commit_classes = Hash.new('list-group-item-info')
     @btn_classes = Hash.new('btn-info')
-    (@nearby_tccs + @pull_request_tccs.values).each do |tcc|
+    @nearby_tccs.each do |tcc|
       @commit_classes[tcc.commit] = case tcc.status
       when 0 then 'list-group-item-success'
       when 1 then 'list-group-item-danger'
