@@ -731,11 +731,33 @@ class Commit < ApplicationRecord
 
     # determine where rest starts by looking at length of first line, but
     # dropping any ellipsis
+    first_line = message_first_line(max_len)
     start = message_first_line(max_len).chomp('...').length
     res = message[(start..-1)].strip
     return nil if res.empty?
     
-    '...' + res.strip
+    res = if /.*\.\.\.$/ =~ first_line
+            '...' + res.strip
+          else
+            res.strip
+          end
+
+    res.gsub!("\n\n+", '<br><br>')
+    newline_plus_space_matcher = /\n(?<indent>\s+)/
+    m = newline_plus_space_matcher.match(res)
+    while m
+      indent = m[:indent].chars.map do |char|
+        case char
+        when "\t" then '&#9;'
+        when ' ' then '&nbsp;'
+        else
+          ''
+        end
+      end.join
+      res.sub!(newline_plus_space_matcher, "<br>#{indent}")
+      m = newline_plus_space_matcher.match(res)
+    end
+    res.html_safe
   end
 end
 
