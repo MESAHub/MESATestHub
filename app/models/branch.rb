@@ -95,10 +95,6 @@ class Branch < ApplicationRecord
     named('main')
   end
 
-  def pull_requests
-    commits.where(pull_request: true, open: true)
-  end
-
   # special getter to allow including associations
   def get_head(includes: nil)
     return head unless includes

@@ -34,7 +34,7 @@
                   %span.font-weight-bold= commit.author
                   %span
                     commited on 
-                    =commit.commit_time.strftime('%B %d %Y')
+                    =format_time(commit.commit_time.strftime('%B %d %Y'))
 
   .col-1.d-none.d-md-block
     -if @next_tcc
