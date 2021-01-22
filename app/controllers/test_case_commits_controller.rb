@@ -51,8 +51,8 @@ class TestCaseCommitsController < ApplicationController
 
     # used for shading commit selector options according to passage status of
     # THIS test
-    @commit_classes = {}
-    @btn_classes = {}
+    @commit_classes = Hash.new('list-group-item-info')
+    @btn_classes = Hash.new('btn-info')
     (@nearby_tccs + @pull_request_tccs.values).each do |tcc|
       @commit_classes[tcc.commit] = case tcc.status
       when 0 then 'list-group-item-success'

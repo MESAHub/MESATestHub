@@ -741,8 +741,7 @@ class Commit < ApplicationRecord
           else
             res.strip
           end
-
-    res.gsub!("\n\n+", '<br><br>')
+    res.gsub!(/\n(\s*\n)+/, '<br><br>')
     newline_plus_space_matcher = /\n(?<indent>\s+)/
     m = newline_plus_space_matcher.match(res)
     while m
