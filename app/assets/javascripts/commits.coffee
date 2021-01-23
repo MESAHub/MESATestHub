@@ -155,9 +155,18 @@ NearbyCommits =
       NearbyCommits.commit_sha = $('#nearby-commit-center').html()
       NearbyCommits.retrieve_commits()
 
+CommitMessage = 
+  setup: ->
+    if $('#commit-stats').length && $('#commit-message').length
+      stats_height = $('#commit-stats').height()
+      message_height = $('#commit-message').height()
+      if message_height > 2.0 * stats_height
+        $('#commit-message').height(2.0 * stats_height)
+
 $ ->
   $('[data-toggle="tooltip"]').tooltip()
   TogglePassing.setup()
   ToggleMissing.setup()
   NearbyCommits.setup()
+  CommitMessage.setup()
   

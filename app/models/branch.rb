@@ -112,6 +112,8 @@ class Branch < ApplicationRecord
     min_commits = [10, commits.count].min
     loc = nil
 
+    is_head = (commit == head)
+
     num_found = 0
     # commit may not be in the right window. Commit time is time commited, but
     # not necessarily when it hit the branch (especially for stale pull
@@ -130,9 +132,15 @@ class Branch < ApplicationRecord
         name
       ).map { |c| c[:sha] }
       loc = commit_shas.index(commit.sha)
+
+      # set loc to nil if it is zero, but commit is not head. This is because
+      # we should not have this commit appearing as the latest  when it is not
+      # actully the head commit
+      loc = nil if (loc == 0 && !is_head)
+
       num_found = commit_shas.length
-      time_window *= 2
       api_count += 1
+      time_window *= 2
     end
     start_i = [0, loc - window].max
     stop_i = [commit_shas.length - 1, loc + window].min
@@ -148,6 +156,7 @@ class Branch < ApplicationRecord
   def nearby_test_case_commits(test_case_commit, window = 2)
     test_case = test_case_commit.test_case
     commit = test_case_commit.commit
+    is_head = (commit == head)
 
     # number of days to look on either side of the commit's commit time
     time_window = 10
@@ -176,6 +185,11 @@ class Branch < ApplicationRecord
         name
       ).map { |c| c[:sha] }
       loc = commit_shas.index(commit.sha)
+
+      # set loc to nil if it is zero, but commit is not head. This is because
+      # we should not have this commit appearing as the latest  when it is not
+      # actully the head commit
+      loc = nil if (loc == 0 && !is_head)
 
       if loc
         num_found = commit_shas.length
