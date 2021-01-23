@@ -46,10 +46,9 @@ class Commit < ApplicationRecord
     end
   end
 
-  def self.api_create(sha: nil, update_parents: false, **params)
+  def self.api_create(sha: nil, **params)
     create_or_update_from_github_hash(
-      github_hash: api.commit(repo_path, sha, **params),
-      update_parents: update_parents
+      github_hash: api.commit(repo_path, sha, **params)
     )
   end
 
@@ -59,8 +58,7 @@ class Commit < ApplicationRecord
   # of parents of parents are retrieved and created. Instead, you should
   # set up ALL commits first, and then establish relations with one giant
   # call that hits the api only once
-  def self.create_or_update_from_github_hash(github_hash: nil, branch: nil,
-    update_parents: false)
+  def self.create_or_update_from_github_hash(github_hash: nil, branch: nil)
     commit = if Commit.exists?(sha: github_hash[:sha])
                find_by(sha: github_hash[:sha])
              else
@@ -75,7 +73,6 @@ class Commit < ApplicationRecord
       end
     end
 
-    commit.api_update_parents(github_hash[:parents]) if update_parents
     commit
   end
 
@@ -224,28 +221,6 @@ class Commit < ApplicationRecord
         # all hashes now exist in tccs_to_insert, so do batch insert
         TestCaseCommit.insert_all(tccs_to_insert)
       end
-
-
-        # commits = github_data.each do |github_hash|
-
-        #   hashes_to_insert << hash_from_github
-        #   create_or_update_from_github_hash(github_hash: github_hash,
-        #                                     branch: branch,
-        #                                     update_parents: false)
-        # end
-        # all commits should exist now, so we can safely set up parent/child
-        # relations
-        # github_data.zip(commits).each do |github_hash, commit|
-        #   commit.api_update_parents(github_hash[:parents])
-        # end
-
-        # still need to update branch ownership if this branch was merged into
-        # another (this branch's commits already belong to this branch, but if,
-        # for example, this branch was merged into another branch, we don't
-        # know that yet). Branch.update_branches (not the basic version) should
-        # take care of this in a separate call. If this method is called with
-        # no specific branch, you get this automatically. A +force+ call will
-        # also handle this, since every single commit gets touched with that.
     end
     nil
   end
@@ -408,47 +383,6 @@ class Commit < ApplicationRecord
   ####################
   # INSTANCE METHODS #
   ####################
-
-  # set parents from api data. Might call api if parents don't exist in
-  # database already
-  # def api_update_parents(parent_hashes)
-  #   # associations
-  #   #
-  #   # first link to parents, if any
-  #   # note, we don't explicitly deal with children relations, since parent
-  #   # relations implicitly take care of it. They would be set whenever this
-  #   # is done to the children
-  #   #
-  #   # TODO: MAKE IT SO BULK PARENT ASSIGNMENTS DON'T CALL API UNTIL ALL ARE DONE
-  #   # MAYBE HUNT FOR ORPHANS LATER?
-  #   to_create = []
-  #   created = {}
-  #   parent_hashes.each do |parent_hash|
-  #     # if parent doesn't exist, create a dummy with right sha that will
-  #     # hopefully be filled in later
-  #     if Commit.exists?(sha: parent_hash[:sha])
-  #       created[parent_hash[:sha]] = Commit.find_by(sha: parent_hash[:sha])
-  #     else
-  #       to_create << parent_hash[:sha]
-  #     end
-  #   end
-
-  #   # missing parents get created afterwards. This will recursively 
-  #   # create parents of parents in an inefficient manner, but since we don't
-  #   # have the parent data in bulk, we're just sticking with this.
-  #   to_create.each do |sha|
-  #     created[sha] = Commit.api_create(sha: sha, update_parents: true)
-  #   end
-
-  #   created.each do |sha, new_parent|
-  #     # link the two in a commit relation
-  #     unless CommitRelation.exists?(parent: new_parent, child: self)
-  #       CommitRelation.create(parent: new_parent, child: self)
-  #     end
-  #   end
-
-
-  # end
 
   # use GitHub api to pull `do1_test_source` for each module and set up
   # test case commits if they don't exist
