@@ -126,11 +126,11 @@ class TestInstance < ApplicationRecord
     # now we need to go through the individual inlists, create them, and
     # associate them with the test instance
     if instance_params[:inlists]
-      instance_params[:inlists].each do |inlist_params|
+      instance_params[:inlists].each_with_index do |inlist_params, i|
         new_inlist = instance.instance_inlists.build(
           inlist_params.reject do |key|
             ['extra_testhub_names', 'extra_testhub_vals'].include? key
-          end
+          end.merge({order: i})
         )
         # optionally build on extra data to the inlist
         if inlist_params['extra_testhub_names'] &&

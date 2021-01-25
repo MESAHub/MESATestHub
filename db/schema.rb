@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2021_01_22_235035) do
+ActiveRecord::Schema.define(version: 2021_01_25_215302) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -92,6 +92,7 @@ ActiveRecord::Schema.define(version: 2021_01_22_235035) do
     t.integer "solver_calls_made"
     t.integer "redos"
     t.float "log_rel_run_E_err"
+    t.integer "order", default: 0
     t.index ["test_instance_id"], name: "index_instance_inlists_on_test_instance_id"
   end
 
