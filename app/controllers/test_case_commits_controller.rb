@@ -90,6 +90,7 @@ class TestCaseCommitsController < ApplicationController
     # text and class for last commit test status
     @commit_status, @commit_class = passing_status_and_class
 
+
     # names of default columns in the table of instances, can be toggled on
     # and off
     @default_columns = {
@@ -118,6 +119,86 @@ class TestCaseCommitsController < ApplicationController
     data_names.each do |data_name|
       @specific_columns[data_name] = data_names.length < 3
     end
+
+    # gather all inlists from the instances already in memory
+    # default scope of InstanceInlist should ensure they are read off in the
+    # proper order. Not sure how this would work if one instance skipped an
+    # inlist. Hopefully that doesn't happen.
+    @raw_inlists = []
+    @inlists = []
+    @test_case_commit.test_instances.each do |ti|
+      if ti.instance_inlists.count > @inlists.count
+        @inlists = ti.instance_inlists.map do |inlist|
+          inlist.inlist.sub(/^inlist_/, '').sub(/_header$/, '')
+        end
+        # puts "setting raw_inlists"
+        @raw_inlists = ti.instance_inlists.map(&:inlist)
+        # puts "raw inlists now set to"
+        # @raw_inlists.each { |inl| puts "- #{inl}"}
+      end
+    end
+
+    # need to gather data for each instance inlist. Should be simple, but a few
+    # pieces of data are tricky, so doing this here rather than making the view
+    # horrendous
+    #
+    # Create a hash with inlist names as keys and lists of data hashes as values
+    # each element in the values will encode all of the table data needed for
+    # one computer's submission of that inlist
+    @inlist_data = Hash.new([])
+    @test_case_commit.test_instances.each do |ti|
+      @inlists.zip(@raw_inlists).each do |inlist_short, inlist_full|
+        puts "Gathering data for computer #{ti.computer} and inlist #{inlist_full}"
+        inlist = ti.instance_inlists.select do |inl|
+          inl.inlist == inlist_full
+        end
+        next if inlist.empty?
+        
+        inlist = inlist.first
+        data_hash = {}
+
+        # inlist "passed" if the next one exists OR this is the last one and
+        # the overall test passed
+        data_hash[:passed] = false
+        if inlist_short == @inlists.last
+          data_hash[:passed] = ti.passed
+        elsif ti.instance_inlists.pluck(:order).include? inlist.order + 1
+          data_hash[:passed] = true
+        end
+
+        data_hash[:computer] = ti.computer
+        data_hash[:runtime] = inlist.runtime_minutes
+        data_hash[:threads] = ti.omp_num_threads
+        data_hash[:spec] = ti.computer_specification
+        data_hash[:fpe_checks] = ti.fpe_checks
+        data_hash[:run_optional] = ti.run_optional
+
+        @specific_columns.each do |col_name|
+          data_hash[col_name] = if ti.get_data(col_name)
+                                  format('%0.3g', ti.get_data(col_name))
+                                else
+                                  ''
+                                end
+        end
+
+        # all other useful data just comes straight from the inlist object
+        data_hash = inlist.serializable_hash.to_hash.merge(data_hash)
+        # puts "keys are"
+        # data_hash.keys.each { |key| puts "- #{key}" }
+
+        # puts "created at is #{data_hash[:created_at]}"
+        # puts "runtime is #{data_hash[:runtime_minutes]}"
+        # puts "runtime should be #{inlist.serializable_hash['runtime_minutes']}"
+
+        @inlist_data[inlist_short] = [@inlist_data[inlist_short], data_hash].flatten
+      end
+    end
+
+    puts "keys to inlist_data, and the length of their each's arrays"
+    @inlist_data.each do |key, val|
+      puts "#{key}: #{val.length}"
+    end
+
   end
 
   def show_test_case_commit

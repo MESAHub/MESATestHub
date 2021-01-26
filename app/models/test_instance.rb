@@ -48,6 +48,8 @@ class TestInstance < ApplicationRecord
   scope :full, -> { where(run_optional: true) }
   scope :partial, -> { where(run_optional: false) }
 
+  default_scope { order(created_at: :asc) }
+
   def self.success_types
     @@success_types
   end
