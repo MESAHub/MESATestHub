@@ -198,14 +198,14 @@
                     %td.column-solver_calls_failed.d-none= instance.solver_calls_failed
                     %td.column-log_rel_run_E_err.d-none
                       -if instance.log_rel_run_E_err
-                        =format('%.2f',instance.log_rel_run_E_err)
+                        =format('%.2f',instance.log_rel_run_E_err || 0)
                       -else
                         =''
 
                     - @specific_columns.each do |specific_col, visible|
                       %td{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}
                         -if instance.get_data(specific_col)
-                          =format('%0.3g', instance.get_data(specific_col))
+                          =format('%0.3g', instance.get_data(specific_col) || -1)
                         -else
                           =''
         - if @inlists.length > 2
@@ -251,7 +251,11 @@
                         %td.column-solver_iterations.d-none= data_hash['solver_iterations']
                         %td.column-solver_calls_made.d-none= data_hash['solver_calls_made']
                         %td.column-solver_calls_failed.d-none= data_hash['solver_calls_failed']
-                        %td.column-log_rel_run_E_err.d-none= format('%.2f',data_hash['log_rel_run_E_err'])
+                        %td.column-log_rel_run_E_err.d-none
+                        - if data_hash['log_rel_run_E_err']
+                          =format('%.2f',data_hash['log_rel_run_E_err'])
+                        - else
+                          =""
 
                         - @specific_columns.each do |specific_col, visible|
                           %td{class: "column-#{specific_col}" + (visible ? '' : ' d-none')} = data_hash[specific_col]

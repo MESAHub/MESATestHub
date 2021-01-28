@@ -148,7 +148,7 @@ class TestCaseCommitsController < ApplicationController
     @inlist_data = Hash.new([])
     @test_case_commit.test_instances.each do |ti|
       @inlists.zip(@raw_inlists).each do |inlist_short, inlist_full|
-        puts "Gathering data for computer #{ti.computer} and inlist #{inlist_full}"
+        # puts "Gathering data for computer #{ti.computer} and inlist #{inlist_full}"
         inlist = ti.instance_inlists.select do |inl|
           inl.inlist == inlist_full
         end
@@ -194,10 +194,10 @@ class TestCaseCommitsController < ApplicationController
       end
     end
 
-    puts "keys to inlist_data, and the length of their each's arrays"
-    @inlist_data.each do |key, val|
-      puts "#{key}: #{val.length}"
-    end
+    # puts "keys to inlist_data, and the length of their each's arrays"
+    # @inlist_data.each do |key, val|
+      # puts "#{key}: #{val.length}"
+    # end
 
   end
 
