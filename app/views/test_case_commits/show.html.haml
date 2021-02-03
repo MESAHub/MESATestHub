@@ -1,8 +1,8 @@
 %p#notice= notice
 .row.mb-3
   .col-sm-1.d-none.d-md-block
-    -if @previous_commit
-      %a.btn.btn-outline-primary.btn-lg.btn-block{href: test_case_commit_path(sha: @previous_commit.short_sha, branch: params[:branch], test_case: params[:test_case], module: params[:module])}
+    -if @previous_tcc
+      %a.btn.btn-outline-primary.btn-lg.btn-block{href: test_case_commit_path(sha: @previous_tcc.commit.short_sha, branch: params[:branch], test_case: params[:test_case], module: params[:module])}
         %i.fa.fa-step-backward.text-reset
   .col-6.col-md-5.text-right
     .dropdown
@@ -18,30 +18,9 @@
         =fa_icon 'dot-circle-o'
         %span.h5.text-monospace=@commit
       .dropdown-menu.dropdown-menu-right.py-0.my-0{'aria-labelledby': 'commit-selector'}
-        - unless @pull_requests.empty?
-          %h4.font-weight-bold.my-3.ml-3 Open Pull Requests
-          %ul.list-group.list-group-flush.mb-4
-            -@pull_requests.each do |pr|
-              %li.list-group-item.list-group-item-action.dropdown-item{class: pr == @commit ? 'active' : @commit_classes[pr]}
-                .d-flex.w-100.justify-content-between
-                  
-                  %h5.font-weight-bold.d-none.d-md-inline
-                    =pr.message_first_line(50)
-                  %a.stretched-link.text-reset{href: test_case_commit_path(branch: params[:branch], sha: pr.short_sha, test_case: params[:test_case], module: params[:module])}
-                    %button.btn.ml-2{class: @btn_classes[pr]}
-                      %span.h5.text-monospace=pr.short_sha
-                .d-flex.w-100
-                  %p.mb-0
-                    %span.font-weight-bold= pr.author
-                    %span
-                      commited on 
-                      =pr.commit_time.strftime('%B %d %Y')
-          %h4.font-weight-bold.my-3.ml-3
-            Commits on
-            %samp=@selected_branch.name
-
         %ul.list-group.list-group-flush
-          -@nearby_commits.each do |commit|
+          -@nearby_tccs.each do |tcc|
+            - commit = tcc.commit
             %li.list-group-item.list-group-item-action.dropdown-item{class: @commit_classes[commit] + (commit == @commit ? 'active' : '')}
               .d-flex.w-100.justify-content-between
                 
@@ -55,11 +34,11 @@
                   %span.font-weight-bold= commit.author
                   %span
                     commited on 
-                    =commit.commit_time.strftime('%B %d %Y')
+                    =format_time(commit.commit_time.strftime('%B %d %Y'))
 
   .col-1.d-none.d-md-block
-    -if @next_commit
-      %a.btn.btn-outline-primary.btn-lg.btn-block{href: test_case_commit_path(sha: @next_commit.short_sha, branch: params[:branch], test_case: params[:test_case], module: params[:module])}
+    -if @next_tcc
+      %a.btn.btn-outline-primary.btn-lg.btn-block{href: test_case_commit_path(sha: @next_tcc.commit.short_sha, branch: params[:branch], test_case: params[:test_case], module: params[:module])}
         %i.fa.fa-step-forward.text-reset
 
 .row.my-5
@@ -96,11 +75,11 @@
 .row.mt-5.mb-0
   .col
     %h4 
-      Commit Data for
+      Commit data for
       %span.text-monospace.text-primary= @commit
 .row.mt-0
   .col-lg-6.col-md-7
-    %ul.list-group.list-group-flush.mb-1
+    %ul.list-group.list-group-flush.mb-1#commit-stats
       %li.list-group-item
         %b Author:
         =@commit.author
@@ -111,8 +90,9 @@
         %b Commit Time:
         =format_time(@commit.commit_time)
   .col-lg-6.col-md-5
-    %b Commit Message
-    %blockquote.blockquote= @commit.message
+    #commit-message
+      %h4.font-weight-bold= @commit.message_first_line(100)
+      %p= @commit.message_rest(100)
 .row.mb-0.mt-0
   - if @commit.github_url
     .col
@@ -162,60 +142,123 @@
                 = klass.sub('column-', '').titleize
   .row
     .col
-      .table-responsive.mt-2
-        %table.table.table-hover.table-sm.text-center#test-detail
-          %thead.thead-default
-            %tr
-              %th.column-status Status
-              %th.column-computer Computer
-              %th.column-date.d-none Date Uploaded
-              %th.column-runtime Runtime
-              %th.column-ram.d-none RAM Usage
-              %th.column-checksum Checksum
-              %th.column-threads.d-none Threads
-              %th.column-spec.d-none Computer Specification
-              %th.column-steps Steps
-              %th.column-retries Retries
-              %th.column-redos.d-none Redos
-              %th.column-solver_iterations.d-none Iterations
-              %th.column-solver_calls_made.d-none Calls Made
-              %th.column-solver_calls_failed.d-none Calls Failed
-              %th.column-log_rel_run_E_err.d-none Log Rel. E Err.
-              - @specific_columns.each do |specific_col, visible|
-                %th.text-monospace{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}= specific_col
+      - if @inlists.length > 2
+        %ul.nav.nav-pills.flex-column.flex-sm-row#inlist-pills{role: 'tablist'}
+          %li.nav-item
+            %a.nav-link.active#pill-overview-tab{href: '#pill-overview', 'data-toggle' => 'pill', role: :tab, 'aria-controls' => 'pill-overview', 'aria-selected' => 'true'} Overview
+          - @inlists.each do |inlist|
+            %li.nav-item.flex-sm-fill.text-sm-center
+              %a.nav-link.text-monospace{id: "#{inlist}-pill-tab", href:"\#pill-#{inlist}", 'data-toggle' => 'pill', role: 'tab', 'aria-controls' => "pill-#{inlist}", 'aria-selected' => 'false'}= inlist
+      .div.tab-content#inlist-pillsContent
+        .div.tab-pane.fade.show.active#pill-overview{role: 'tabpanel', 'aria-labelledby' => 'pill-overview-tab'}
+          .table-responsive.mt-2
+            %table.table.table-hover.table-sm.text-center
+              %thead.thead-default
+                %tr
+                  %th.column-status Status
+                  %th.column-computer Computer
+                  %th.column-date.d-none Date Uploaded
+                  %th.column-runtime Runtime
+                  %th.column-ram.d-none RAM Usage
+                  %th.column-checksum Checksum
+                  %th.column-threads.d-none Threads
+                  %th.column-spec.d-none Computer Specification
+                  %th.column-steps Steps
+                  %th.column-retries Retries
+                  %th.column-redos.d-none Redos
+                  %th.column-solver_iterations.d-none Iterations
+                  %th.column-solver_calls_made.d-none Calls Made
+                  %th.column-solver_calls_failed.d-none Calls Failed
+                  %th.column-log_rel_run_E_err.d-none Log Rel. E Err.
+                  - @specific_columns.each do |specific_col, visible|
+                    %th.text-monospace{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}= specific_col
 
-          %tbody
-            -@test_case_commit.test_instances.each do |instance|
-              -# %tr{class: @test_instance_classes[instance] + " clickable-row", "data-href": test_case_test_instance_path(@test_case, instance)}
-              %tr
-                %td.column-status{class: instance.passed ? 'text-success' : 'text-danger'}
-                  =fa_icon('wrench', title: 'FPE Checks') if instance.fpe_checks
-                  =fa_icon('plus-square', title: 'Run Optional') if instance.run_optional
-                  =instance.passage_status
-                %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
-                %td.column-date.d-none=format_time(instance.created_at)
-                %td.column-runtime
-                  -if instance.runtime_minutes
-                    =format('%.2f', instance.runtime_minutes) + ' m'
-                %td.column-ram.d-none=format("%.2f", instance.rn_mem_GB || 0) + ' GB'
-                %td.column-checksum
-                  %samp=instance.checksum[(-7..-1)] if instance.checksum
-                %td.column-threads.d-none=instance.omp_num_threads
-                %td.column-spec.d-none=instance.computer_specification
-                %td.column-steps=instance.steps
-                %td.column-retries=instance.retries
-                %td.column-redos.d-none= instance.redos
-                %td.column-solver_iterations.d-none= instance.solver_iterations
-                %td.column-solver_calls_made.d-none= instance.solver_calls_made
-                %td.column-solver_calls_failed.d-none= instance.solver_calls_failed
-                %td.column-log_rel_run_E_err.d-none= instance.log_rel_run_E_err
+              %tbody
+                -@test_case_commit.test_instances.each do |instance|
+                  %tr
+                    %td.column-status{class: instance.passed ? 'text-success' : 'text-danger'}
+                      =fa_icon('wrench', title: 'FPE Checks') if instance.fpe_checks
+                      =fa_icon('plus-square', title: 'Run Optional') if instance.run_optional
+                      =instance.passage_status
+                    %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
+                    %td.column-date.d-none=format_time(instance.created_at)
+                    %td.column-runtime
+                      -if instance.runtime_minutes
+                        =format('%.2f', instance.runtime_minutes) + ' m'
+                    %td.column-ram.d-none=format("%.2f", instance.rn_mem_GB || 0) + ' GB'
+                    %td.column-checksum
+                      %samp=instance.checksum[(-7..-1)] if instance.checksum
+                    %td.column-threads.d-none=instance.omp_num_threads
+                    %td.column-spec.d-none=instance.computer_specification
+                    %td.column-steps=instance.steps
+                    %td.column-retries=instance.retries
+                    %td.column-redos.d-none= instance.redos
+                    %td.column-solver_iterations.d-none= instance.solver_iterations
+                    %td.column-solver_calls_made.d-none= instance.solver_calls_made
+                    %td.column-solver_calls_failed.d-none= instance.solver_calls_failed
+                    %td.column-log_rel_run_E_err.d-none
+                      -if instance.log_rel_run_E_err
+                        =format('%.2f',instance.log_rel_run_E_err || 0)
+                      -else
+                        =''
 
-                - @specific_columns.each do |specific_col, visible|
-                  %td{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}
-                    -if instance.get_data(specific_col)
-                      =format('%0.3g', instance.get_data(specific_col))
-                    -else
-                      =''
+                    - @specific_columns.each do |specific_col, visible|
+                      %td{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}
+                        -if instance.get_data(specific_col)
+                          =format('%0.3g', instance.get_data(specific_col) || -1)
+                        -else
+                          =''
+        - if @inlists.length > 2
+          - @inlists.each do |inlist_name|
+            .div.tab-pane.fade{role: 'tabpanel', 'aria-labelledby' => "#{inlist_name}-pill-tab", id: "pill-#{inlist_name}"}
+              .table-responsive.mt-2
+                %table.table.table-hover.table-sm.text-center
+                  %thead.thead-default
+                    %tr
+                      %th.column-status Status
+                      %th.column-computer Computer
+                      %th.column-date.d-none Date Uploaded
+                      %th.column-runtime Runtime
+                      %th.column-threads.d-none Threads
+                      %th.column-spec.d-none Computer Specification
+                      %th.column-steps Steps
+                      %th.column-retries Retries
+                      %th.column-redos.d-none Redos
+                      %th.column-solver_iterations.d-none Iterations
+                      %th.column-solver_calls_made.d-none Calls Made
+                      %th.column-solver_calls_failed.d-none Calls Failed
+                      %th.column-log_rel_run_E_err.d-none Log Rel. E Err.
+                      - @specific_columns.each do |specific_col, visible|
+                        %th.text-monospace{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}= specific_col
+
+                  %tbody
+                    -@inlist_data[inlist_name].each do |data_hash|
+                      %tr
+                        %td.column-status{class: data_hash[:passed] ? 'text-success' : 'text-danger'}
+                          =fa_icon('wrench', title: 'FPE Checks') if data_hash[:fpe_checks]
+                          =fa_icon('plus-square', title: 'Run Optional') if data_hash[:run_optional]
+                          =data_hash[:passed] ? "Passed" : "Failed"
+                        %td.column-computer=link_to(data_hash[:computer], user_computer_path(data_hash[:computer].user, data_hash[:computer]))
+                        %td.column-date.d-none=format_time(data_hash['created_at'])
+                        %td.column-runtime
+                          -if data_hash['runtime_minutes']
+                            =format('%.2f', data_hash['runtime_minutes']) + ' m'
+                        %td.column-threads.d-none=data_hash['threads']
+                        %td.column-spec.d-none=data_hash['spec']
+                        %td.column-steps=data_hash['steps']
+                        %td.column-retries=data_hash['retries']
+                        %td.column-redos.d-none= data_hash['redos']
+                        %td.column-solver_iterations.d-none= data_hash['solver_iterations']
+                        %td.column-solver_calls_made.d-none= data_hash['solver_calls_made']
+                        %td.column-solver_calls_failed.d-none= data_hash['solver_calls_failed']
+                        %td.column-log_rel_run_E_err.d-none
+                          - if data_hash['log_rel_run_E_err']
+                            =format('%.2f',data_hash['log_rel_run_E_err'])
+                          - else
+                            =""
+
+                        - @specific_columns.each do |specific_col, visible|
+                          %td{class: "column-#{specific_col}" + (visible ? '' : ' d-none')} = data_hash[specific_col]
 
 - else
   .alert.alert-warning

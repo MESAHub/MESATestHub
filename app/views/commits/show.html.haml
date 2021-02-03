@@ -17,44 +17,6 @@
         =fa_icon 'dot-circle-o'
         %span.h5.text-monospace#nearby-commit-center=@commit
       .dropdown-menu.dropdown-menu-right.py-0.my-0#nearby-commit-list{'aria-labelledby': 'commit-selector'}
-        -# - unless @pull_requests.empty?
-        -#   %h4.font-weight-bold.my-3.ml-3 Open Pull Requests
-        -#   %ul.list-group.list-group-flush.mb-4
-        -#     -@pull_requests.each do |commit|
-        -#       %li.list-group-item.list-group-item-action.dropdown-item{class: commit == @commit ? 'active' : @commit_classes[commit]}
-        -#         .d-flex.w-100.justify-content-between
-                  
-        -#           %h5.font-weight-bold.d-none.d-md-inline
-        -#             =commit.message_first_line(50)
-        -#           %a.stretched-link.text-reset{href: commit_path(branch: @selected_branch.name, sha: commit.short_sha)}
-        -#             %button.btn.ml-2{class: @btn_classes[commit]}
-        -#               %span.h5.text-monospace=commit.short_sha
-        -#         .d-flex.w-100
-        -#           %p.mb-0
-        -#             %span.font-weight-bold= commit.author
-        -#             %span
-        -#               commited on 
-        -#               =commit.commit_time.strftime('%B %d %Y')
-        -#   %h4.font-weight-bold.my-3.ml-3
-        -#     Commits on
-        -#     %samp=@selected_branch.name
-
-        -# %ul.list-group.list-group-flush
-        -#   -@nearby_commits.each do |commit|
-        -#     %li.list-group-item.list-group-item-action.dropdown-item{class: commit == @commit ? 'active' : @commit_classes[commit]}
-        -#       .d-flex.w-100.justify-content-between
-                
-        -#         %h5.font-weight-bold.d-none.d-md-inline
-        -#           =commit.message_first_line(50)
-        -#         %a.stretched-link.text-reset{href: commit_path(branch: @selected_branch.name, sha: commit.short_sha)}
-        -#           %button.btn.ml-2{class: @btn_classes[commit]}
-        -#             %span.h5.text-monospace=commit.short_sha
-        -#       .d-flex.w-100
-        -#         %p.mb-0
-        -#           %span.font-weight-bold= commit.author
-        -#           %span
-        -#             commited on 
-        -#             =commit.commit_time.strftime('%B %d %Y')
 
   .col-1.d-none.d-md-block#next-btn
     -if @next_commit
@@ -63,15 +25,11 @@
 .row.mt-5.mb-0
   .col
     %h4
-      - if @commit.pull_request 
-        %b.text-success Pull Request Data
-      - else
-        Commit Data
-      for
+      Commit data for
       %span.text-monospace.text-primary= @commit
 .row.mt-0
   .col-lg-6.col-md-7
-    %ul.list-group.list-group-flush.mb-1
+    %ul.list-group.list-group-flush.mb-1#commit-stats
       %li.list-group-item
         %b Author:
         =@commit.author
@@ -82,8 +40,9 @@
         %b Commit Time:
         =format_time(@commit.commit_time)
   .col-lg-6.col-md-5
-    %b Commit Message
-    %blockquote.blockquote= @commit.message
+    #commit-message
+      %h4.font-weight-bold=@commit.message_first_line(100)
+      %p= @commit.message_rest(100)
 .row.mb-0.mt-0
   .col
     - if @commit.github_url

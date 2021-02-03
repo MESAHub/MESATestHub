@@ -70,28 +70,17 @@ ToggleMissing =
         $('html,body').animate({scrollTop: $('#missing').offset().top})
 
 NearbyCommits = 
-  pull_requests: []
   commits: []
   commit_sha: ''
   branch: ''
   retrieve_commits: ->
     # use this for development due to CORS issues
-    # $.get({url: 'http://localhost:3000/commits/nearby_commits.json', contentType: 'application/json', dataType: 'json', data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha}, success: (returned_data) ->
-    $.get({url: 'https://testhub.mesastar.org/commits/nearby_commits.json', contentType: 'application/json', dataType: 'json', data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha}, success: (returned_data) ->
-      NearbyCommits.pull_requests = returned_data.pull_requests
+    $.get({url: 'http://localhost:3000/commits/nearby_commits.json', contentType: 'application/json', dataType: 'json', data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha}, success: (returned_data) ->
+    # $.get({url: 'https://testhub.mesastar.org/commits/nearby_commits.json', contentType: 'application/json', dataType: 'json', data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha}, success: (returned_data) ->
       NearbyCommits.commits = returned_data.commits
-      if NearbyCommits.pull_requests && NearbyCommits.pull_requests.length > 0  
-        NearbyCommits.add_pull_requests()
       if NearbyCommits.commits && NearbyCommits.commits.length > 0
         NearbyCommits.add_commits()
     })
-
-  add_pull_requests: ->
-    $("<h4 class='font-weight-bold my-3 ml-3'>Open Pull Requests</h4>").appendTo('#nearby-commit-list')
-    $("<ul class='list-group list-group-flush mb-4' id='pull-requests'></ul>").appendTo('#nearby-commit-list')
-    NearbyCommits.add_commit_list(NearbyCommits.pull_requests, '#pull-requests')
-    if NearbyCommits.commits && NearbyCommits.commits.length > 0
-      $("<h4 class='font-weight-bold my-3 ml-3'>Recent Commits</h4>").appendTo('#nearby-commit-list')    
 
   add_commits: ->
     $("<ul class='list-group list-group-flush' id='commits'></ul>").appendTo('#nearby-commit-list')
@@ -166,9 +155,18 @@ NearbyCommits =
       NearbyCommits.commit_sha = $('#nearby-commit-center').html()
       NearbyCommits.retrieve_commits()
 
+CommitMessage = 
+  setup: ->
+    if $('#commit-stats').length && $('#commit-message').length
+      stats_height = $('#commit-stats').height()
+      message_height = $('#commit-message').height()
+      if message_height > 2.0 * stats_height
+        $('#commit-message').height(2.0 * stats_height)
+
 $ ->
   $('[data-toggle="tooltip"]').tooltip()
   TogglePassing.setup()
   ToggleMissing.setup()
   NearbyCommits.setup()
+  CommitMessage.setup()
   

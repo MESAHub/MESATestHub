@@ -3,12 +3,6 @@ class Commit < ApplicationRecord
   # Git structure
   has_many :branch_memberships, dependent: :destroy
   has_many :branches, through: :branch_memberships
-  # has_many :parent_relations, class_name: 'CommitRelation',
-           # foreign_key: :parent_id, dependent: :destroy
-  # has_many :child_relations, class_name: 'CommitRelation',
-           # foreign_key: :child_id, dependent: :destroy
-  # has_many :children, through: :parent_relations
-  # has_many :parents, through: :child_relations
 
   # from parsing do1_test_source in tested modules
   has_many :test_case_commits, dependent: :destroy
@@ -52,66 +46,9 @@ class Commit < ApplicationRecord
     end
   end
 
-  # get pull requests from github API
-  def self.api_pulls(**params)
-    api.pull_requests(repo_path, **params)
-  end
-
-  # find new open requests and add them to database, and convert existing
-  # pull requests to be closed if they no longer appear open to github api
-  def self.api_update_pulls
-    pulls_data = api_pulls(state: :open)
-    shas = pulls_data.pluck(:merge_commit_sha)
-    pulls_data = Hash[shas.zip(pulls_data.map(&:to_hash))]
-
-    # get all open pull request commits that were not found by the api call
-    # and close them
-    Commit.where(pull_request: true, open: true)
-          .where.not(sha: shas).each { |c| c.update(open: false) }
-
-    # get shas that need to be created
-    new_shas = shas - Commit.where(pull_request: true, sha: shas).pluck(:sha)
-
-    # get info from github for each commit
-    new_pulls = new_shas.map do |sha|
-      # don't use api_create, because we need to use parents without actually
-      # setting them. If we DID set parents, then branches would appear
-      # pre-maturely merged (head would have children). So instead we figure
-      # out parents from github data, find branch memberships of the parents,
-      # and then assign the union of those branche memberships to the commit
-      github_hash = api.commit(repo_path, sha)
-      commit = create_or_update_from_github_hash(github_hash: github_hash)
-
-      # now figure out branch memberships. ASSUME PARENTS EXIST. No disaster
-      # if no parents exist, but branches won't be set if they don't
-      github_hash[:parents].pluck(:sha).each do |parent_sha|
-        parent = Commit.includes(:branches).find_by(sha: parent_sha)
-        next if parent.nil?
-        parent.branches.each do |branch|
-          BranchMembership.find_or_create_by(branch: branch, commit: commit)
-        end
-      end
-      commit
-    end
-
-    # mark each as an open pull request, all at once
-    update_hash = {}
-    new_pulls.each do |pull|
-      # puts "sha: #{pull.sha}"
-      update_hash[pull.id] = {
-        pull_request: true,
-        open: true,
-        message: pulls_data[pull.sha][:title],
-        github_url: pulls_data[pull.sha][:html_url]
-      }
-    end
-    Commit.update(update_hash.keys, update_hash.values)
-  end
-
-  def self.api_create(sha: nil, update_parents: false, **params)
+  def self.api_create(sha: nil, **params)
     create_or_update_from_github_hash(
-      github_hash: api.commit(repo_path, sha, **params),
-      update_parents: update_parents
+      github_hash: api.commit(repo_path, sha, **params)
     )
   end
 
@@ -121,8 +58,7 @@ class Commit < ApplicationRecord
   # of parents of parents are retrieved and created. Instead, you should
   # set up ALL commits first, and then establish relations with one giant
   # call that hits the api only once
-  def self.create_or_update_from_github_hash(github_hash: nil, branch: nil,
-    update_parents: false)
+  def self.create_or_update_from_github_hash(github_hash: nil, branch: nil)
     commit = if Commit.exists?(sha: github_hash[:sha])
                find_by(sha: github_hash[:sha])
              else
@@ -137,7 +73,6 @@ class Commit < ApplicationRecord
       end
     end
 
-    commit.api_update_parents(github_hash[:parents]) if update_parents
     commit
   end
 
@@ -163,8 +98,6 @@ class Commit < ApplicationRecord
         api_update_tree(branch: this_branch, force: force,
                         days_before: days_before)
       end
-
-      api_update_pulls
 
       # Somewhat redundant, as it re-establishes branch names, but also
       # updates head commits and determines whether each branch is merged or
@@ -288,28 +221,6 @@ class Commit < ApplicationRecord
         # all hashes now exist in tccs_to_insert, so do batch insert
         TestCaseCommit.insert_all(tccs_to_insert)
       end
-
-
-        # commits = github_data.each do |github_hash|
-
-        #   hashes_to_insert << hash_from_github
-        #   create_or_update_from_github_hash(github_hash: github_hash,
-        #                                     branch: branch,
-        #                                     update_parents: false)
-        # end
-        # all commits should exist now, so we can safely set up parent/child
-        # relations
-        # github_data.zip(commits).each do |github_hash, commit|
-        #   commit.api_update_parents(github_hash[:parents])
-        # end
-
-        # still need to update branch ownership if this branch was merged into
-        # another (this branch's commits already belong to this branch, but if,
-        # for example, this branch was merged into another branch, we don't
-        # know that yet). Branch.update_branches (not the basic version) should
-        # take care of this in a separate call. If this method is called with
-        # no specific branch, you get this automatically. A +force+ call will
-        # also handle this, since every single commit gets touched with that.
     end
     nil
   end
@@ -433,18 +344,7 @@ class Commit < ApplicationRecord
 
   def self.parse_sha(sha, branch: 'main', includes: nil)
     branch = Branch.named(branch) || Branch.main
-    if sha.downcase == 'auto'
-      # no pull requests? just pretend like we asked for head
-      if branch.pull_requests.empty?
-        return branch.get_head unless includes
-
-        branch.get_head(includes: includes)
-      else
-        return branch.pull_requests.order(:commit_time).first unless includes
-
-        branch.pull_requests.includes(includes).order(:commit_time).first
-      end
-    elsif sha.downcase == 'head'
+    if (sha.downcase == 'head') || (sha.downcase == 'auto')
       puts "Getting head commit of #{branch.name}"
       return branch.get_head unless includes
 
@@ -483,47 +383,6 @@ class Commit < ApplicationRecord
   ####################
   # INSTANCE METHODS #
   ####################
-
-  # set parents from api data. Might call api if parents don't exist in
-  # database already
-  # def api_update_parents(parent_hashes)
-  #   # associations
-  #   #
-  #   # first link to parents, if any
-  #   # note, we don't explicitly deal with children relations, since parent
-  #   # relations implicitly take care of it. They would be set whenever this
-  #   # is done to the children
-  #   #
-  #   # TODO: MAKE IT SO BULK PARENT ASSIGNMENTS DON'T CALL API UNTIL ALL ARE DONE
-  #   # MAYBE HUNT FOR ORPHANS LATER?
-  #   to_create = []
-  #   created = {}
-  #   parent_hashes.each do |parent_hash|
-  #     # if parent doesn't exist, create a dummy with right sha that will
-  #     # hopefully be filled in later
-  #     if Commit.exists?(sha: parent_hash[:sha])
-  #       created[parent_hash[:sha]] = Commit.find_by(sha: parent_hash[:sha])
-  #     else
-  #       to_create << parent_hash[:sha]
-  #     end
-  #   end
-
-  #   # missing parents get created afterwards. This will recursively 
-  #   # create parents of parents in an inefficient manner, but since we don't
-  #   # have the parent data in bulk, we're just sticking with this.
-  #   to_create.each do |sha|
-  #     created[sha] = Commit.api_create(sha: sha, update_parents: true)
-  #   end
-
-  #   created.each do |sha, new_parent|
-  #     # link the two in a commit relation
-  #     unless CommitRelation.exists?(parent: new_parent, child: self)
-  #       CommitRelation.create(parent: new_parent, child: self)
-  #     end
-  #   end
-
-
-  # end
 
   # use GitHub api to pull `do1_test_source` for each module and set up
   # test case commits if they don't exist
@@ -731,11 +590,32 @@ class Commit < ApplicationRecord
 
     # determine where rest starts by looking at length of first line, but
     # dropping any ellipsis
+    first_line = message_first_line(max_len)
     start = message_first_line(max_len).chomp('...').length
     res = message[(start..-1)].strip
     return nil if res.empty?
     
-    '...' + res.strip
+    res = if /.*\.\.\.$/ =~ first_line
+            '...' + res.strip
+          else
+            res.strip
+          end
+    res.gsub!(/\n(\s*\n)+/, '<br><br>')
+    newline_plus_space_matcher = /\n(?<indent>\s+)/
+    m = newline_plus_space_matcher.match(res)
+    while m
+      indent = m[:indent].chars.map do |char|
+        case char
+        when "\t" then '&#9;'
+        when ' ' then '&nbsp;'
+        else
+          ''
+        end
+      end.join
+      res.sub!(newline_plus_space_matcher, "<br>#{indent}")
+      m = newline_plus_space_matcher.match(res)
+    end
+    res.html_safe
   end
 end
 

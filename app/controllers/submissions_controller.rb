@@ -167,15 +167,7 @@ class SubmissionsController < ApplicationController
 
     # if commit doesn't exist, do desperate call to update pull requests to see
     # if that does the trick and search again
-    unless @commit.nil?
-      Commit.api_update_pulls
-      @commit = Commit.find_by_sha(commit_params[:sha])
-    end
-
-    # still no commit in the db? We COULD try running api_update_tree, but
-    # that is very expensive, and repeated failures would be extremely costly
-    # Stick with the pull request update only as a compromise, and bail if it
-    # doesn't work.
+    @commit ||= Commit.api_create(sha: commit_params[:sha])
 
     # bail out if there was no proper commit found (this would be bad!)
     submission_fail_commit(commit_params[:sha]) and return nil unless @commit
