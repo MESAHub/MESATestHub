@@ -252,10 +252,10 @@
                         %td.column-solver_calls_made.d-none= data_hash['solver_calls_made']
                         %td.column-solver_calls_failed.d-none= data_hash['solver_calls_failed']
                         %td.column-log_rel_run_E_err.d-none
-                        - if data_hash['log_rel_run_E_err']
-                          =format('%.2f',data_hash['log_rel_run_E_err'])
-                        - else
-                          =""
+                          - if data_hash['log_rel_run_E_err']
+                            =format('%.2f',data_hash['log_rel_run_E_err'])
+                          - else
+                            =""
 
                         - @specific_columns.each do |specific_col, visible|
                           %td{class: "column-#{specific_col}" + (visible ? '' : ' d-none')} = data_hash[specific_col]

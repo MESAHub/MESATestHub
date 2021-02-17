@@ -16,7 +16,8 @@ class TestInstance < ApplicationRecord
     'photo_file' => 'Missing Photo',
     'photo_checksum' => 'Photo Checksum',
     'photo_diff' => 'Photo Diff',
-    'compilation' => 'Compilation'
+    'compilation' => 'Compilation',
+    'stderr' => 'Stderr (mesa_error?)'
   })
 
   @@compilers = %w[gfortran ifort SDK]
