@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2021_01_25_215302) do
+ActiveRecord::Schema.define(version: 2021_02_17_165657) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -93,6 +93,9 @@ ActiveRecord::Schema.define(version: 2021_01_25_215302) do
     t.integer "redos"
     t.float "log_rel_run_E_err"
     t.integer "order", default: 0
+    t.integer "model_number", default: -1
+    t.float "star_age", default: -1.0
+    t.integer "num_retries", default: -1
     t.index ["test_instance_id"], name: "index_instance_inlists_on_test_instance_id"
   end
 

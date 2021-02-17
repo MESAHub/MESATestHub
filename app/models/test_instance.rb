@@ -95,7 +95,7 @@ class TestInstance < ApplicationRecord
     # updated as more junk is added to the test output, and attributes may need
     # to be set manually if naming conventions between testhub and mesa diverge
     instance = new(instance_params.reject do |key|
-      ['test_case', 'module', 'inlists', 'outcome'].include? key 
+      ['test_case', 'module', 'inlists', 'outcome'].include? key
     end)
 
     # other important details that we can't get directly from the params
@@ -132,7 +132,7 @@ class TestInstance < ApplicationRecord
         new_inlist = instance.instance_inlists.build(
           inlist_params.reject do |key|
             ['extra_testhub_names', 'extra_testhub_vals'].include? key
-          end.merge({order: i})
+          end.merge({ order: i })
         )
         # optionally build on extra data to the inlist
         if inlist_params['extra_testhub_names'] &&
