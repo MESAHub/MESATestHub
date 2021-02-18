@@ -36,6 +36,9 @@ gem 'octokit', "~> 4.0"
 gem 'faraday-http-cache'
 gem 'github_webhook', '~> 1.1'
 
+# heroku metrics
+gem 'barnes'
+
 group :development, :test do
   gem 'byebug', platforms: [:mri, :mingw, :x64_mingw]
   # gem 'guard-bundler'
