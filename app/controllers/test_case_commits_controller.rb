@@ -76,7 +76,7 @@ class TestCaseCommitsController < ApplicationController
 
     # @test_case_version isn't getting set properly. Need to investigate...
 
-    @test_case_commit.test_instances.each do |instance|
+    @test_case_commit.test_instances.ascending.each do |instance|
       @test_instance_classes[instance] =
         if instance.passed
           'table-success'
@@ -127,7 +127,7 @@ class TestCaseCommitsController < ApplicationController
     # inlist. Hopefully that doesn't happen.
     @raw_inlists = []
     @inlists = []
-    @test_case_commit.test_instances.each do |ti|
+    @test_case_commit.test_instances.ascending.each do |ti|
       if ti.instance_inlists.count > @inlists.count
         @inlists = ti.instance_inlists.map do |inlist|
           inlist.inlist.sub(/^inlist_/, '').sub(/_header$/, '')
@@ -147,7 +147,7 @@ class TestCaseCommitsController < ApplicationController
     # each element in the values will encode all of the table data needed for
     # one computer's submission of that inlist
     @inlist_data = Hash.new([])
-    @test_case_commit.test_instances.each do |ti|
+    @test_case_commit.test_instances.ascending.each do |ti|
       @inlists.zip(@raw_inlists).each do |inlist_short, inlist_full|
         # puts "Gathering data for computer #{ti.computer} and inlist #{inlist_full}"
         inlist = ti.instance_inlists.select do |inl|

@@ -343,7 +343,7 @@ class TestCasesController < ApplicationController
     @inlist_columns = {}
     @inlists.each do |inlist|
       # all inlists have these columns
-      @inlist_columns[inlist] = %w{runtime steps retries redos 
+      @inlist_columns[inlist] = %w{runtime model_number steps retries redos 
         solver_iterations solver_calls_made solver_calls_failed
         log_rel_run_E_err}
 
@@ -370,7 +370,7 @@ class TestCasesController < ApplicationController
 
     # names of default columns in the table of instances, can be toggled on
     # and off
-    @default_columns = %w{commit status date runtime ram checksum } +
+    @default_columns = %w{commit status date runtime ram checksum model_number } +
                        %w{restart_photo restart_checksum threads spec steps } +
                        %w{retries redos solver_iterations solver_calls_made} +
                        %w{solver_calls_failed}
@@ -381,6 +381,7 @@ class TestCasesController < ApplicationController
       'runtime' => 'Runtime [min]',
       'ram' => 'RAM Usage',
       'checksum' => 'Checksum',
+      'model_number' => 'Model Number',
       'restart_photo' => 'Re Photo',
       'restart_checksum' => 'Re Checksum',
       'threads' => 'Threads',
@@ -409,6 +410,7 @@ class TestCasesController < ApplicationController
       'runtime' => true,
       'ram' => false,
       'checksum' => false,
+      'model_number' => true,
       'restart_photo' => false,
       'restart_checksum' => false,
       'threads' => false,
@@ -425,6 +427,7 @@ class TestCasesController < ApplicationController
       'runtime' => false,
       'ram' => false,
       'checksum' => false,
+      'model_number' => true,
       'threads' => false,
       'spec' => false,
       'steps' => true,
@@ -443,6 +446,7 @@ class TestCasesController < ApplicationController
       'runtime' => 'Runtime',
       'ram' => 'RAM Usage',
       'checksum' => 'Checksum',
+      'model_number' => 'Model Number',
       'restart_photo' => 'Re Photo',
       'restart_checksum' => 'Re Checksum',
       'threads' => 'Threads',

@@ -149,7 +149,7 @@ class TestCase < ApplicationRecord
     # build this up and then execute only once or twice
     valid_commit_ids = Branch.named(search_params[:branch]).commits.where(
       commit_time: start_date..end_date).pluck(:id)
-    query = { commit_id: valid_commit_ids }
+    query = { commit_id: valid_commit_ids.reverse }
 
     return nil if test_instances.joins(:commit).where(query).count == 0
 
@@ -180,13 +180,14 @@ class TestCase < ApplicationRecord
     sort_query = ''
     # by default, with most recent commits and instances first
     if search_params[:sort_query].nil? || search_params[:sort_query].empty?
-      sort_query = 'commits.commit_time DESC, test_instances.created_at DESC'
+      sort_query = 'commits.created_at DESC, commits.commit_time DESC, test_instances.created_at DESC'
     else
       # enforce a valid sort order to prevent SQL injection
       sort_order = search_params[:sort_order] || 'ASC'
       sort_order.upcase!
       unless %w{ASC DESC}.include? sort_order
         sort_order = 'ASC'
+        puts "forced order to ASC"
       end
 
       # dictionary between what was passed in (if anything), and what the
@@ -197,7 +198,7 @@ class TestCase < ApplicationRecord
       # creation timestamp ordering, which respect user input for ordering.
       sort_query = case search_params[:sort_query].to_s.downcase
       when "commit" 
-        "commits.commit_time #{sort_order}, "\
+        "commits.created_at #{sort_order} commits.commit_time #{sort_order}, "\
         "test_instances.created_at #{sort_order}"
       when "status" 
         "test_instances.passed #{sort_order}, test_instances.created_at DESC"
@@ -228,16 +229,24 @@ class TestCase < ApplicationRecord
         else
           # exhausted all possibilites, just default to created_at and hope
           # for the best
-          'commits.commit_time DESC, test_instances.created_at DESC'
+          'commits.created_at DESC, commits.commit_time DESC, test_instances.created_at DESC'
         end
       end
     end
-    test_instances
+    res = test_instances
       .includes(:commit, :test_case_commit, :inlist_data,
                 { instance_inlists: :inlist_data, computer: :user })
       .where(query)
-      .order(sort_query)
+      .order(Arel.sql(sort_query))
       .page(search_params[:page] || 1)
+    puts '#############################################'
+    res.each do |ti|
+      puts ti.created_at
+    end
+    puts query
+    puts sort_query
+    puts '#############################################'
+    res
   end
 
   def sorted_computers(branch, start_date, end_date)
