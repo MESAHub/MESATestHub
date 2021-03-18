@@ -9,7 +9,7 @@ class CommitsController < ApplicationController
     @selected_branch = Branch.includes(:head).named(params[:branch])
     @other_branches = @commit.branches.reject do |branch|
       branch == @selected_branch
-    end
+    end.sort_by { |c| c.updated_at }
     @branches = [@selected_branch, @other_branches].flatten
 
     # Get array of commits made in the same branch around the same time of this
@@ -147,7 +147,8 @@ class CommitsController < ApplicationController
 
   def index
     @page_length = 25
-    @branches = Branch.all
+    @branches = Branch.includes(:head)
+    @branches.sort_by! { |b| b.head.created_at }
     @unmerged_branches = @branches.reject(&:merged)
     @merged_branches = @branches.select(&:merged)
     @branch_names = @branches.map(&:name)

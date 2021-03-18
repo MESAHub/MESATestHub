@@ -11,9 +11,9 @@ class Branch < ApplicationRecord
   # use github api to create an array of hashes that contain data about all
   # known branches
   def self.api_branches(**params)
-    # puts '#######################'
-    # puts 'API retrieving branches'
-    # puts '#######################'
+    puts '#######################'
+    puts 'API retrieving branches'
+    puts '#######################'
     api.branches(@@repo_path, **params)
   end
 
@@ -59,27 +59,67 @@ class Branch < ApplicationRecord
   # the commits themselves)
   def self.api_update_branches(**params)
     branch_data = api_branches(**params)
+
+    # STEP 1: UPDATE WHICH BRANCHES ARE PRESENT AT ALL
+    ##################################################
+    github_branch_names = branch_data.map(&:name)
+    existing_branch_names = Branch.all.pluck(:name)
+
+    # batch insert of new branches
+    to_add = github_branch_names - existing_branch_names
+    branch_hashes_to_insert = to_add.map { |b_name| { name: b_name } }
+    unless branch_hashes_to_insert.empty?
+      Branch.insert_all(branch_hashes_to_insert)
+    end
+
+    # STEP 2: UPDATE HEAD COMMITS, TRIGGERING A LARGER UPDATE IF HEAD COMMIT
+    # IS MISSING
+    ########################################################################
+
     branch_data.each do |branch_hash|
-      branch = if Branch.exists?(name: branch_hash[:name])
-                 Branch.find_by(name: branch_hash[:name])
-               else
-                 Branch.new(name: branch_hash[:name])
-               end
-      head_commit = if Commit.exists?(sha: branch_hash[:commit][:sha])
-                      Commit.find_by(sha: branch_hash[:commit][:sha])
-                    else
-                      Commit.api_create(sha: branch_hash[:commit][:sha])
-                    end
-      branch.head = head_commit
+      branch = Branch.find_by(name: branch_hash[:name])
+      next unless branch
+
+      # update head commit. If that commit doesn't exist, update that branch's
+      # commits ONLY
+      new_head_commit = Commit.find_by(sha: branch_hash[:commit][:sha])
+      if new_head_commit
+        branch.head = new_head_commit
+      else
+        Commit.api_update_tree(branch: branch)
+        new_head_commit = Commit.find_by(sha: branch_hash[:commit][:sha])
+        branch.head = new_head_commit if new_head_commit
+      end
+
       branch.save
     end
 
-    # make sure each branch extends back to the root commit
-    # Branch.all.each { |branch| branch.recursive_assign_root }
-
+    # STEP 3: MAKE SURE COMMITS ON MERGED BRANCHES NOW BELONG TO THEIR NEW
+    # BRANCHES, THEN DELETE ALL ORPHANED BRANCHES AND THEIR MEMBERSHIPS
+    # (THOUGH NOT THEIR COMMITS)
+    #########################################################################
+  
     # make sure that all commits in a merged branch belong to at least the
     # branches that its head node belongs to
-    Branch.merged.each { |branch| branch.update_membership }
+    # Branch.merged.each { |branch| branch.update_membership }
+
+    # delete orphaned branches, but first make sure their commits have homes
+    to_delete = Branch.where(name: existing_branch_names - github_branch_names)
+    to_delete.each(&:update_membership)
+
+    # using destroy_all would be simpler, but much more time-consuming, as 
+    # it would need to issue a delete statement for each affected branch
+    # membership. Instead, we delete the branch memberships first, and then
+    # kill the branches themseleves with delete_all, which is closer to the
+    # database, and requires more babysitting (branch memberships are dependent
+    # on branches, so they should die when the branch dies)
+    unless to_delete.empty?
+      to_delete.each do |branch|
+        branch.branch_memberships.delete_all
+      end
+      to_delete.delete_all
+    end
+
     nil
   end
 
