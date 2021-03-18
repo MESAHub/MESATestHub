@@ -100,6 +100,7 @@ class TestCaseCommitsController < ApplicationController
       'runtime' => true,
       'ram' => false,
       'checksum' => true,
+      'model_number' => true,
       'threads' => false,
       'spec' => false,
       'steps' => true,

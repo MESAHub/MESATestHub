@@ -16,11 +16,11 @@ column_control =
       self = this
       klass = '.column-' + $(self).val()
       if self.checked
-        console.log('turned on column ' + klass)
+        # console.log('turned on column ' + klass)
         $(klass).removeClass('d-none')
         setCookie(klass.replace('.', ''), 'checked', 7)
       else
-        console.log('turned off column ' + klass)
+        # console.log('turned off column ' + klass)
         $(klass).addClass('d-none')
         setCookie(klass.replace('.', ''), 'unchecked', 7)
       column_control.adjust_header_widths($(self).data('inlist'))

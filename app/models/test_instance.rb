@@ -521,6 +521,10 @@ class TestInstance < ApplicationRecord
     test_data.where(name: name).order(updated_at: :desc).first.value = new_val
   end
 
+  def model_number
+    instance_inlists.order(:order).last.model_number
+  end
+
   def to_minutes(num)
     num.to_f / 60.0
   end

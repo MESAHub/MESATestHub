@@ -124,7 +124,7 @@
           Default Columns
           %small.text-muted Check/uncheck to show/hide
         .row
-          -@default_columns.each_slice(5) do |columns|
+          -@default_columns.each_slice(6) do |columns|
             .col
               -columns.each do |klass, checked|
                 .mr-5
@@ -161,6 +161,7 @@
                   %th.column-runtime Runtime
                   %th.column-ram.d-none RAM Usage
                   %th.column-checksum Checksum
+                  %th.column-model_number Model Number
                   %th.column-threads.d-none Threads
                   %th.column-spec.d-none Computer Specification
                   %th.column-steps Steps
@@ -188,6 +189,8 @@
                     %td.column-ram.d-none=format("%.2f", instance.rn_mem_GB || 0) + ' GB'
                     %td.column-checksum
                       %samp=instance.checksum[(-7..-1)] if instance.checksum
+                    %td.column-model_number
+                      =instance.model_number
                     %td.column-threads.d-none=instance.omp_num_threads
                     %td.column-spec.d-none=instance.computer_specification
                     %td.column-steps=instance.steps
@@ -221,6 +224,7 @@
                       %th.column-runtime Runtime
                       %th.column-threads.d-none Threads
                       %th.column-spec.d-none Computer Specification
+                      %th.column-model_number Model Number
                       %th.column-steps Steps
                       %th.column-retries Retries
                       %th.column-redos.d-none Redos
@@ -245,6 +249,7 @@
                             =format('%.2f', data_hash['runtime_minutes']) + ' m'
                         %td.column-threads.d-none=data_hash['threads']
                         %td.column-spec.d-none=data_hash['spec']
+                        %td.column-model_number=data_hash['model_number']
                         %td.column-steps=data_hash['steps']
                         %td.column-retries=data_hash['retries']
                         %td.column-redos.d-none= data_hash['redos']
