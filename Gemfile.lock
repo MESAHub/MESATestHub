@@ -1,6 +1,7 @@
 GEM
   remote: https://rubygems.org/
   specs:
+<<<<<<< HEAD
     actioncable (6.0.3.7)
       actionpack (= 6.0.3.7)
       nio4r (~> 2.0)
@@ -239,7 +240,6 @@ GEM
     listen (3.1.5)
       rb-fsevent (~> 0.9, >= 0.9.4)
       rb-inotify (~> 0.9, >= 0.9.7)
-      ruby_dep (~> 1.2)
     lograge (0.11.2)
       actionpack (>= 4)
       activesupport (>= 4)
@@ -488,7 +488,7 @@ DEPENDENCIES
   web-console (>= 3.3.0)
 
 RUBY VERSION
-   ruby 2.7.1p83
+   ruby 3.0.0p0
 
 BUNDLED WITH
-   2.1.4
+   2.2.11

@@ -120,7 +120,10 @@ class TestCaseCommitsController < ApplicationController
       'solver_iterations' => false,
       'solver_calls_made' => false,
       'solver_calls_failed' => false,
-      'log_rel_run_E_err' => false
+      'log_rel_run_E_err' => false,
+      'model_number' => false,
+      'star_age' => false,
+      'num_retries' => true
     }
 
     @specific_columns = {}
@@ -185,6 +188,10 @@ class TestCaseCommitsController < ApplicationController
         data_hash[:fpe_checks] = ti.fpe_checks
         data_hash[:run_optional] = ti.run_optional
         data_hash[:resolution_factor] = ti.resolution_factor
+        data_hash[:model_number] = inlist.model_number || -1
+        data_hash[:star_age] = inlist.star_age || -1
+        data_hash[:num_retries] = inlist.num_retries || -1
+
 
         @specific_columns.each do |col_name|
           data_hash[col_name] = if ti.get_data(col_name)

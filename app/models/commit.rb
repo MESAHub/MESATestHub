@@ -34,9 +34,9 @@ class Commit < ApplicationRecord
   # done AFTER this
   
   def self.api_commits(auto_paginate: true, **params)
-    # puts '######################'
-    # puts 'API retrieving commits'
-    # puts '#######################'
+    puts '######################'
+    puts 'API retrieving commits'
+    puts '#######################'
     begin
       data = api(auto_paginate: auto_paginate).commits(repo_path, **params)
     rescue Octokit::NotFound
@@ -109,7 +109,7 @@ class Commit < ApplicationRecord
       earliest ||= days_before.days.before(branch.commits.maximum(:commit_time) || Date.today)
       # Avoid asking api for commits since the beginning of time unless we 
       # REALLY want it.
-      github_data = if force || Commit.count.zero?
+      github_data = if force || branch.commits.count.zero?
                       api_commits(sha: branch.name)
                     else
                       api_commits(sha: branch.name, since: earliest)
@@ -118,7 +118,7 @@ class Commit < ApplicationRecord
       # probably deleted on the github side
       if github_data.nil?
         branch.update(merged: true) 
-        return unless github_data
+        return
       end
 
       # Prevent abusive calls to database to the beginning of time by only
@@ -391,6 +391,9 @@ class Commit < ApplicationRecord
     TestCase.modules.each do |mod|
       source_file = "/#{mod}/test_suite/do1_test_source"
       begin
+        puts '#################################'
+        puts "API getting test cases for commit"
+        puts '#################################'
         contents = Base64.decode64(
           Commit.api.content(
             Commit.repo_path, path: source_file, query: {ref: sha}).content)
