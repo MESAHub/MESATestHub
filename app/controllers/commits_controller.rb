@@ -66,7 +66,7 @@ class CommitsController < ApplicationController
         @failing_instances[tcc].pluck(:failure_type).uniq.each do |failure_type|
           @failure_types[tcc][failure_type] = @failing_instances[tcc].select do |ti|
             ti.failure_type == failure_type
-          end.map(&:computer)
+          end.map(&:computer).uniq
         end
       end
       @counts[tcc] = {}
