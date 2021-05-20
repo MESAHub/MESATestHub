@@ -93,7 +93,7 @@
               - when :failure
                 %span.font-weight-bold.text-danger Failed
                 %a.text-reset.d-none.build-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{entry[:computer].name}/build.log", target:'_blank', 'data-commit': @commit.sha, 'data-computer': entry[:computer].name}
-                  %button.btn.btn-light{'data-toggle' => 'modal', 'data-target' => '#buildModal'}
+                  %button.btn.btn-light
                     %i.fa.fa-file-text-o
               - when :mixed
                 %span.font-weight-bold.text-warning Mixed
@@ -195,23 +195,6 @@
           %li.list-group-item.list-group-item-action.list-group-item-success
             .d-flex.w-100.mb-0.justify-content-between.mb-0
               = render partial: "badges", locals: { tcc: tcc }
-
-.modal.modal-xl.fade#buildModal{:tabindex => "-1", 'aria-labelledby' => 'buildModalLabel', 'aria-hidden' => "true", 'role' => 'dialog'}
-  .modal-dialog{role: 'document'}
-    .modal-content
-      .modal-header
-        -# %h5.modal-title#buildModalLabel
-        -#   Build Log for
-        -#   %span.text-monospace=@commit
-        -#   from
-        -#   %span.text-monospace.computer-name Computer Name
-        %h5.modal-title#buildModalLabel Title
-        %button.close{type: "button", 'data-dismiss' => "modal", 'aria-label' => "Close"}
-          %span{'aria-hidden'=> "true"} &times;
-      .modal-body
-        %p Body
-      .modal-footer
-        %p Footer
 
 -#  .row
 -#    .col

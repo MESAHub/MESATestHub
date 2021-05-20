@@ -172,16 +172,16 @@ CommitMessage =
 
 BuildLog = 
   setup: ->
-    console.log('in setup')
     if $('.build-log-link').length
       $('.build-log-link').each ->
         anchor = $(this)
         $.ajax({
           url: anchor.attr('href'),
           method: 'HEAD',
-          headers: {'Access-Control-Allow-Origin': '*'},
           crossDomain: true,
           success: (returned_data) ->
+            anchor.hide()
+            anchor.removeClass('d-none')
             anchor.fadeIn()
         })
 
