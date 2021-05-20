@@ -35,6 +35,7 @@ gem 'font-awesome-rails'
 gem 'octokit', "~> 4.0"
 gem 'faraday-http-cache'
 gem 'github_webhook', '~> 1.1'
+gem 'rack-cors', require: 'rack/cors'
 
 # heroku metrics
 gem 'barnes'

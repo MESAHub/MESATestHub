@@ -76,10 +76,17 @@ NearbyCommits =
   retrieve_commits: ->
     # use this for development due to CORS issues
     # $.get({url: 'http://localhost:3000/commits/nearby_commits.json', contentType: 'application/json', dataType: 'json', data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha}, success: (returned_data) ->
-    $.get({url: 'https://testhub.mesastar.org/commits/nearby_commits.json', contentType: 'application/json', dataType: 'json', data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha}, success: (returned_data) ->
-      NearbyCommits.commits = returned_data.commits
-      if NearbyCommits.commits && NearbyCommits.commits.length > 0
-        NearbyCommits.add_commits()
+    $.get({
+      url: 'https://testhub.mesastar.org/commits/nearby_commits.json',
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      crossDomain: true,
+      dataType: 'json',
+      data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha},
+      success: (returned_data) ->
+        NearbyCommits.commits = returned_data.commits
+        if NearbyCommits.commits && NearbyCommits.commits.length > 0
+          NearbyCommits.add_commits()
     })
 
   add_commits: ->
@@ -163,10 +170,26 @@ CommitMessage =
       if message_height > 2.0 * stats_height
         $('#commit-message').height(2.0 * stats_height)
 
+BuildLog = 
+  setup: ->
+    console.log('in setup')
+    if $('.build-log-link').length
+      $('.build-log-link').each ->
+        anchor = $(this)
+        $.ajax({
+          url: anchor.attr('href'),
+          method: 'HEAD',
+          headers: {'Access-Control-Allow-Origin': '*'},
+          crossDomain: true,
+          success: (returned_data) ->
+            anchor.fadeIn()
+        })
+
 $ ->
   $('[data-toggle="tooltip"]').tooltip()
   TogglePassing.setup()
   ToggleMissing.setup()
   NearbyCommits.setup()
   CommitMessage.setup()
+  BuildLog.setup()
   

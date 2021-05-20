@@ -92,13 +92,14 @@
                 %span.font-weight-bold.text-success Succeeded
               - when :failure
                 %span.font-weight-bold.text-danger Failed
-                %button.btn.btn-light{'data-toggle' => 'modal', 'data-target' => '#buildModal'}
-                  %i.fa.fa-file-text-o
-                }
+                %a.text-reset.d-none.build-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{entry[:computer].name}/build.log", target:'_blank', 'data-commit': @commit.sha, 'data-computer': entry[:computer].name}
+                  %button.btn.btn-light{'data-toggle' => 'modal', 'data-target' => '#buildModal'}
+                    %i.fa.fa-file-text-o
               - when :mixed
                 %span.font-weight-bold.text-warning Mixed
-                %button.btn.btn-light{'data-toggle' => 'modal', 'data-target' => '#buildModal'}
-                  %i.fa.fa-file-text-o
+                %a.text-reset.d-none.build-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{entry[:computer].name}/build.log", target:'_blank', 'data-commit': @commit.sha, 'data-computer': entry[:computer].name}
+                  %button.btn.btn-light{'data-toggle' => 'modal', 'data-target' => '#buildModal'}
+                    %i.fa.fa-file-text-o
               - else
                 %span.h5.font-weight-bold.text-primary Testhub Error
 
