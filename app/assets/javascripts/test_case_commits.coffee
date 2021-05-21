@@ -60,6 +60,20 @@ column_control =
     else
       header.addClass('d-none')
     
-
+TestLogs = 
+  setup: ->
+    if $('.test-log-link').length
+      $('.test-log-link').each ->
+        anchor = $(this)
+        $.ajax({
+          url: anchor.attr('href'),
+          method: 'HEAD',
+          crossDomain: true,
+          success: (returned_data) ->
+            anchor.hide()
+            anchor.removeClass('d-none')
+            anchor.fadeIn()
+        })
 $ ->
   column_control.setup()
+  TestLogs.setup()
