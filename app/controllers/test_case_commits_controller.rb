@@ -54,7 +54,7 @@ class TestCaseCommitsController < ApplicationController
 
       # prepare for adding plus or wrench symbole for optional inlists/FPEs
       if tcc.test_instances.where(run_optional: true).count > 0
-        @extra_symbols[tcc] += ['plus-square', 'Optional Inlists Run']
+        @extra_symbols[tcc] += [['plus-square', 'Optional Inlists Run']]
       end
       if tcc.test_instances.where(fpe_checks: true).count > 0
         @extra_symbols[tcc] += [['wrench', 'FPE Checks Run']]
