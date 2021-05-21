@@ -524,6 +524,7 @@ class TestInstance < ApplicationRecord
   end
 
   def model_number
+    return -1 unless instance_inlists.count > 0
     instance_inlists.order(:order).last.model_number
   end
 

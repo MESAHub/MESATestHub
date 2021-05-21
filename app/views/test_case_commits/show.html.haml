@@ -197,15 +197,15 @@
                     %td.column-checksum
                       %samp=instance.checksum[(-7..-1)] if instance.checksum
                     %td.column-model_number
-                      =instance.model_number
-                    %td.column-threads.d-none=instance.omp_num_threads
-                    %td.column-spec.d-none=instance.computer_specification
-                    %td.column-steps=instance.steps
-                    %td.column-retries=instance.retries
-                    %td.column-redos.d-none= instance.redos
-                    %td.column-solver_iterations.d-none= instance.solver_iterations
-                    %td.column-solver_calls_made.d-none= instance.solver_calls_made
-                    %td.column-solver_calls_failed.d-none= instance.solver_calls_failed
+                      =instance.model_number if instance && instance.model_number
+                    %td.column-threads.d-none=instance.omp_num_threads if instance && instance.omp_num_threads
+                    %td.column-spec.d-none=instance.computer_specification if instance && instance.computer_specification
+                    %td.column-steps=instance.steps if instance && instance.steps
+                    %td.column-retries=instance.retries if instance && instance.retries
+                    %td.column-redos.d-none= instance.redos if instance && instance.redos
+                    %td.column-solver_iterations.d-none= instance.solver_iterations if instance && instance.solver_iterations
+                    %td.column-solver_calls_made.d-none= instance.solver_calls_made if instance && instance.solver_calls_made
+                    %td.column-solver_calls_failed.d-none= instance.solver_calls_failed if instance && instance.solver_calls_failed
                     %td.column-log_rel_run_E_err.d-none
                       -if instance.log_rel_run_E_err
                         =format('%.2f',instance.log_rel_run_E_err || 0)
