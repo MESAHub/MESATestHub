@@ -30,7 +30,7 @@
         = @commit
         - if @commit.run_optional?
           =fa_icon('plus-square', title: 'Optional inlists run on all tests')
-        -if commit.fpe_checks?
+        -if @commit.fpe_checks?
           =fa_icon('wrench', title: 'FPE checks run on all tests')
 
 .row.mt-0
