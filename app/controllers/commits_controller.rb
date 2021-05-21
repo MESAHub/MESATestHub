@@ -66,7 +66,16 @@ class CommitsController < ApplicationController
         @failing_instances[tcc].pluck(:failure_type).uniq.each do |failure_type|
           @failure_types[tcc][failure_type] = @failing_instances[tcc].select do |ti|
             ti.failure_type == failure_type
-          end.map(&:computer).uniq
+          end.map do |ti| 
+            { 
+              computer: ti.computer.name,
+              run_optional: ti.run_optional,
+              fpe_checks: ti.fpe_checks 
+            }
+          end.uniq.sort_by do |failure_config|
+            [failure_config[:run_optional], failure_config[:fpe_checks],
+             failure_config[:computer]]
+          end
         end
       end
       @counts[tcc] = {}
