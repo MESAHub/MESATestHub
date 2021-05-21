@@ -293,6 +293,8 @@ class CommitsController < ApplicationController
         {
           short_sha: commit.short_sha,
           message_first_line: commit.message_first_line(40),
+          run_optional: commit.run_optional?,
+          fpe_checks: commit.fpe_checks?,
           author: commit.author,
           commit_time: format_time(commit.commit_time),
           message_rest: commit.message_rest(40),

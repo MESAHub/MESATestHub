@@ -25,6 +25,8 @@
               .d-flex.w-100.justify-content-between
                 
                 %h5.font-weight-bold.d-none.d-md-inline
+                  -@extra_symbols[tcc].each do |pair|
+                    =fa_icon(pair[0], title: pair[1])
                   =commit.message_first_line(50)
                 %a.stretched-link.text-reset{href: test_case_commit_path(branch: params[:branch], sha: commit.short_sha, test_case: params[:test_case], module: params[:module])}
                   %button.btn.ml-2{class: @btn_classes[commit]}

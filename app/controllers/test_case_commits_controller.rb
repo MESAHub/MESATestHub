@@ -33,6 +33,7 @@ class TestCaseCommitsController < ApplicationController
     # THIS test
     @commit_classes = Hash.new('list-group-item-info')
     @btn_classes = Hash.new('btn-info')
+    @extra_symbols = Hash.new([])
     @nearby_tccs.each do |tcc|
       @commit_classes[tcc.commit] = case tcc.status
       when 0 then 'list-group-item-success'
@@ -51,6 +52,13 @@ class TestCaseCommitsController < ApplicationController
         'btn-info'
       end
 
+      # prepare for adding plus or wrench symbole for optional inlists/FPEs
+      if tcc.test_instances.where(run_optional: true).count > 0
+        @extra_symbols[tcc] += ['plus-square', 'Optional Inlists Run']
+      end
+      if tcc.test_instances.where(fpe_checks: true).count > 0
+        @extra_symbols[tcc] += [['wrench', 'FPE Checks Run']]
+      end
     end
 
     # other test case commits for this commit
