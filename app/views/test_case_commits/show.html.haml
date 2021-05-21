@@ -175,7 +175,7 @@
                     %th.text-monospace{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}= specific_col
 
               %tbody
-                -@test_case_commit.test_instances.each do |instance|
+                -@test_case_commit.test_instances.reject(&:nil?).each do |instance|
                   %tr
                     %td.column-status{class: instance.passed ? 'text-success' : 'text-danger'}
                       =fa_icon('wrench', title: 'FPE Checks') if instance.fpe_checks
@@ -252,8 +252,12 @@
                             Passed
                           - else
                             Failed
-                            %a.text-reset{href: "https://logs.mesastar.org/#{@commit.sha}/#{data_hash[:computer].name}/#{@test_case.name}/out.txt"}
-                              %span.badge.badge-danger.text-monospace out.txt
+                            %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/out.txt", target:'_blank'}
+                              %span.badge.badge-danger.text-monospace out
+                            %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/mk.txt", target:'_blank'}
+                              %span.badge.badge-danger.text-monospace mk
+                            %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/err.txt", target:'_blank'}
+
                         %td.column-computer=link_to(data_hash[:computer], user_computer_path(data_hash[:computer].user, data_hash[:computer]))
                         %td.column-date.d-none=format_time(data_hash['created_at'])
                         %td.column-runtime
