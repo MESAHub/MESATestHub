@@ -26,7 +26,13 @@
   .col
     %h4
       Commit data for
-      %span.text-monospace.text-primary= @commit
+      %span.text-monospace.text-primary
+        = @commit
+        - if @commit.run_optional?
+          =fa_icon('plus-square', title: 'Optional inlists run on all tests')
+        -if commit.fpe_checks?
+          =fa_icon('wrench', title: 'FPE checks run on all tests')
+
 .row.mt-0
   .col-lg-6.col-md-7
     %ul.list-group.list-group-flush.mb-1#commit-stats
@@ -36,6 +42,9 @@
       %li.list-group-item
         %b Full SHA:
         %span.text-monospace=@commit.sha
+      %li.list-group-item
+        %b Added to Testhub:
+        =format_time(@commit.created_at)
       %li.list-group-item
         %b Commit Time:
         =format_time(@commit.commit_time)
