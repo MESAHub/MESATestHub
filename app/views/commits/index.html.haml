@@ -9,7 +9,10 @@
         %samp= @branch
       .dropdown-menu
         - @unmerged_branches.each do |branch|
-          =link_to branch, commits_path(branch: branch.name), class: "dropdown-item text-monospace"
+          -if branch == @branch
+            =link_to branch, commits_path(branch: branch.name), class: "dropdown-item text-monospace active text-reset"
+          -else
+            =link_to branch, commits_path(branch: branch.name), class: "dropdown-item text-monospace text-reset"
   .col-12.col-md-6
     %p.text-right.mb-1
       %span.badge.badge-light Test Cases
