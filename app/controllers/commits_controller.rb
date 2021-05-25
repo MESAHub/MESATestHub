@@ -157,10 +157,10 @@ class CommitsController < ApplicationController
 
   def index
     @page_length = 25
-    @branches = Branch.all
+    @branches = Branch.order(:name)
     @unmerged_branches = @branches.reject(&:merged)
     @merged_branches = @branches.select(&:merged)
-    @branch_names = @branches.map(&:name)
+    @branch_names = @branches.pluck(:name)
     @branch = if @branch_names.include? params[:branch]
                 @branches[@branch_names.index(params[:branch])]
               else
