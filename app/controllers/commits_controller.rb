@@ -73,7 +73,8 @@ class CommitsController < ApplicationController
               fpe_checks: ti.fpe_checks 
             }
           end.uniq.sort_by do |failure_config|
-            [failure_config[:run_optional], failure_config[:fpe_checks],
+            [failure_config[:run_optional] ? 0 : 1,
+             failure_config[:fpe_checks] ? 0 : 1,
              failure_config[:computer]]
           end
         end
