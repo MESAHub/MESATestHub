@@ -735,6 +735,16 @@ class TestInstance < ApplicationRecord
     test_case_commit.update_and_save_scalars
   end
 
+  # intended to update old submissions to have a pre-computed cpu hour
+  # usage which is just the product of omp_num_threads and runtime_minutes / 60
+  # Shouldn't be needed after database is updated.
+  def update_cpu_hours
+    return unless omp_num_threads && runtime_minutes
+    self.cpu_hours = omp_num_threads * runtime_minutes / 60.0
+    save
+  end
+
+
   # overridden to get user names, computer names, and other details
   def as_json(options)
     {
@@ -757,7 +767,8 @@ class TestInstance < ApplicationRecord
       compiler: compiler,
       compiler_version: compiler_version,
       summary_text: summary_text,
-      checksum: checksum
+      checksum: checksum,
+      cpu_hours: cpu_hours
     }
   end
 
