@@ -160,6 +160,9 @@ class TestInstance < ApplicationRecord
       end
     end
 
+    # with runtime minutes and number of threads, can calculate cpu hours
+    instance.cpu_hours = instance.runtime_minutes / 60.0 * instance.omp_num_threads
+
     # test case commit automatically set by +#set_tcv_or_tcc+ at validation
     instance
   end
