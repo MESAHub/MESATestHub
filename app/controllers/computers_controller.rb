@@ -46,34 +46,10 @@ class ComputersController < ApplicationController
     @cpu_times = {}
 
     @cpu_times[:day] =  @computer.test_instances.
-      select(:omp_num_threads, :runtime_minutes).
-      where(created_at: 1.day.ago..Time.now).
-      inject(0) do |res, ti|
-        begin
-          res + ti.omp_num_threads * ti.runtime_minutes / 60
-        rescue NoMethodError
-          res
-        end
-      end
+      where(created_at: 1.day.ago..Time.now).sum(:cpu_hours)
     @cpu_times[:year] = @computer.test_instances.
-      select(:omp_num_threads, :runtime_minutes).
-      where(created_at: 1.year.ago..Time.now).
-      inject(0) do |res, ti|
-        begin
-          res + ti.omp_num_threads * ti.runtime_minutes / 60
-        rescue NoMethodError
-          res
-        end
-      end
-    @cpu_times[:all] = @computer.test_instances.
-      select(:omp_num_threads, :runtime_minutes).
-      inject(0) do |res, ti|
-        begin
-          res + ti.omp_num_threads * ti.runtime_minutes / 60
-        rescue NoMethodError
-          res
-        end
-      end
+      where(created_at: 1.year.ago..Time.now).sum(:cpu_hours)
+    @cpu_times[:all] = @computer.test_instances.sum(:cpu_hours)
   end
 
   # GET /computers/new
