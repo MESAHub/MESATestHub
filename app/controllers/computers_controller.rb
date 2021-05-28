@@ -42,18 +42,26 @@ class ComputersController < ApplicationController
     @submissions.each do |submission|
       @counts[submission] = submission.test_instances.length
     end
-    # @test_instances = @computer.test_instances.order(
-    #   mesa_version: :desc, created_at: :desc
-    # ).limit(20)
-    # @test_instance_classes = {}
-    # @test_instances.each do |instance|
-    #   @test_instance_classes[instance] =
-    #     if instance.passed
-    #       'table-success'
-    #     else
-    #       'table-danger'
-    #     end
-    # end
+
+    @cpu_times = {}
+
+    @cpu_times[:day] =  @computer.test_instances.
+      select(:omp_num_threads, :runtime_minutes).
+      where(created_at: 1.day.ago..Time.now).
+      inject(0) do |res, ti|
+        res + ti.omp_num_threads * ti.runtime_minutes / 60
+      end
+    @cpu_times[:year] = @computer.test_instances.
+      select(:omp_num_threads, :runtime_minutes).
+      where(created_at: 1.year.ago..Time.now).
+      inject(0) do |res, ti|
+        res + ti.omp_num_threads * ti.runtime_minutes / 60
+      end
+    @cpu_times[:all] = @computer.test_instances.
+      select(:omp_num_threads, :runtime_minutes).
+      inject(0) do |res, ti|
+        res + ti.omp_num_threads * ti.runtime_minutes / 60
+      end
   end
 
   # GET /computers/new
