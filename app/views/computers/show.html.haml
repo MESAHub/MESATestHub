@@ -32,7 +32,9 @@
           = format('%.3g', @cpu_times[:year])
           CPU Hours
       %tr
-        %th{scope: 'row'} Since Inception
+        %th{scope: 'row'}
+          Since Inception
+          = "(#{format_date(@earliest)})"
         %td
           = format('%.3g', @cpu_times[:all])
           CPU Hours

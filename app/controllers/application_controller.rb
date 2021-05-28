@@ -24,6 +24,10 @@ class ApplicationController < ActionController::Base
     I18n.l time.to_time.in_time_zone(time_zone), format: :short
   end
 
+  def format_date(time)
+    I18n.l time.to_time.in_time_zone(time_zone), format: '%Y-%m-%d'
+  end
+
   def admin?
     return false unless current_user
     current_user.admin?
@@ -44,6 +48,7 @@ class ApplicationController < ActionController::Base
   helper_method :current_user
   helper_method :time_zone
   helper_method :format_time
+  helper_method :format_date
   helper_method :admin?
   helper_method :self?
   helper_method :self_or_admin?

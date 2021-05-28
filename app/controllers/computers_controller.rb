@@ -43,6 +43,8 @@ class ComputersController < ApplicationController
       @counts[submission] = submission.test_instances.length
     end
 
+    @earliest = @computer.test_instances.order(:created_at).first.created_at
+
     @cpu_times = {}
 
     @cpu_times[:day] =  @computer.test_instances.
