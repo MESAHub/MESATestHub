@@ -17,7 +17,8 @@ class TestInstance < ApplicationRecord
     'photo_checksum' => 'Photo Checksum',
     'photo_diff' => 'Photo Diff',
     'compilation' => 'Compilation',
-    'stderr' => 'Stderr (mesa_error?)'
+    'stderr' => 'Stderr (mesa_error?)',
+    'exit_code' => 'Exit Code failure'
   })
 
   @@compilers = %w[gfortran ifort SDK]
