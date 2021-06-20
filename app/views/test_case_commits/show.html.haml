@@ -144,7 +144,7 @@
                 = klass.sub('column-', '').titleize
   .row
     .col
-      - if @inlists.length > 2
+      - if @inlists.length >= 2
         %ul.nav.nav-pills.flex-column.flex-sm-row#inlist-pills{role: 'tablist'}
           %li.nav-item
             %a.nav-link.active#pill-overview-tab{href: '#pill-overview', 'data-toggle' => 'pill', role: :tab, 'aria-controls' => 'pill-overview', 'aria-selected' => 'true'} Overview
@@ -220,7 +220,7 @@
                           =format('%0.3g', instance.get_data(specific_col) || -1)
                         -else
                           =''
-        - if @inlists.length > 2
+        - if @inlists.length >= 2
           - @inlists.each do |inlist_name|
             .div.tab-pane.fade{role: 'tabpanel', 'aria-labelledby' => "#{inlist_name}-pill-tab", id: "pill-#{inlist_name}"}
               .table-responsive.mt-2
