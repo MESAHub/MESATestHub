@@ -151,6 +151,7 @@
                       =format('%.2f', instance.runtime_minutes)
                   %td.align-middle.column-ram{class: @default_column_visibility['ram'] ? '' : 'd-none'}=format("%.2f", instance.rn_mem_GB) + ' GB'
                   %td.align-middle.column-checksum.text-monospace{class: @default_column_visibility['checksum'] ? '' : 'd-none'}=instance.checksum[(-7..-1)] if instance.checksum
+                  %td.align-middle.column-model-number{class: @default_column_visibility['model_number'] ? '' : 'd-none'}=instance.model_number
                   %td.align-middle.column-restart_photo.text-monospace{class: @default_column_visibility['restart_photo'] ? '' : 'd-none'}
                     =instance.restart_photo || ''
                   %td.align-middle.column-restart_checksum.text-monospace{class: @default_column_visibility['restart_checksum'] ? '' : 'd-none'}
