@@ -8,7 +8,7 @@ ruby '3.0.0'
 gem 'sinatra', '~> 2.0.2'
 gem 'rack', '~> 2.1.4'
 gem 'rails', '~> 6.0.0'
-gem 'puma', '~> 4.3'
+gem 'puma', '~> 4.3.6'
 gem 'puma_worker_killer'
 gem 'bootsnap',  '>= 1.1.0'
 # gem 'sass-rails', '~> 5.0'
@@ -35,6 +35,7 @@ gem 'font-awesome-rails'
 gem 'octokit', "~> 4.0"
 gem 'faraday-http-cache'
 gem 'github_webhook', '~> 1.1'
+gem 'rack-cors', require: 'rack/cors'
 
 # heroku metrics
 gem 'barnes'

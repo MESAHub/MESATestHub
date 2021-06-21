@@ -17,7 +17,8 @@ class TestInstance < ApplicationRecord
     'photo_checksum' => 'Photo Checksum',
     'photo_diff' => 'Photo Diff',
     'compilation' => 'Compilation',
-    'stderr' => 'Stderr (mesa_error?)'
+    'stderr' => 'Stderr (mesa_error?)',
+    'exit_code' => 'Exit Code failure'
   })
 
   @@compilers = %w[gfortran ifort SDK]
@@ -49,7 +50,9 @@ class TestInstance < ApplicationRecord
   scope :full, -> { where(run_optional: true) }
   scope :partial, -> { where(run_optional: false) }
 
-  default_scope { order(created_at: :asc) }
+  scope :ascending, -> { order(created_at: :asc) }
+
+  # default_scope { order(created_at: :asc) }
 
   def self.success_types
     @@success_types
@@ -157,6 +160,9 @@ class TestInstance < ApplicationRecord
         # adding linear quantities; will take log at the end
       end
     end
+
+    # with runtime minutes and number of threads, can calculate cpu hours
+    instance.cpu_hours = instance.runtime_minutes / 60.0 * instance.omp_num_threads
 
     # test case commit automatically set by +#set_tcv_or_tcc+ at validation
     instance
@@ -521,6 +527,11 @@ class TestInstance < ApplicationRecord
     test_data.where(name: name).order(updated_at: :desc).first.value = new_val
   end
 
+  def model_number
+    return -1 unless instance_inlists.count > 0
+    instance_inlists.order(:order).last.model_number
+  end
+
   def to_minutes(num)
     num.to_f / 60.0
   end
@@ -725,6 +736,16 @@ class TestInstance < ApplicationRecord
     test_case_commit.update_and_save_scalars
   end
 
+  # intended to update old submissions to have a pre-computed cpu hour
+  # usage which is just the product of omp_num_threads and runtime_minutes / 60
+  # Shouldn't be needed after database is updated.
+  def update_cpu_hours
+    return unless omp_num_threads && runtime_minutes
+    self.cpu_hours = omp_num_threads * runtime_minutes / 60.0
+    save
+  end
+
+
   # overridden to get user names, computer names, and other details
   def as_json(options)
     {
@@ -747,7 +768,8 @@ class TestInstance < ApplicationRecord
       compiler: compiler,
       compiler_version: compiler_version,
       summary_text: summary_text,
-      checksum: checksum
+      checksum: checksum,
+      cpu_hours: cpu_hours
     }
   end
 

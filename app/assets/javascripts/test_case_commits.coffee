@@ -16,11 +16,11 @@ column_control =
       self = this
       klass = '.column-' + $(self).val()
       if self.checked
-        console.log('turned on column ' + klass)
+        # console.log('turned on column ' + klass)
         $(klass).removeClass('d-none')
         setCookie(klass.replace('.', ''), 'checked', 7)
       else
-        console.log('turned off column ' + klass)
+        # console.log('turned off column ' + klass)
         $(klass).addClass('d-none')
         setCookie(klass.replace('.', ''), 'unchecked', 7)
       column_control.adjust_header_widths($(self).data('inlist'))
@@ -60,6 +60,20 @@ column_control =
     else
       header.addClass('d-none')
     
-
+TestLogs = 
+  setup: ->
+    if $('.test-log-link').length
+      $('.test-log-link').each ->
+        anchor = $(this)
+        $.ajax({
+          url: anchor.attr('href'),
+          method: 'HEAD',
+          crossDomain: true,
+          success: (returned_data) ->
+            anchor.hide()
+            anchor.removeClass('d-none')
+            anchor.fadeIn()
+        })
 $ ->
   column_control.setup()
+  TestLogs.setup()

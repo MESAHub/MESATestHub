@@ -2,4 +2,13 @@
   %dl{class: @checksum_groups[tcc] ? 'row' : 'row mb-0'}
     - @failure_types[tcc].keys.each do |failure_type|
       %dt.col-6.col-sm-3.mb-0.text-right.text-truncate= TestInstance.failure_types[failure_type] + ' Failure: '
-      %dd.col-6.col-sm-9.mb-0= @failure_types[tcc][failure_type].map { |comp| comp.name }.sort_by { |comp_name| comp_name.downcase }.join(', ')
+      %dd.col-6.col-sm-9.mb-0
+        - @failure_types[tcc][failure_type].each_with_index do |failure_config, i|
+          - if failure_config[:run_optional]
+            = fa_icon('plus-square', title: 'Optional inlists run')
+          - if failure_config[:fpe_checks]
+            = fa_icon('wrench', title: 'FPE checks run')
+          - if i < @failure_types[tcc][failure_type].length - 1
+            = "#{failure_config[:computer].downcase}, "
+          - else
+            = failure_config[:computer].downcase

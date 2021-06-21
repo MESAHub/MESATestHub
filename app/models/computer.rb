@@ -1,6 +1,7 @@
 class Computer < ApplicationRecord
   has_many :submissions, dependent: :destroy
   has_many :test_instances, through: :submissions, dependent: :destroy
+  has_many :instance_inlists, through: :test_instances
   belongs_to :user
   validates_presence_of :name
   validates_uniqueness_of :name

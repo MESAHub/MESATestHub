@@ -18,6 +18,28 @@
       %tr
         %th{scope: 'row'} RAM
         %td=@computer.ram_gb.to_s + ' GB'
+  .col
+    %h3 Usage Over Time
+    %table.table
+      %tr
+        %th{scope: 'row'} Last 24 hours
+        %td
+          = format('%.3g', @cpu_times[:day])
+          CPU Hours
+      %tr
+        %th{scope: 'row'} Last year
+        %td
+          = format('%.3g', @cpu_times[:year])
+          CPU Hours
+      %tr
+        %th{scope: 'row'}
+          Since Inception
+          = "(#{format_date(@earliest)})"
+        %td
+          = format('%.3g', @cpu_times[:all])
+          CPU Hours
+.row
+  .col
     -if self_or_admin?
       .text-center
         %a.btn.btn-lg.btn-outline-primary{href: edit_user_computer_path(@user, @computer)}

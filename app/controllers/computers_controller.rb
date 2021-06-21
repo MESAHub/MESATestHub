@@ -42,18 +42,16 @@ class ComputersController < ApplicationController
     @submissions.each do |submission|
       @counts[submission] = submission.test_instances.length
     end
-    # @test_instances = @computer.test_instances.order(
-    #   mesa_version: :desc, created_at: :desc
-    # ).limit(20)
-    # @test_instance_classes = {}
-    # @test_instances.each do |instance|
-    #   @test_instance_classes[instance] =
-    #     if instance.passed
-    #       'table-success'
-    #     else
-    #       'table-danger'
-    #     end
-    # end
+
+    @earliest = @computer.test_instances.order(:created_at).first.created_at
+
+    @cpu_times = {}
+
+    @cpu_times[:day] =  @computer.test_instances.
+      where(created_at: 1.day.ago..Time.now).sum(:cpu_hours)
+    @cpu_times[:year] = @computer.test_instances.
+      where(created_at: 1.year.ago..Time.now).sum(:cpu_hours)
+    @cpu_times[:all] = @computer.test_instances.sum(:cpu_hours)
   end
 
   # GET /computers/new

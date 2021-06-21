@@ -497,6 +497,20 @@ class Commit < ApplicationRecord
     specs
   end
 
+  # determine if each test case has been run with all optional inlists
+  def run_optional?
+    test_instances.
+      where(run_optional: true).
+      pluck(:test_case_id).uniq.count == test_cases.count
+  end
+
+  # determine if each test case has been run with all optional inlists
+  def fpe_checks?
+    test_instances.
+      where(fpe_checks: true).
+      pluck(:test_case_id).uniq.count == test_cases.count
+  end
+
   # make this stuff searchable directly on the database without having
   # to summon all the test case commits. This should be called whenever
   # a submission is made and whenever a change is made to a test case commit

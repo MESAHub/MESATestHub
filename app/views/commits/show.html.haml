@@ -26,7 +26,13 @@
   .col
     %h4
       Commit data for
-      %span.text-monospace.text-primary= @commit
+      %span.text-monospace.text-primary
+        = @commit
+        - if @commit.run_optional?
+          =fa_icon('plus-square', title: 'Optional inlists run on all tests')
+        -if @commit.fpe_checks?
+          =fa_icon('wrench', title: 'FPE checks run on all tests')
+
 .row.mt-0
   .col-lg-6.col-md-7
     %ul.list-group.list-group-flush.mb-1#commit-stats
@@ -36,6 +42,9 @@
       %li.list-group-item
         %b Full SHA:
         %span.text-monospace=@commit.sha
+      %li.list-group-item
+        %b Added to Testhub:
+        =format_time(@commit.created_at)
       %li.list-group-item
         %b Commit Time:
         =format_time(@commit.commit_time)
@@ -55,10 +64,10 @@
         %h3.card-title Computers and Compilation
         - if @specs.empty?
           %h4.text-info.font-weight-bold No submissions for this commit.
-        %dl.row
+        %dl.row.align-baseline{style: 'display: flex; align-items: center;'}
           - @specs.each do |entry|
             %dt.col-md-4
-              %span{'data-toggle' => 'tooltip', title: "#{entry[:numerator]}/#{entry[:denominator]}", width: '1.5rem'}
+              %span.align-middle{'data-toggle' => 'tooltip', title: "#{entry[:numerator]}/#{entry[:denominator]}", width: '1.5rem'}
                 -case entry[:frac] * 16
                 -when 0.0
                   =render partial: 'none_tested'
@@ -82,20 +91,27 @@
               = surround '(', ')' do
                 %a{href: user_path(entry[:computer].user), class: 'text-primary'}=entry[:computer].user.name
 
-            %dd.col-md-5.offset-md-0.offset-1=entry[:spec]
+            %dd.col-md-5.offset-md-0.offset-1.align-middle=entry[:spec]
             %dd.col-md-3.offset-md-0.offset-1
-              Compilation: 
-              - case entry[:compilation]
-              - when :unknown
-                %span.font-weight-bold.text-info Unknown
-              - when :success
-                %span.font-weight-bold.text-success Succeeded
-              - when :failure
-                %span.font-weight-bold.text-danger Failed
-              - when :mixed
-                %span.font-weight-bold.text-warning Mixed
-              - else
-                %span.h5.font-weight-bold.text-primary Testhub Error
+              %span.align-middle
+                Compilation: 
+                - case entry[:compilation]
+                - when :unknown
+                  %span.font-weight-bold.text-info Unknown
+                - when :success
+                  %span.font-weight-bold.text-success Succeeded
+                - when :failure
+                  %span.font-weight-bold.text-danger.my-2 Failed
+                  %a.text-reset.d-none.build-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{entry[:computer].name}/build.log", target:'_blank', 'data-commit': @commit.sha, 'data-computer': entry[:computer].name}
+                    %button.btn.btn-light.btn-sm
+                      %i.fa.fa-file-text-o
+                - when :mixed
+                  %span.font-weight-bold.text-warning.my-2 Mixed
+                  %a.text-reset.d-none.build-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{entry[:computer].name}/build.log", target:'_blank', 'data-commit': @commit.sha, 'data-computer': entry[:computer].name}
+                    %button.btn.btn-light.btn-sm{'data-toggle' => 'modal', 'data-target' => '#buildModal'}
+                      %i.fa.fa-file-text-o
+                - else
+                  %span.h5.font-weight-bold.text-primary Testhub Error
 
 .row.row-cols-1.row-cols-sm-2.row-cols-md-3.row-cols-lg-4.row-cols-xl-5#index-desc
   - if @others.count.positive?

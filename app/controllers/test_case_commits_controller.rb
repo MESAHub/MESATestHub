@@ -33,6 +33,7 @@ class TestCaseCommitsController < ApplicationController
     # THIS test
     @commit_classes = Hash.new('list-group-item-info')
     @btn_classes = Hash.new('btn-info')
+    @extra_symbols = Hash.new([])
     @nearby_tccs.each do |tcc|
       @commit_classes[tcc.commit] = case tcc.status
       when 0 then 'list-group-item-success'
@@ -51,6 +52,13 @@ class TestCaseCommitsController < ApplicationController
         'btn-info'
       end
 
+      # prepare for adding plus or wrench symbole for optional inlists/FPEs
+      if tcc.test_instances.where(run_optional: true).count > 0
+        @extra_symbols[tcc] += [['plus-square', 'Optional Inlists Run']]
+      end
+      if tcc.test_instances.where(fpe_checks: true).count > 0
+        @extra_symbols[tcc] += [['wrench', 'FPE Checks Run']]
+      end
     end
 
     # other test case commits for this commit
@@ -76,7 +84,7 @@ class TestCaseCommitsController < ApplicationController
 
     # @test_case_version isn't getting set properly. Need to investigate...
 
-    @test_case_commit.test_instances.each do |instance|
+    @test_case_commit.test_instances.ascending.each do |instance|
       @test_instance_classes[instance] =
         if instance.passed
           'table-success'
@@ -100,6 +108,7 @@ class TestCaseCommitsController < ApplicationController
       'runtime' => true,
       'ram' => false,
       'checksum' => true,
+      'model_number' => true,
       'threads' => false,
       'spec' => false,
       'steps' => true,
@@ -129,7 +138,7 @@ class TestCaseCommitsController < ApplicationController
     # inlist. Hopefully that doesn't happen.
     @raw_inlists = []
     @inlists = []
-    @test_case_commit.test_instances.each do |ti|
+    @test_case_commit.test_instances.ascending.each do |ti|
       if ti.instance_inlists.count > @inlists.count
         @inlists = ti.instance_inlists.map do |inlist|
           inlist.inlist.sub(/^inlist_/, '').sub(/_header$/, '')
@@ -149,7 +158,7 @@ class TestCaseCommitsController < ApplicationController
     # each element in the values will encode all of the table data needed for
     # one computer's submission of that inlist
     @inlist_data = Hash.new([])
-    @test_case_commit.test_instances.each do |ti|
+    @test_case_commit.test_instances.ascending.each do |ti|
       @inlists.zip(@raw_inlists).each do |inlist_short, inlist_full|
         # puts "Gathering data for computer #{ti.computer} and inlist #{inlist_full}"
         inlist = ti.instance_inlists.select do |inl|

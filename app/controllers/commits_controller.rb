@@ -66,7 +66,17 @@ class CommitsController < ApplicationController
         @failing_instances[tcc].pluck(:failure_type).uniq.each do |failure_type|
           @failure_types[tcc][failure_type] = @failing_instances[tcc].select do |ti|
             ti.failure_type == failure_type
-          end.map(&:computer)
+          end.map do |ti| 
+            { 
+              computer: ti.computer.name,
+              run_optional: ti.run_optional,
+              fpe_checks: ti.fpe_checks 
+            }
+          end.uniq.sort_by do |failure_config|
+            [failure_config[:run_optional] ? 0 : 1,
+             failure_config[:fpe_checks] ? 0 : 1,
+             failure_config[:computer]]
+          end
         end
       end
       @counts[tcc] = {}
@@ -147,11 +157,11 @@ class CommitsController < ApplicationController
 
   def index
     @page_length = 25
-    @branches = Branch.includes(:head)
-    @branches.sort_by! { |b| b.head.created_at }
+
+    @branches = Branch.order(:name)
     @unmerged_branches = @branches.reject(&:merged)
     @merged_branches = @branches.select(&:merged)
-    @branch_names = @branches.map(&:name)
+    @branch_names = @branches.pluck(:name)
     @branch = if @branch_names.include? params[:branch]
                 @branches[@branch_names.index(params[:branch])]
               else
@@ -285,6 +295,8 @@ class CommitsController < ApplicationController
         {
           short_sha: commit.short_sha,
           message_first_line: commit.message_first_line(40),
+          run_optional: commit.run_optional?,
+          fpe_checks: commit.fpe_checks?,
           author: commit.author,
           commit_time: format_time(commit.commit_time),
           message_rest: commit.message_rest(40),

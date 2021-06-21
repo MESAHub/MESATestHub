@@ -74,12 +74,29 @@ NearbyCommits =
   commit_sha: ''
   branch: ''
   retrieve_commits: ->
-    # use this for development due to CORS issues
-    $.get({url: 'http://localhost:3000/commits/nearby_commits.json', contentType: 'application/json', dataType: 'json', data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha}, success: (returned_data) ->
-    # $.get({url: 'https://testhub.mesastar.org/commits/nearby_commits.json', contentType: 'application/json', dataType: 'json', data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha}, success: (returned_data) ->
-      NearbyCommits.commits = returned_data.commits
-      if NearbyCommits.commits && NearbyCommits.commits.length > 0
-        NearbyCommits.add_commits()
+    # use this for development if making changes not present on server
+    # $.get({
+    #   url: 'http://localhost:3000/commits/nearby_commits.json',
+    #   contentType: 'application/json',
+    #   crossDomain: true,
+    #   dataType: 'json',
+    #   data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha},
+    #   success: (returned_data) ->
+    #     NearbyCommits.commits = returned_data.commits
+    #     if NearbyCommits.commits && NearbyCommits.commits.length > 0
+    #       NearbyCommits.add_commits()
+    # })
+    $.get({
+      url: 'https://testhub.mesastar.org/commits/nearby_commits.json',
+      contentType: 'application/json',
+      # headers: { 'Access-Control-Allow-Origin': '*' },
+      crossDomain: true,
+      dataType: 'json',
+      data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha},
+      success: (returned_data) ->
+        NearbyCommits.commits = returned_data.commits
+        if NearbyCommits.commits && NearbyCommits.commits.length > 0
+          NearbyCommits.add_commits()
     })
 
   add_commits: ->
@@ -111,6 +128,7 @@ NearbyCommits =
       do (commit) ->
         bonus_cls = ''
         btn_cls = ''
+        bonus_symbols = ''
         if commit.short_sha == $('#nearby-commit-center').text()
           bonus_cls = 'active'
           btn_cls = 'btn-secondary'
@@ -129,11 +147,16 @@ NearbyCommits =
         else
           bonus_cls = 'list-group-item-info'
           btn_cls = 'btn-info'
-          
+
+        if commit.run_optional
+          bonus_symbols = bonus_symbols + '<i title="Run Optional" class="fa fa-plus-square"></i>'
+        if commit.fpe_checks
+          bonus_symbols = bonus_symbols + '<i title="FPE Checks" class="fa fa-wrench"></i>'
+
         $([
           "<li class='list-group-item list-group-item-action dropdown-item #{bonus_cls}''>",
           "  <div class='d-flex w-100 justify-content-between'>",
-          "    <h5 class='font-weight-bold d-non d-md-inline'>#{commit.message_first_line}</h5>",
+          "    <h5 class='font-weight-bold d-non d-md-inline'>#{bonus_symbols}#{commit.message_first_line}</h5>",
           "    <a class='stretched-link text-reset' href='#{commit.url}'>",
           "      <button class='btn ml-2 #{btn_cls}'>",
           "        <span class='h5 text-monospace'>#{commit.short_sha}</span>",
@@ -163,10 +186,26 @@ CommitMessage =
       if message_height > 2.0 * stats_height
         $('#commit-message').height(2.0 * stats_height)
 
+BuildLog = 
+  setup: ->
+    if $('.build-log-link').length
+      $('.build-log-link').each ->
+        anchor = $(this)
+        $.ajax({
+          url: anchor.attr('href'),
+          method: 'HEAD',
+          crossDomain: true,
+          success: (returned_data) ->
+            anchor.hide()
+            anchor.removeClass('d-none')
+            anchor.fadeIn()
+        })
+
 $ ->
   $('[data-toggle="tooltip"]').tooltip()
   TogglePassing.setup()
   ToggleMissing.setup()
   NearbyCommits.setup()
   CommitMessage.setup()
+  BuildLog.setup()
   

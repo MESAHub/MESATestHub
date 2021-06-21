@@ -25,6 +25,8 @@
               .d-flex.w-100.justify-content-between
                 
                 %h5.font-weight-bold.d-none.d-md-inline
+                  -@extra_symbols[tcc].each do |pair|
+                    =fa_icon(pair[0], title: pair[1])
                   =commit.message_first_line(50)
                 %a.stretched-link.text-reset{href: test_case_commit_path(branch: params[:branch], sha: commit.short_sha, test_case: params[:test_case], module: params[:module])}
                   %button.btn.ml-2{class: @btn_classes[commit]}
@@ -124,7 +126,7 @@
           Default Columns
           %small.text-muted Check/uncheck to show/hide
         .row
-          -@default_columns.each_slice(5) do |columns|
+          -@default_columns.each_slice(6) do |columns|
             .col
               -columns.each do |klass, checked|
                 .mr-5
@@ -142,7 +144,7 @@
                 = klass.sub('column-', '').titleize
   .row
     .col
-      - if @inlists.length > 2
+      - if @inlists.length >= 2
         %ul.nav.nav-pills.flex-column.flex-sm-row#inlist-pills{role: 'tablist'}
           %li.nav-item
             %a.nav-link.active#pill-overview-tab{href: '#pill-overview', 'data-toggle' => 'pill', role: :tab, 'aria-controls' => 'pill-overview', 'aria-selected' => 'true'} Overview
@@ -161,6 +163,7 @@
                   %th.column-runtime Runtime
                   %th.column-ram.d-none RAM Usage
                   %th.column-checksum Checksum
+                  %th.column-model_number Model Number
                   %th.column-threads.d-none Threads
                   %th.column-spec.d-none Computer Specification
                   %th.column-steps Steps
@@ -179,12 +182,19 @@
                     %th.text-monospace{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}= specific_col
 
               %tbody
-                -@test_case_commit.test_instances.each do |instance|
+                -@test_case_commit.test_instances.reject(&:nil?).each do |instance|
                   %tr
                     %td.column-status{class: instance.passed ? 'text-success' : 'text-danger'}
                       =fa_icon('wrench', title: 'FPE Checks') if instance.fpe_checks
                       =fa_icon('plus-square', title: 'Run Optional') if instance.run_optional
                       =instance.passage_status
+                      - unless instance.passed
+                        %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/out.txt", target:'_blank'}
+                          %span.badge.badge-danger.text-monospace out
+                        %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/mk.txt", target:'_blank'}
+                          %span.badge.badge-danger.text-monospace mk
+                        %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/err.txt", target:'_blank'}
+                          %span.badge.badge-danger.text-monospace err
                     %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
                     %td.column-date.d-none=format_time(instance.created_at)
                     %td.column-runtime
@@ -193,14 +203,16 @@
                     %td.column-ram.d-none=format("%.2f", instance.rn_mem_GB || 0) + ' GB'
                     %td.column-checksum
                       %samp=instance.checksum[(-7..-1)] if instance.checksum
-                    %td.column-threads.d-none=instance.omp_num_threads
-                    %td.column-spec.d-none=instance.computer_specification
-                    %td.column-steps=instance.steps
-                    %td.column-retries=instance.retries
-                    %td.column-redos.d-none= instance.redos
-                    %td.column-solver_iterations.d-none= instance.solver_iterations
-                    %td.column-solver_calls_made.d-none= instance.solver_calls_made
-                    %td.column-solver_calls_failed.d-none= instance.solver_calls_failed
+                    %td.column-model_number
+                      =instance.model_number if instance && instance.model_number
+                    %td.column-threads.d-none=instance.omp_num_threads if instance && instance.omp_num_threads
+                    %td.column-spec.d-none=instance.computer_specification if instance && instance.computer_specification
+                    %td.column-steps=instance.steps if instance && instance.steps
+                    %td.column-retries=instance.retries if instance && instance.retries
+                    %td.column-redos.d-none= instance.redos if instance && instance.redos
+                    %td.column-solver_iterations.d-none= instance.solver_iterations if instance && instance.solver_iterations
+                    %td.column-solver_calls_made.d-none= instance.solver_calls_made if instance && instance.solver_calls_made
+                    %td.column-solver_calls_failed.d-none= instance.solver_calls_failed if instance && instance.solver_calls_failed
                     %td.column-log_rel_run_E_err.d-none
                       -if instance.log_rel_run_E_err
                         =format('%.2f',instance.log_rel_run_E_err || 0)
@@ -222,7 +234,7 @@
                           =format('%0.3g', instance.get_data(specific_col) || -1)
                         -else
                           =''
-        - if @inlists.length > 2
+        - if @inlists.length >= 2
           - @inlists.each do |inlist_name|
             .div.tab-pane.fade{role: 'tabpanel', 'aria-labelledby' => "#{inlist_name}-pill-tab", id: "pill-#{inlist_name}"}
               .table-responsive.mt-2
@@ -235,6 +247,7 @@
                       %th.column-runtime Runtime
                       %th.column-threads.d-none Threads
                       %th.column-spec.d-none Computer Specification
+                      %th.column-model_number Model Number
                       %th.column-steps Steps
                       %th.column-retries Retries
                       %th.column-redos.d-none Redos
@@ -254,7 +267,16 @@
                         %td.column-status{class: data_hash[:passed] ? 'text-success' : 'text-danger'}
                           =fa_icon('wrench', title: 'FPE Checks') if data_hash[:fpe_checks]
                           =fa_icon('plus-square', title: 'Run Optional') if data_hash[:run_optional]
-                          =data_hash[:passed] ? "Passed" : "Failed"
+                          - if data_hash[:passed]
+                            Passed
+                          - else
+                            Failed
+                            %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{data_hash[:computer].name}/#{@test_case.name}/out.txt", target:'_blank'}
+                              %span.badge.badge-danger.text-monospace out
+                            %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{data_hash[:computer].name}/#{@test_case.name}/mk.txt", target:'_blank'}
+                              %span.badge.badge-danger.text-monospace mk
+                            %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{data_hash[:computer].name}/#{@test_case.name}/err.txt", target:'_blank'}
+
                         %td.column-computer=link_to(data_hash[:computer], user_computer_path(data_hash[:computer].user, data_hash[:computer]))
                         %td.column-date.d-none=format_time(data_hash['created_at'])
                         %td.column-runtime
@@ -262,6 +284,7 @@
                             =format('%.2f', data_hash['runtime_minutes']) + ' m'
                         %td.column-threads.d-none=data_hash['threads']
                         %td.column-spec.d-none=data_hash['spec']
+                        %td.column-model_number=data_hash['model_number']
                         %td.column-steps=data_hash['steps']
                         %td.column-retries=data_hash['retries']
                         %td.column-redos.d-none= data_hash['redos']
