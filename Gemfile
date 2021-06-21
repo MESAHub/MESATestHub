@@ -3,7 +3,7 @@ git_source(:github) do |repo_name|
   repo_name = "#{repo_name}/#{repo_name}" unless repo_name.include?("/")
   "https://github.com/#{repo_name}.git"
 end
-ruby '3.0.0'
+ruby '3.0.1'
 # gem 'bundler', '~> 2.1.4'
 gem 'sinatra', '~> 2.0.2'
 gem 'rack', '~> 2.1.4'
@@ -26,7 +26,7 @@ gem 'rails-html-sanitizer', '~> 1.2'
 gem 'rails_12factor', group: :production
 gem 'scout_apm', group: :production
 # gem 'sprockets', '~> 4.0.0.beta4'
-gem 'libv8', '~> 7.3.492.27.1'
+gem 'libv8', '~> 8.4'
 gem 'mini_racer', :require => nil
 gem 'rubyzip', '~>1.3.0'
 gem 'barista'
@@ -54,7 +54,7 @@ group :development, :test do
 end
 group :development do
   gem 'web-console', '>= 3.3.0'
-  gem 'listen', '>= 3.0.5', '< 3.2'
+  gem 'listen', '~> 3.5'
   gem 'spring'
   gem 'spring-watcher-listen', '~> 2.0.0'
 end
