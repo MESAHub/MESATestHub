@@ -8,6 +8,8 @@
             = fa_icon('plus-square', title: 'Optional inlists run')
           - if failure_config[:fpe_checks]
             = fa_icon('wrench', title: 'FPE checks run')
+          - if failure_config[:resolution_factor] < 0.99
+            = fa_icon('search-plus', title: 'Finer resolution')
           - if i < @failure_types[tcc][failure_type].length - 1
             = "#{failure_config[:computer].downcase}, "
           - else

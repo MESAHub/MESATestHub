@@ -181,6 +181,7 @@ class TestCaseCommitsController < ApplicationController
         data_hash[:spec] = ti.computer_specification
         data_hash[:fpe_checks] = ti.fpe_checks
         data_hash[:run_optional] = ti.run_optional
+        data_hash[:resolution_factor] = ti.resolution_factor
 
         @specific_columns.each do |col_name|
           data_hash[col_name] = if ti.get_data(col_name)

@@ -508,6 +508,12 @@ class Commit < ApplicationRecord
       pluck(:test_case_id).uniq.count == test_cases.count
   end
 
+  def fine_resolution?
+    test_instances.
+      where(resolution_factor: 0..0.99).
+      pluck(:test_case_id).uniq.count == test_cases.count
+  end
+
   # make this stuff searchable directly on the database without having
   # to summon all the test case commits. This should be called whenever
   # a submission is made and whenever a change is made to a test case commit

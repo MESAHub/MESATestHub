@@ -182,6 +182,7 @@
                     %td.column-status{class: instance.passed ? 'text-success' : 'text-danger'}
                       =fa_icon('wrench', title: 'FPE Checks') if instance.fpe_checks
                       =fa_icon('plus-square', title: 'Run Optional') if instance.run_optional
+                      =fa_icon('search-plus', title: 'Finer Resolution') if instance.resolution_factor < 0.999
                       =instance.passage_status
                       - unless instance.passed
                         %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/out.txt", target:'_blank'}
@@ -250,6 +251,7 @@
                         %td.column-status{class: data_hash[:passed] ? 'text-success' : 'text-danger'}
                           =fa_icon('wrench', title: 'FPE Checks') if data_hash[:fpe_checks]
                           =fa_icon('plus-square', title: 'Run Optional') if data_hash[:run_optional]
+                          =fa_icon('search-plus', title: 'Finer Resolution') if data_hash[:resolution_factor] < 0.99
                           - if data_hash[:passed]
                             Passed
                           - else

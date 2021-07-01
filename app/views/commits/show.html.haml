@@ -32,6 +32,8 @@
           =fa_icon('plus-square', title: 'Optional inlists run on all tests')
         -if @commit.fpe_checks?
           =fa_icon('wrench', title: 'FPE checks run on all tests')
+        -if @commit.fine_resolution?
+          =fa_icon('search-plus', title: 'Finer resolution')
 
 .row.mt-0
   .col-lg-6.col-md-7

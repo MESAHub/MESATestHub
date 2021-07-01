@@ -70,7 +70,8 @@ class CommitsController < ApplicationController
             { 
               computer: ti.computer.name,
               run_optional: ti.run_optional,
-              fpe_checks: ti.fpe_checks 
+              fpe_checks: ti.fpe_checks,
+              resolution_factor: ti.resolution_factor
             }
           end.uniq.sort_by do |failure_config|
             [failure_config[:run_optional] ? 0 : 1,
