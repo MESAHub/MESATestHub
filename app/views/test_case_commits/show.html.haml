@@ -283,7 +283,8 @@
                             =""
 
                         - @specific_columns.each do |specific_col, visible|
-                          %td{class: "column-#{specific_col}" + (visible ? '' : ' d-none')} = data_hash[specific_col]
+                          %td{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}
+                            = data_hash[specific_col]
 
 - else
   .alert.alert-warning
