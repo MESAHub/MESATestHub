@@ -152,6 +152,8 @@ NearbyCommits =
           bonus_symbols = bonus_symbols + '<i title="Run Optional" class="fa fa-plus-square"></i>'
         if commit.fpe_checks
           bonus_symbols = bonus_symbols + '<i title="FPE Checks" class="fa fa-wrench"></i>'
+        if commit.fine_resolution
+          bonus_symbols = bonus_symbols + '<i title="Finer resolution" class="fa fa-search-plus"></i>'
 
         $([
           "<li class='list-group-item list-group-item-action dropdown-item #{bonus_cls}''>",
