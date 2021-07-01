@@ -89,15 +89,18 @@ class TestCaseCommit < ApplicationRecord
   end
 
   def unique_checksums
-    # all non-empty, non-nill checksums from submissions to this test case for
-    # this commit. Also ignore instances that ran optional inlists, since
+    # all non-empty, non-nil checksums from submissions to this test case for
+    # this commit. Also ignore instances that ran optional inlists or had 
+    # finer resolution than the default settings, since
     # they are not necessarily expected to have identical checksums
     
     # check to see if things are loaded. Gross, but this happens on the
     # most common resource (commit#show), which eager-loads tons of stuff
-    # so this avoides unnecessary hits to the database.
+    # so this avoids unnecessary hits to the database.
     if test_instances.loaded?
-      test_instances.reject(&:run_optional).map(&:checksum)
+      test_instances.reject do |ti|
+        ti.run_optional || ti.resolution_factor < 0.99
+      end.map(&:checksum)
     else
       test_instances.where.not(run_optional: true).pluck(:checksum)
     end.uniq.reject(&:nil?).reject(&:empty?)

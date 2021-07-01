@@ -297,6 +297,7 @@ class CommitsController < ApplicationController
           message_first_line: commit.message_first_line(40),
           run_optional: commit.run_optional?,
           fpe_checks: commit.fpe_checks?,
+          fine_resolution: commit.fine_resolution?,
           author: commit.author,
           commit_time: format_time(commit.commit_time),
           message_rest: commit.message_rest(40),
