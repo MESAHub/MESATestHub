@@ -102,7 +102,7 @@ class TestCaseCommit < ApplicationRecord
         ti.run_optional || ti.resolution_factor < 0.99
       end.map(&:checksum)
     else
-      test_instances.where.not(run_optional: true).pluck(:checksum)
+      test_instances.where.not(run_optional: true).where.not(resolution_factor: 0...0.99).pluck(:checksum)
     end.uniq.reject(&:nil?).reject(&:empty?)
   end
 
