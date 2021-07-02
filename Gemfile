@@ -10,7 +10,8 @@ gem 'rack', '~> 2.1.4'
 gem 'rails', '~> 6.0.0'
 gem 'puma', '~> 4.3.6'
 gem 'puma_worker_killer'
-gem 'bootsnap',  '>= 1.1.0'
+gem 'bootsnap',  '~> 1.7'
+gem 'msgpack', '~>1.2'
 # gem 'sass-rails', '~> 5.0'
 gem 'uglifier', '>= 1.3.0'
 gem 'coffee-rails', '~> 4.2'
@@ -26,8 +27,8 @@ gem 'rails-html-sanitizer', '~> 1.2'
 gem 'rails_12factor', group: :production
 gem 'scout_apm', group: :production
 # gem 'sprockets', '~> 4.0.0.beta4'
-gem 'libv8', '~> 8.4'
-gem 'mini_racer', :require => nil
+# gem 'libv8', '~> 8.3'
+gem 'mini_racer', '~>0.2.15 ' #, :require => nil
 gem 'rubyzip', '~>1.3.0'
 gem 'barista'
 gem 'font-awesome-rails'
