@@ -159,8 +159,6 @@ class CommitsController < ApplicationController
   def index
     @page_length = 25
     @branches = Branch.includes(:head).order(:name)
-    @unmerged_branches = @branches.reject(&:merged)
-    @merged_branches = @branches.select(&:merged)
     @branch_names = @branches.pluck(:name)
     @branch = if @branch_names.include? params[:branch]
                 @branches[@branch_names.index(params[:branch])]
@@ -172,93 +170,95 @@ class CommitsController < ApplicationController
     # which page of commits do we want?
     @page = (params[:page] || 1).to_i
 
-    # grab commits for that page (which also includes how many pages there are)
-    commit_shas = Commit.api_commits(
-      auto_paginate: false,
-      sha: @branch.head.sha,
-      per_page: @page_length,
-      page: @page).map { |c| c[:sha] }
+    @commits = @branch.commits.order(created_at: :desc, commit_time: :desc).page(@page)
+
+    # # grab commits for that page (which also includes how many pages there are)
+    # commit_shas = Commit.api_commits(
+    #   auto_paginate: false,
+    #   sha: @branch.head.sha,
+    #   per_page: @page_length,
+    #   page: @page).map { |c| c[:sha] }
     
-    # determine number of pages through tortured exploration of the "last" link
-    # provided by the api client
-    @num_pages = if Commit.api(auto_paginate: false).last_response.rels[:last]
-                   link = Commit.api(auto_paginate: false).last_response
-                                .rels[:last].href
-                   m = %r{api.github.com/.*\?page=(?<num_pages>\d+)}.match(link)
-                   m[:num_pages]
-                 else
-                   @page
-                 end.to_i
+    # # determine number of pages through tortured exploration of the "last" link
+    # # provided by the api client
+    # @num_pages = if Commit.api(auto_paginate: false).last_response.rels[:last]
+    #                link = Commit.api(auto_paginate: false).last_response
+    #                             .rels[:last].href
+    #                m = %r{api.github.com/.*\?page=(?<num_pages>\d+)}.match(link)
+    #                m[:num_pages]
+    #              else
+    #                @page
+    #              end.to_i
     
-    # subset = commit_shas[@page_length * (@page - 1), @page_length]
-    @commits = @branch.commits.where(sha: commit_shas).to_a
-      .sort! { |a, b| commit_shas.index(a.sha) <=> commit_shas.index(b.sha) }      
+    # # subset = commit_shas[@page_length * (@page - 1), @page_length]
+    # @commits = @branch.commits.where(sha: commit_shas).to_a
+    #   .sort! { |a, b| commit_shas.index(a.sha) <=> commit_shas.index(b.sha) }      
 
-    @start_num = 1 + (@page - 1) * @page_length
-    @stop_num = @start_num + @commits.length
+    # @start_num = 1 + (@page - 1) * @page_length
+    # @stop_num = @start_num + @commits.length
 
-    # set buttons for pages
-    @page_button_data = []
-    @page_button_data << if @page > 1
-                           {
-                             label: 'First',
-                             href: commits_path(branch: @branch.name, page: 1),
-                             klass: '',
-                             disabled: false
-                           }
-                         else
-                           {
-                             label: 'First',
-                             href: '#',
-                             klass: ' disabled',
-                             disabled: true
-                           }
-                         end
-    1.upto(@num_pages) do |page|
-      next unless (page - @page).abs <= 3
+    # # set buttons for pages
+    # @page_button_data = []
+    # @page_button_data << if @page > 1
+    #                        {
+    #                          label: 'First',
+    #                          href: commits_path(branch: @branch.name, page: 1),
+    #                          klass: '',
+    #                          disabled: false
+    #                        }
+    #                      else
+    #                        {
+    #                          label: 'First',
+    #                          href: '#',
+    #                          klass: ' disabled',
+    #                          disabled: true
+    #                        }
+    #                      end
+    # 1.upto(@num_pages) do |page|
+    #   next unless (page - @page).abs <= 3
 
-      @page_button_data << case (page - @page).abs
-      when 0
-        {
-          label: page.to_s,
-          href: commits_path(branch: @branch.name, page: page),
-          klass: ' active',
-          disabled: false
-        }
-      when 1..2
-        {
-          label: page.to_s,
-          href: commits_path(branch: @branch.name, page: page),
-          klass: '',
-          disabled: false
-        }
-      when 3
-        {
-          label: '<i class="fa fa-ellipsis-h" aria-hidden="true"></i>'.html_safe,
-          href: '#',
-          klass: ' disabled',
-          disabled: true
-        }
-      end
+    #   @page_button_data << case (page - @page).abs
+    #   when 0
+    #     {
+    #       label: page.to_s,
+    #       href: commits_path(branch: @branch.name, page: page),
+    #       klass: ' active',
+    #       disabled: false
+    #     }
+    #   when 1..2
+    #     {
+    #       label: page.to_s,
+    #       href: commits_path(branch: @branch.name, page: page),
+    #       klass: '',
+    #       disabled: false
+    #     }
+    #   when 3
+    #     {
+    #       label: '<i class="fa fa-ellipsis-h" aria-hidden="true"></i>'.html_safe,
+    #       href: '#',
+    #       klass: ' disabled',
+    #       disabled: true
+    #     }
+    #   end
 
-    end
+    # end
 
-    # add "Last" button
-    @page_button_data << if @page < @num_pages
-                           {
-                             label: 'Last',
-                             href: commits_path(branch: @branch.name, page: @num_pages),
-                             klass: '',
-                             disabled: false
-                           }
-                         else
-                           {
-                             label: 'Last',
-                             href: '#',
-                             klass: ' disabled',
-                             disabled: true
-                           }
-                         end
+    # # add "Last" button
+    # @page_button_data << if @page < @num_pages
+    #                        {
+    #                          label: 'Last',
+    #                          href: commits_path(branch: @branch.name, page: @num_pages),
+    #                          klass: '',
+    #                          disabled: false
+    #                        }
+    #                      else
+    #                        {
+    #                          label: 'Last',
+    #                          href: '#',
+    #                          klass: ' disabled',
+    #                          disabled: true
+    #                        }
+    #                      end
 
     @row_classes = {}
     @btn_classes = {}
