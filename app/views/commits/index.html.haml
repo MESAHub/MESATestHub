@@ -8,7 +8,7 @@
         =fa_icon 'code-fork'
         %samp= @branch
       .dropdown-menu
-        - @unmerged_branches.each do |branch|
+        - @branches.each do |branch|
           -if branch == @branch
             =link_to branch, commits_path(branch: branch.name), class: "dropdown-item text-monospace active text-reset"
           -else
@@ -36,9 +36,9 @@
           =@stop_num
           in
           %span.text-monospace=@branch.name
-  .col-12.col-md-6
-    %ul.pagination.pagination.justify-content-end
-      =render partial: 'index_pagination_li'
+  -# .col-12.col-md-6
+  -#   %ul.pagination.pagination.justify-content-end
+  -#     =render partial: 'index_pagination_li'
 
 .row.mb-3
   .col
@@ -82,7 +82,7 @@
             .d-flex.w-100
               %p.mb-0.mt-2{class: 'collapse', id: "msg_#{commit.short_sha}"}= commit.message_rest
 
-=render partial: 'index_pagination'
+-# =render partial: 'index_pagination'
 -# .row.mb-3.mt-0
 -#   .col.text-center.mt-0
 -#     %nav{'aria-label' => 'commit page navigation'}

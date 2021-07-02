@@ -66,18 +66,29 @@ class Branch < ApplicationRecord
     existing_branch_names = Branch.all.pluck(:name)
 
     # batch insert of new branches
+    # need to include timestamps since insert_all doesn't create them
+    # automatically
     to_add = github_branch_names - existing_branch_names
-    branch_hashes_to_insert = to_add.map { |b_name| { name: b_name } }
+    timestamp = Time.zone.now
+    branch_hashes_to_insert = to_add.map do |b_name|
+      { 
+        name: b_name,
+        created_at: timestamp,
+        updated_at: timestamp
+      }
+    end
     unless branch_hashes_to_insert.empty?
-      Branch.insert_all(branch_hashes_to_insert)
+      # do upsertion, skipping existing branches (shouldn't be any, but just
+      # in case!)
+      Branch.upsert_all(branch_hashes_to_insert, unique_by: :name)
     end
 
     # STEP 2: UPDATE HEAD COMMITS, TRIGGERING A LARGER UPDATE IF HEAD COMMIT
     # IS MISSING
     ########################################################################
-
     branch_data.each do |branch_hash|
       branch = Branch.find_by(name: branch_hash[:name])
+      # bail if the branch isn't found... but this shouldn't happen (see step 1)
       next unless branch
 
       # update head commit. If that commit doesn't exist, update that branch's
@@ -105,6 +116,10 @@ class Branch < ApplicationRecord
 
     # delete orphaned branches, but first make sure their commits have homes
     to_delete = Branch.where(name: existing_branch_names - github_branch_names)
+
+    # this ensures that all commits in a soon-to-be-deleted branch are members
+    # of the same branch their head commit is in. Probably redundant since we
+    # should already have updated the branch into which they are merged
     to_delete.each(&:update_membership)
 
     # using destroy_all would be simpler, but much more time-consuming, as 
@@ -284,11 +299,19 @@ class Branch < ApplicationRecord
       # other branch that it was merged into. Create all needed memberships
       not_in = branch_commit_ids - already_in
       memberships_to_insert = not_in.map do |commit_id|
-        { commit_id: commit_id, branch_id: other_branch.id }
+        { 
+          commit_id: commit_id,
+          branch_id: other_branch.id,
+          created_at: Time.zone.now,
+          updated_at: Time.zone.now
+        }
       end
 
+      # do upsertion, treating any memberships with matching commit/branches
+      # as already existing
       unless memberships_to_insert.empty?
-        BranchMembership.upsert(memberships_to_insert)
+        BranchMembership.upsert_all(memberships_to_insert, 
+                                    unique_by: [:commit_id, :branch_id])
       end
     end
   end
