@@ -34,14 +34,17 @@
           =@start_num
           through
           =@stop_num
+          of
+          =@max_num
           in
-          %span.text-monospace=@branch.name
+        %span.text-monospace=@branch.name
   -# .col-12.col-md-6
   -#   %ul.pagination.pagination.justify-content-end
   -#     =render partial: 'index_pagination_li'
 
 .row.mb-3
   .col
+    = paginate @memberships
     %ul.list-group
       - @commits.each do |commit|
         - cache commit do

@@ -138,6 +138,84 @@ class Branch < ApplicationRecord
     nil
   end
 
+
+  # Gets list of ALL commits from github and uses it to assign orders to
+  # all branch memberships. Makes abusive amounts of calls to GitHub API that
+  # will scale poorly with repo size.
+  def api_reorder_all_commits
+    # get ordered list of ALL shas for commits in this branch
+    shas = Commit.api_commits(sha: self.name).map do |commit_hash|
+      commit_hash[:sha]
+    end.reverse
+
+    # create hash that maps sha to id for creating/updating memberships
+    sha_to_id = {}
+    commits.select(:id, :sha).each do |commit|
+      sha_to_id[commit.sha] = commit.id
+    end
+
+    # create hashses of attributes for branch memberships
+    membership_hashes = []
+    shas.each_with_index do |sha, i|
+      membership_hashes << {
+        branch_id: self.id,
+        commit_id: sha_to_id[sha],
+        position: i,
+      } 
+    end
+    BranchMembership.upsert_all(membership_hashes,
+                                unique_by: [:commit_id, :branch_id])
+  end
+
+  # UNTESTED
+  # find the earliest position with multiple branch memberships and reorder
+  # memberships down to a little before that
+  def api_reorder_commits
+    # find lowest duplicated position and how many commits "deep" we need to
+    # go to straighten things out
+    min_pos = earliest_duplicated_position
+    membership_count = branch_memberships.count
+    depth = membership_count - min_pos
+    
+    # build up a list of commit data from GitHub api until we have enough to
+    # "go deep enough". Limit calls to 50, just in case things go crazy
+    shas = []
+    page = 1
+    num_calls = 0
+    while shas.length < depth && num_cals < 50
+      shas.concat(
+        Branch.api(auto_paginate: false).commits(
+          Branch.repo_path,
+          sha: self.name,
+          page: page,
+          per_page: 100
+        ).map { |commit| commit[:sha] }
+      )
+      page += 1
+      num_cals += 1
+    end
+    
+    # reassign memberships with proper ordering, but first destroy memberships
+    # of commits that think they are in this range, but didn't come out of
+    # api call
+    branch_memberships.includes(:commit).where('position >= ?', min_pos).
+                                         where.not(commit: {sha: shas})
+
+
+  end
+  
+  # UNTESTED
+  # earliest position assigned to at least two branch memberships. Useful
+  # when knowing when and where to reorder commits (like post-merge)
+  def earliest_duplicated_position
+    dups = branch_memberships.select(:position).group(:position).
+                              having('count(*) > 1').pluck(:position).
+                              reject(:nil?)
+    return nil unless dups.length > 0
+
+    dups.min
+
+  end                                           
   # convenience methods to get a hold of branches quickly
 
   # access a branch by name
