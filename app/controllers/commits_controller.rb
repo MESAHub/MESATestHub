@@ -170,7 +170,9 @@ class CommitsController < ApplicationController
     # which page of commits do we want?
     @page = (params[:page] || 1).to_i
 
-    @commits = @branch.commits.order(created_at: :desc, commit_time: :desc).page(@page)
+    @memberships = @branch.branch_memberships.includes(:commit).where.
+                           not(position: nil).order(position: :desc).page(@page)
+    @commits = @memberships.map(&:commit)
 
     # # grab commits for that page (which also includes how many pages there are)
     # commit_shas = Commit.api_commits(
@@ -193,6 +195,10 @@ class CommitsController < ApplicationController
     # # subset = commit_shas[@page_length * (@page - 1), @page_length]
     # @commits = @branch.commits.where(sha: commit_shas).to_a
     #   .sort! { |a, b| commit_shas.index(a.sha) <=> commit_shas.index(b.sha) }      
+
+    @start_num = 1 + (@page - 1) * @memberships.limit_value
+    @stop_num = @start_num + @commits.length - 1
+    @max_num = @branch.branch_memberships.where.not(position: nil).count
 
     # @start_num = 1 + (@page - 1) * @page_length
     # @stop_num = @start_num + @commits.length

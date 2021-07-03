@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2021_07_01_220520) do
+ActiveRecord::Schema.define(version: 2021_07_02_234750) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -18,7 +18,9 @@ ActiveRecord::Schema.define(version: 2021_07_01_220520) do
   create_table "branch_memberships", force: :cascade do |t|
     t.bigint "branch_id"
     t.bigint "commit_id"
+    t.integer "position"
     t.index ["branch_id"], name: "index_branch_memberships_on_branch_id"
+    t.index ["commit_id", "branch_id"], name: "index_branch_memberships_on_commit_id_and_branch_id", unique: true
     t.index ["commit_id"], name: "index_branch_memberships_on_commit_id"
   end
 
