@@ -82,24 +82,13 @@ class Branch < ApplicationRecord
     end
 
     #######################################################################
-    ### STEP 2: UPDATE HEAD COMMITS, TRIGGERING A LARGER UPDATE IF HEAD ###
-    ### COMMIT IS DIFFERENT                                             ###
-    #######################################################################
+    ### STEP 2: CHECK HEAD COMMITS, TRIGGERING A LARGER UPDATE IF HEAD ###
+    ### COMMIT IS DIFFERENT                                            ###
+    ######################################################################
     branch_data.each do |branch_hash|
       branch = Branch.find_by(name: branch_hash[:name])
       # bail if the branch isn't found... but this shouldn't happen (see step 1)
       next unless branch
-
-      # # update head commit. If that commit doesn't exist, update that branch's
-      # # commits ONLY
-      # new_head_commit = Commit.find_by(sha: branch_hash[:commit][:sha])
-      # if new_head_commit
-      #   branch.head = new_head_commit
-      # else
-      #   Commit.api_update_tree(branch: branch)
-      #   new_head_commit = Commit.find_by(sha: branch_hash[:commit][:sha])
-      #   branch.head = new_head_commit if new_head_commit
-      # end
 
       # If head commit differs from what GitHub reports, do a proper update
       # of the branch (involves one or more api calls)
@@ -121,21 +110,23 @@ class Branch < ApplicationRecord
     ### STEP 3: DELETE ORPHANED BRANCHES ###
     ########################################
   
-    # delete orphaned branches, but first make sure their commits have homes
-    to_delete = Branch.where(name: existing_branch_names - github_branch_names)
+    # identify branches to be destroyed (exist in db, but not on GitHub)
+    to_delete = Branch.includes(:head).
+      where(name: existing_branch_names - github_branch_names).to_a
 
     # final check on head commits of orphaned branches. To make sure none of
     # their commits got abandoned too far in the past. Hopefully the head
     # commits of abandoned branches made it into their new homes, and then we
     # can make sure that subsequent commits did as well.
     to_delete.each do |branch|
-      branch.head.branches.reject { |b| b == branch }.each do |other_branch|
+      branch.head.branches.reject { |b| to_delete.include? b }.each do |other_branch|
         in_both = other_branch.commits.where(id: branch.commits.pluck(:id))
 
         # nuclear option. If we're missing commits in the new branches, it's
         # not clear where they should be. Just look up ALL commits in the
         # branch and reorder them. The commits must already exist in the
-        # database; we just need to order them.
+        # database; we just need to order them. This is bad since it makes
+        # tons of api calls, especially as the repo grows.
         other_branch.reorder_all_commits if in_both.count < branch.commits.count
       end
     end
@@ -161,7 +152,6 @@ class Branch < ApplicationRecord
   # brings commits in a branch and their order up to date by syncing order
   # with that provided by GitHub api, adding any missing commits along the
   # way
-
   def api_update
     ##############################
     ### STEP 1: UPDATE COMMITS ###
@@ -187,11 +177,12 @@ class Branch < ApplicationRecord
       end
     end
 
-    # add/update commits to database. Hold on to ids so we can more easily
-    # create memberships. Thankfully,
-    # these ids should already be ordered (recent first), so we can use this
+    # add/update commits to database. Hold on to commits so we can more easily
+    # create memberships. Thankfully, these commits should already be ordered
+    # (most recent first), so we can use this
     # to generate the new ordering. We also add memberships at this point,
-    # but they will be updated by the ordering code below
+    # (implicit in create_or_update_from_github_hash) but they will be updated
+    # by the ordering code below
     commits = commits_data.map do |gh_hash|
       Commit.create_or_update_from_github_hash(github_hash: gh_hash,
                                                branch: self)

@@ -7,14 +7,13 @@ class GithubWebhooksController < ApplicationController
   # Handle push event
   def github_push(payload)
     # Create new entry in database for each new commit in push
-    Commit.push_update(payload)
+    # Commit.push_update(payload)
+    Branch.api_update_branches
   end
 
   private
 
   def webhook_secret(payload)
-    # hard-coded for now, but this needs to go into an environment variable
-    'Betelgeuse3x'
-    # ENV['GITHUB_WEBHOOK_SECRET']
+    ENV['GITHUB_WEBHOOK_SECRET']
   end
 end
