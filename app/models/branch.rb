@@ -11,9 +11,6 @@ class Branch < ApplicationRecord
   # use github api to create an array of hashes that contain data about all
   # known branches
   def self.api_branches(**params)
-    puts '#######################'
-    puts 'API retrieving branches'
-    puts '#######################'
     api.branches(@@repo_path, **params)
   end
 
@@ -60,8 +57,9 @@ class Branch < ApplicationRecord
   def self.api_update_branches(**params)
     branch_data = api_branches(**params)
 
-    # STEP 1: UPDATE WHICH BRANCHES ARE PRESENT AT ALL
-    ##################################################
+    ########################################################
+    ### STEP 1: UPDATE WHICH BRANCHES ARE PRESENT AT ALL ###
+    ########################################################
     github_branch_names = branch_data.map(&:name)
     existing_branch_names = Branch.all.pluck(:name)
 
@@ -83,46 +81,68 @@ class Branch < ApplicationRecord
       Branch.upsert_all(branch_hashes_to_insert, unique_by: :name)
     end
 
-    # STEP 2: UPDATE HEAD COMMITS, TRIGGERING A LARGER UPDATE IF HEAD COMMIT
-    # IS MISSING
-    ########################################################################
+    #######################################################################
+    ### STEP 2: UPDATE HEAD COMMITS, TRIGGERING A LARGER UPDATE IF HEAD ###
+    ### COMMIT IS DIFFERENT                                             ###
+    #######################################################################
     branch_data.each do |branch_hash|
       branch = Branch.find_by(name: branch_hash[:name])
       # bail if the branch isn't found... but this shouldn't happen (see step 1)
       next unless branch
 
-      # update head commit. If that commit doesn't exist, update that branch's
-      # commits ONLY
-      new_head_commit = Commit.find_by(sha: branch_hash[:commit][:sha])
-      if new_head_commit
-        branch.head = new_head_commit
-      else
-        Commit.api_update_tree(branch: branch)
-        new_head_commit = Commit.find_by(sha: branch_hash[:commit][:sha])
-        branch.head = new_head_commit if new_head_commit
-      end
+      # # update head commit. If that commit doesn't exist, update that branch's
+      # # commits ONLY
+      # new_head_commit = Commit.find_by(sha: branch_hash[:commit][:sha])
+      # if new_head_commit
+      #   branch.head = new_head_commit
+      # else
+      #   Commit.api_update_tree(branch: branch)
+      #   new_head_commit = Commit.find_by(sha: branch_hash[:commit][:sha])
+      #   branch.head = new_head_commit if new_head_commit
+      # end
 
-      branch.save
+      # If head commit differs from what GitHub reports, do a proper update
+      # of the branch (involves one or more api calls)
+      new_head_commit = Commit.find_by(sha: branch_hash[:commit][:sha])
+
+      if new_head_commit
+        # new head commit already exists in db; only update if it isn't
+        # the current head commit
+        branch.api_update unless branch.head &&
+                                 (branch.head.sha == new_head_commit.sha)
+      else
+        # new head commit is not already in db (most common case).
+        # Update commits on branch and then set the head commit
+        branch.api_update
+      end
     end
 
-    # STEP 3: MAKE SURE COMMITS ON MERGED BRANCHES NOW BELONG TO THEIR NEW
-    # BRANCHES, THEN DELETE ALL ORPHANED BRANCHES AND THEIR MEMBERSHIPS
-    # (THOUGH NOT THEIR COMMITS)
-    #########################################################################
+    ########################################
+    ### STEP 3: DELETE ORPHANED BRANCHES ###
+    ########################################
   
-    # make sure that all commits in a merged branch belong to at least the
-    # branches that its head node belongs to
-    # Branch.merged.each { |branch| branch.update_membership }
-
     # delete orphaned branches, but first make sure their commits have homes
     to_delete = Branch.where(name: existing_branch_names - github_branch_names)
 
-    # this ensures that all commits in a soon-to-be-deleted branch are members
-    # of the same branch their head commit is in. Probably redundant since we
-    # should already have updated the branch into which they are merged
-    to_delete.each(&:update_membership)
+    # final check on head commits of orphaned branches. To make sure none of
+    # their commits got abandoned too far in the past. Hopefully the head
+    # commits of abandoned branches made it into their new homes, and then we
+    # can make sure that subsequent commits did as well.
+    to_delete.each do |branch|
+      branch.head.branches.reject { |b| b == branch }.each do |other_branch|
+        in_both = other_branch.commits.where(id: branch.commits.pluck(:id))
 
-    # using destroy_all would be simpler, but much more time-consuming, as 
+        # nuclear option. If we're missing commits in the new branches, it's
+        # not clear where they should be. Just look up ALL commits in the
+        # branch and reorder them. The commits must already exist in the
+        # database; we just need to order them.
+        other_branch.reorder_all_commits if in_both.count < branch.commits.count
+      end
+    end
+
+    # all orphaned commits should now be properly situated in new branches. Now
+    # we kill off the defunct memberships, and finally, the defunct branches.
+    # Using destroy_all would be simpler, but much more time-consuming, as 
     # it would need to issue a delete statement for each affected branch
     # membership. Instead, we delete the branch memberships first, and then
     # kill the branches themseleves with delete_all, which is closer to the
@@ -138,10 +158,90 @@ class Branch < ApplicationRecord
     nil
   end
 
+  # brings commits in a branch and their order up to date by syncing order
+  # with that provided by GitHub api, adding any missing commits along the
+  # way
+
+  def api_update
+    ##############################
+    ### STEP 1: UPDATE COMMITS ###
+    ##############################
+
+    # gather commits from GitHub api
+    # for new branch, just grab first 100 commits (bleeds into past branches)
+    commits_data = Branch.api(auto_paginate: false).
+                          commits(Branch.repo_path, sha: self.name, per_page: 100)
+    unless commits.length.zero?
+      # for existing branch, grab up to 500 commits in successive api calls
+      # limit of 500 is abitrary, but the madness must stop somewhere if we
+      # can't find any existing commits
+      call_count = 1
+      while commits.where(sha: commits_data.pluck(:sha)).count.zero? && 
+            call_count < 5
+        commits_data.concat(
+          api(auto_paginate: false).commits(
+            repo_path, sha: self.name, per_page: 100, page: call_count + 1
+          )
+        )
+        call_count += 1
+      end
+    end
+
+    # add/update commits to database. Hold on to ids so we can more easily
+    # create memberships. Thankfully,
+    # these ids should already be ordered (recent first), so we can use this
+    # to generate the new ordering. We also add memberships at this point,
+    # but they will be updated by the ordering code below
+    commits = commits_data.map do |gh_hash|
+      Commit.create_or_update_from_github_hash(github_hash: gh_hash,
+                                               branch: self)
+    end
+
+    # for new commits, they need their test cases loaded. This is an expensive
+    # set of api calls that grows with the number of "new" commits.
+    commits.select { |c| c.test_case_count == 0 }.each do |c|
+      c.api_update_test_cases
+      c.save
+    end
+
+    ############################################
+    ### STEP 2: UPDATE MEMBERSHIPS/POSITIONS ###
+    ############################################
+
+    # get position of "oldest" commit in this collection (if there is one)
+    earliest_position = (branch_memberships.where.not(commit: commits).
+                                            maximum(:position) || 0) + 1
+
+    # create the membership hashes. Reverse the list of ids so that "old"
+    # commits come first, and thus have smaller positions, which are derived
+    # from their position in this reversed array
+    membership_hashes = []
+    commits.reverse.each_with_index do |commit, i|
+      membership_hashes << {
+        branch_id: self.id,
+        commit_id: commit.id,
+        position: earliest_position + i
+      }
+    end
+
+    # dump it all into the database, updating existing membership's positions
+    # and creating the rest from scratch. upsert_all is amazing.
+    BranchMembership.upsert_all(membership_hashes,
+                                unique_by: [:commit_id, :branch_id])
+
+    # update head to most recent (highest position) commit, and save to the db
+    self.head = branch_memberships.where.not(position: nil).
+                                   order(position: :desc).first.commit
+    self.save
+  end
+
+    
+
 
   # Gets list of ALL commits from github and uses it to assign orders to
   # all branch memberships. Makes abusive amounts of calls to GitHub API that
-  # will scale poorly with repo size.
+  # will scale poorly with repo size. No controller calls this; only for
+  # manual maintenance.
   def api_reorder_all_commits
     # get ordered list of ALL shas for commits in this branch
     shas = Commit.api_commits(sha: self.name).map do |commit_hash|
@@ -174,6 +274,7 @@ class Branch < ApplicationRecord
     # find lowest duplicated position and how many commits "deep" we need to
     # go to straighten things out
     min_pos = earliest_duplicated_position
+    return unless min_pos
     membership_count = branch_memberships.count
     depth = membership_count - min_pos
     
@@ -216,6 +317,7 @@ class Branch < ApplicationRecord
     dups.min
 
   end                                           
+
   # convenience methods to get a hold of branches quickly
 
   # access a branch by name

@@ -34,9 +34,6 @@ class Commit < ApplicationRecord
   # done AFTER this
   
   def self.api_commits(auto_paginate: true, **params)
-    puts '######################'
-    puts 'API retrieving commits'
-    puts '#######################'
     begin
       data = api(auto_paginate: auto_paginate).commits(repo_path, **params)
     rescue Octokit::NotFound
@@ -392,9 +389,6 @@ class Commit < ApplicationRecord
     TestCase.modules.each do |mod|
       source_file = "/#{mod}/test_suite/do1_test_source"
       begin
-        puts '#################################'
-        puts "API getting test cases for commit"
-        puts '#################################'
         contents = Base64.decode64(
           Commit.api.content(
             Commit.repo_path, path: source_file, query: {ref: sha}).content)
