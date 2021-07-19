@@ -34,9 +34,6 @@ class Commit < ApplicationRecord
   # done AFTER this
   
   def self.api_commits(auto_paginate: true, **params)
-    # puts '######################'
-    # puts 'API retrieving commits'
-    # puts '#######################'
     begin
       data = api(auto_paginate: auto_paginate).commits(repo_path, **params)
     rescue Octokit::NotFound
@@ -109,17 +106,11 @@ class Commit < ApplicationRecord
       earliest ||= days_before.days.before(branch.commits.maximum(:commit_time) || Date.today)
       # Avoid asking api for commits since the beginning of time unless we 
       # REALLY want it.
-      github_data = if force || Commit.count.zero?
+      github_data = if force || branch.commits.count.zero?
                       api_commits(sha: branch.name)
                     else
                       api_commits(sha: branch.name, since: earliest)
                     end
-      # if github doesn't know about branch, mark it as merged, as it was
-      # probably deleted on the github side
-      if github_data.nil?
-        branch.update(merged: true) 
-        return unless github_data
-      end
 
       # Prevent abusive calls to database to the beginning of time by only
       # looking at new commits in this branch. Note, this allows commits
@@ -161,18 +152,24 @@ class Commit < ApplicationRecord
       ids = ids.map { |commit_hash| commit_hash['id'] }
 
       # add branch memberships. Just use insert_all since we know they
-      # shouldn't exist yet
-      # ids = Commit.where(sha: github_data.pluck(:sha)).pluck(:id)
+      # shouldn't exist yet. Create a generic timestamp for the various
+      # insertion statements we'll be using
+      timestamp = Time.zone.now
       membership_hashes_to_insert = ids.map do |commit_id|
         {
           branch_id: branch.id,
-          commit_id: commit_id
+          commit_id: commit_id,
+          created_at: timestamp,
+          updated_at: timestamp
         }
       end
 
       BranchMembership.insert_all(membership_hashes_to_insert)
 
       # Populate test case commits for each new commit that doesn't have any
+      # Note: this accounts for ALL commits, but this probably shouldn't
+      # matter since it's hard to add commits to a branch without already
+      # executing this very method already.
       commits_to_populate = Commit.where(id: ids, test_case_count: 0)
       # this will translate from a module and test case name to a database id
       tc_name_to_id = {}
@@ -201,14 +198,15 @@ class Commit < ApplicationRecord
             end
 
             tccs_to_insert << { commit_id: commit.id,
-                                test_case_id: tc_name_to_id[mod][tc_name] }
+                                test_case_id: tc_name_to_id[mod][tc_name],
+                                created_at: timestamp,
+                                updated_at: timestamp
+                              }
           end
         end
         # set relevant scalars. Other default values should be sufficient to
-        # stand in instead of full blown update_scalars. INVOLVES A DATABASE
-        # CALL, but only one per commit that is both new to the branch and has
-        # no existing test case commits. Could potentially be replaced with an
-        # upsert for further optimization.
+        # stand in instead of full blown update_scalars. Nothing saved until
+        # the upsert below.
         commit.test_case_count = test_case_count
         commit.untested_count = test_case_count
         commit.status = -1

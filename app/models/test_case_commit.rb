@@ -39,7 +39,8 @@ class TestCaseCommit < ApplicationRecord
       existing_cases = TestCase.where(name: test_case_names, module: mod).to_a
       existing_names = existing_cases.pluck(:name)
       to_create = test_case_names - existing_names
-      to_create.each { |tc_name| puts tc_name }
+
+      # target for insert_all optimization
       TestCase.transaction do
         to_create.each do |new_name|
           existing_cases << TestCase.create(name: new_name, module: mod)
@@ -51,6 +52,8 @@ class TestCaseCommit < ApplicationRecord
       missing_tcc_cases = existing_cases - existing_tccs.includes(:test_case).map(&:test_case)
       # do all test case commit creations in one transaction (hopefully this
       # is better on the database? Not really sure...)
+      # 
+      # NOTE FOR FUTURE OPERATION: apply insert_all to this nonsense. 
       TestCaseCommit.transaction do
         missing_tcc_cases.each do |test_case|
           test_case.test_case_commits.create(commit: commit)
