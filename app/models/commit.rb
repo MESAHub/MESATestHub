@@ -492,6 +492,9 @@ class Commit < ApplicationRecord
     specs
   end
 
+  # note: future optimization would be to make these three "questions" be
+  # scalars that are updated at save time. They are all summoned every time we
+  # load an index view, meaning we have a 3n+1 situation
   # determine if each test case has been run with all optional inlists
   def run_optional?
     test_instances.
