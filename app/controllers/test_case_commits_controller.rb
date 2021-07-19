@@ -192,7 +192,6 @@ class TestCaseCommitsController < ApplicationController
         data_hash[:star_age] = inlist.star_age || -1
         data_hash[:num_retries] = inlist.num_retries || -1
 
-
         @specific_columns.each do |col_name|
           data_hash[col_name] = if ti.get_data(col_name)
                                   format('%0.3g', ti.get_data(col_name))
