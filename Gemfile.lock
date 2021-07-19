@@ -238,7 +238,6 @@ GEM
     kaminari-core (1.2.1)
     launchy (2.5.0)
       addressable (~> 2.7)
-    libv8 (8.4.255.0)
     listen (3.5.1)
       rb-fsevent (~> 0.10, >= 0.10.3)
       rb-inotify (~> 0.9, >= 0.9.10)
@@ -262,8 +261,6 @@ GEM
     mini_histogram (0.3.1)
     mini_mime (1.1.0)
     mini_portile2 (2.5.3)
-    mini_racer (0.2.15)
-      libv8 (> 7.3)
     minitest (5.14.4)
     msgpack (1.4.2)
     multi_json (1.15.0)
@@ -459,7 +456,6 @@ DEPENDENCIES
   listen (~> 3.5)
   lograge
   loofah (~> 2.3.1)
-  mini_racer (~> 0.2.15)
   msgpack (~> 1.2)
   octokit (~> 4.0)
   pg

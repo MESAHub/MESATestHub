@@ -28,7 +28,7 @@ gem 'rails_12factor', group: :production
 gem 'scout_apm', group: :production
 # gem 'sprockets', '~> 4.0.0.beta4'
 # gem 'libv8', '~> 8.3'
-gem 'mini_racer', '~>0.2.15 ' #, :require => nil
+# gem 'mini_racer', '~>0.3.1 ' #, :require => nil
 gem 'rubyzip', '~>1.3.0'
 gem 'barista'
 gem 'font-awesome-rails'
