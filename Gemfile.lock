@@ -489,14 +489,7 @@ DEPENDENCIES
   web-console (>= 3.3.0)
 
 RUBY VERSION
-<<<<<<< HEAD
-   ruby 3.0.0p0
-
-BUNDLED WITH
-   2.2.11
-=======
    ruby 3.0.1p64
 
 BUNDLED WITH
    2.2.15
->>>>>>> c14167449e4cec9fb72efe08df83e07ba4ef6ef4
