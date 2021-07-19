@@ -142,8 +142,8 @@ class Branch < ApplicationRecord
     unless to_delete.empty?
       to_delete.each do |branch|
         branch.branch_memberships.delete_all
+        branch.destroy
       end
-      to_delete.delete_all
     end
 
     nil
@@ -169,8 +169,9 @@ class Branch < ApplicationRecord
       while commits.where(sha: commits_data.pluck(:sha)).count.zero? && 
             call_count < 5
         commits_data.concat(
-          api(auto_paginate: false).commits(
-            repo_path, sha: self.name, per_page: 100, page: call_count + 1
+          Branch.api(auto_paginate: false).commits(
+            Branch.repo_path, sha: self.name, per_page: 100,
+            page: call_count + 1
           )
         )
         call_count += 1
