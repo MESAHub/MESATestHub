@@ -220,13 +220,13 @@
                       -else
                         =''
                     - if @inlists.length == 1
-                      %td.column-model-number.d-none= instance.instance_inlists.first.model_number
+                      %td.column-model-number.d-none= instance.instance_inlists.first ? instance.instance_inlists.first.model_number : ''
                       %td.column-star-age.d-none
-                        -if instance.instance_inlists.first.star_age
+                        -if instance.instance_inlists.first && instance.instance_inlists.first.star_age
                           = format("%.3e", instance.instance_inlists.first.star_age)
                         -else
                           –
-                      %td.column-num-retries= instance.instance_inlists.first.num_retries
+                      %td.column-num-retries= instance.instance_inlists.first ? instance.instance_inlists.first.num_retries : ''
 
 
                     - @specific_columns.each do |specific_col, visible|
