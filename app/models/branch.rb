@@ -329,127 +329,190 @@ class Branch < ApplicationRecord
     Commit.includes(includes).find(head_id)
   end
 
-  # ordered commits (most recent first; according to GitHub API ordering)
-  # within some window around a particular commit, assumed to be in the branch
   def nearby_commits(commit, window = 2)
-    # number of days to look on either side of the commit's commit time
-    time_window = 10
-
-    # minimum number of commits to make sure we get from the api call
-    min_commits = [10, commits.count].min
-    loc = nil
-
-    is_head = (commit == head)
-
-    num_found = 0
-    # commit may not be in the right window. Commit time is time commited, but
-    # not necessarily when it hit the branch (especially for stale pull
-    # requests). There's probably a better way, but for now, just keep 
-    # expanding the window around the commit time until the commit shows up in
-    # the list. Don't make more than 3 api calls, though, as this can quickly
-    # abuse the rate limit.
-    api_count = 0
-    until (loc && num_found >= min_commits) || api_count > 3
-      latest = [DateTime.now, time_window.days.after(commit.commit_time)].min
-      earliest = (2 * time_window).days.before(latest)
-      commit_shas = Commit.api.commits_between(
-        Commit.repo_path,
-        earliest,
-        latest,
-        name
-      ).map { |c| c[:sha] }
-      loc = commit_shas.index(commit.sha)
-
-      # set loc to nil if it is zero, but commit is not head. This is because
-      # we should not have this commit appearing as the latest  when it is not
-      # actully the head commit
-      loc = nil if (loc == 0 && !is_head)
-
-      num_found = commit_shas.length
-      api_count += 1
-      time_window *= 2
-    end
-    start_i = [0, loc - window].max
-    stop_i = [commit_shas.length - 1, loc + window].min
-    commit_shas = commit_shas[(start_i..stop_i)]
-
-    commits.where(sha: commit_shas).to_a.sort! do |a, b|
-      commit_shas.index(a.sha) <=> commit_shas.index(b.sha)
-    end
+    membership = branch_memberships.find_by(commit_id: commit.id)
+    return [commit] unless membership
+    position = membership.position
+    memberships = branch_memberships.includes(:commit).
+      where(position: (position - window)..(position + window)).
+      order(position: :desc)
+    memberships.map(&:commit)
   end
 
-  # ordered commits (most recent first; according to GitHub API ordering)
-  # within some window around a particular commit, assumed to be in the branch
+  # # ordered commits (most recent first; according to GitHub API ordering)
+  # # within some window around a particular commit, assumed to be in the branch
+  # def nearby_commits(commit, window = 2)
+  #   # number of days to look on either side of the commit's commit time
+  #   time_window = 10
+
+  #   # minimum number of commits to make sure we get from the api call
+  #   min_commits = [10, commits.count].min
+  #   loc = nil
+
+  #   is_head = (commit == head)
+
+  #   num_found = 0
+  #   # commit may not be in the right window. Commit time is time commited, but
+  #   # not necessarily when it hit the branch (especially for stale pull
+  #   # requests). There's probably a better way, but for now, just keep 
+  #   # expanding the window around the commit time until the commit shows up in
+  #   # the list. Don't make more than 3 api calls, though, as this can quickly
+  #   # abuse the rate limit.
+  #   api_count = 0
+  #   until (loc && num_found >= min_commits) || api_count > 3
+  #     latest = [DateTime.now, time_window.days.after(commit.commit_time)].min
+  #     earliest = (2 * time_window).days.before(latest)
+  #     commit_shas = Commit.api.commits_between(
+  #       Commit.repo_path,
+  #       earliest,
+  #       latest,
+  #       name
+  #     ).map { |c| c[:sha] }
+  #     loc = commit_shas.index(commit.sha)
+
+  #     # set loc to nil if it is zero, but commit is not head. This is because
+  #     # we should not have this commit appearing as the latest  when it is not
+  #     # actully the head commit
+  #     loc = nil if (loc == 0 && !is_head)
+
+  #     num_found = commit_shas.length
+  #     api_count += 1
+  #     time_window *= 2
+  #   end
+  #   start_i = [0, loc - window].max
+  #   stop_i = [commit_shas.length - 1, loc + window].min
+  #   commit_shas = commit_shas[(start_i..stop_i)]
+
+  #   commits.where(sha: commit_shas).to_a.sort! do |a, b|
+  #     commit_shas.index(a.sha) <=> commit_shas.index(b.sha)
+  #   end
+  # end
+  
   def nearby_test_case_commits(test_case_commit, window = 2)
-    test_case = test_case_commit.test_case
     commit = test_case_commit.commit
-    is_head = (commit == head)
+    test_case = test_case_commit.test_case
+    this_membership = branch_memberships.find_by(
+      commit_id: test_case_commit.commit.id)
+    tccs = [test_case_commit]
+    return tccs unless this_membership
+    
+    position = this_membership.position
 
-    # number of days to look on either side of the commit's commit time
-    time_window = 10
+    # find "older" commits in the branch, and count how many we can expect to
+    # have this test case represented in them (don't want to search forever
+    # if the test case is new)
+    older_memberships = branch_memberships.where(position: 0...position).
+      order(position: :desc).limit(50)
+    num_to_find = TestCaseCommit.where(commit_id: older_memberships.pluck(:commit_id),
+      test_case: test_case).count
+    num_to_find = [num_to_find, window].min
+    older_memberships.each do |membership|
+      # stop once we have enough test case commits
+      break if tccs.length >= num_to_find + 1
+      tcc = TestCaseCommit.find_by(commit_id: membership.commit_id, 
+                                   test_case: test_case)
+      # place at end of array (we keep going earlier and earlier, but want
+      # newest test case commits at top)
+      tccs << tcc
+    end
 
-    # minimum number of commits to make sure we get from the api call
-    min_tccs = [10, commits.count].min
-    loc = nil
+    # now do something similar for newer test case commits, but this time
+    # flip the order so that they get newer as we go on
+    newer_memberships = branch_memberships.where(position: (position + 1)..).
+      order(position: :asc).limit(50)
 
-    all_commits = nil
+    num_to_find = TestCaseCommit.where(commit_id: newer_memberships.pluck(:commit_id),
+      test_case_id: test_case.id).count
 
-    num_found = 0
-    # commit may not be in the right window. Commit time is time commited, but
-    # not necessarily when it hit the branch (especially for stale pull
-    # requests). There's probably a better way, but for now, just keep 
-    # expanding the window around the commit time until the commit shows up in
-    # the list. Don't make more than 3 api calls, though, as this can quickly
-    # abuse the rate limit.
-    api_count = 0
-    until (loc && num_found >= min_tccs) || api_count > 3
-      latest = [DateTime.now, time_window.days.after(commit.commit_time)].min
-      earliest = (2 * time_window).days.before(latest)
-      commit_shas = Commit.api.commits_between(
-        Commit.repo_path,
-        earliest,
-        latest,
-        name
-      ).map { |c| c[:sha] }
-      loc = commit_shas.index(commit.sha)
+    num_to_find = [num_to_find, window].min
+    current_num = tccs.length
 
-      # set loc to nil if it is zero, but commit is not head. This is because
-      # we should not have this commit appearing as the latest  when it is not
-      # actully the head commit
-      loc = nil if (loc == 0 && !is_head)
-
-      if loc
-        num_found = commit_shas.length
-        # if we found enough commits, check to see if we have enough that
-        # actually contain the test case we want
-        if loc && num_found > min_tccs
-          all_commits = commits.where(sha: commit_shas)
-          num_found = test_case_commits.where(
-            commit: all_commits,
-            test_case: test_case
-          ).count
-        end
+    newer_memberships.each do |membership|
+      if tccs.length >= num_to_find + current_num + 1
+        break 
       end
-
-      time_window *= 2
-      api_count += 1
+      tcc = TestCaseCommit.find_by(commit_id: membership.commit_id, 
+                                   test_case: test_case)
+      tccs.unshift(tcc) if tcc
     end
 
-    # fetch all test case commits. Wasteful, but we don't know which ones
-    # we need until we know which commits actually have this test case. Also
-    # arrange them. We'll throw out any outside of the desired window
-    # afterwards
-    tccs = test_case_commits.includes(:commit, :test_case).where(
-      commit: all_commits, test_case: test_case
-    ).to_a.sort! do |a, b|
-      commit_shas.index(a.commit.sha) <=> commit_shas.index(b.commit.sha)
-    end
-
-    loc = tccs.index(test_case_commit)
-    start_i = [0, loc - window].max
-    stop_i = [tccs.length - 1, loc + window].min
-    tccs[(start_i..stop_i)]
+    tccs
   end
+
+
+
+  # # ordered commits (most recent first; according to GitHub API ordering)
+  # # within some window around a particular commit, assumed to be in the branch
+  # def nearby_test_case_commits(test_case_commit, window = 2)
+  #   test_case = test_case_commit.test_case
+  #   commit = test_case_commit.commit
+  #   is_head = (commit == head)
+
+  #   # number of days to look on either side of the commit's commit time
+  #   time_window = 10
+
+  #   # minimum number of commits to make sure we get from the api call
+  #   min_tccs = [10, commits.count].min
+  #   loc = nil
+
+  #   all_commits = nil
+
+  #   num_found = 0
+  #   # commit may not be in the right window. Commit time is time commited, but
+  #   # not necessarily when it hit the branch (especially for stale pull
+  #   # requests). There's probably a better way, but for now, just keep 
+  #   # expanding the window around the commit time until the commit shows up in
+  #   # the list. Don't make more than 3 api calls, though, as this can quickly
+  #   # abuse the rate limit.
+  #   api_count = 0
+  #   until (loc && num_found >= min_tccs) || api_count > 3
+  #     latest = [DateTime.now, time_window.days.after(commit.commit_time)].min
+  #     earliest = (2 * time_window).days.before(latest)
+  #     commit_shas = Commit.api.commits_between(
+  #       Commit.repo_path,
+  #       earliest,
+  #       latest,
+  #       name
+  #     ).map { |c| c[:sha] }
+  #     loc = commit_shas.index(commit.sha)
+
+  #     # set loc to nil if it is zero, but commit is not head. This is because
+  #     # we should not have this commit appearing as the latest  when it is not
+  #     # actully the head commit
+  #     loc = nil if (loc == 0 && !is_head)
+
+  #     if loc
+  #       num_found = commit_shas.length
+  #       # if we found enough commits, check to see if we have enough that
+  #       # actually contain the test case we want
+  #       if loc && num_found > min_tccs
+  #         all_commits = commits.where(sha: commit_shas)
+  #         num_found = test_case_commits.where(
+  #           commit: all_commits,
+  #           test_case: test_case
+  #         ).count
+  #       end
+  #     end
+
+  #     time_window *= 2
+  #     api_count += 1
+  #   end
+
+  #   # fetch all test case commits. Wasteful, but we don't know which ones
+  #   # we need until we know which commits actually have this test case. Also
+  #   # arrange them. We'll throw out any outside of the desired window
+  #   # afterwards
+  #   tccs = test_case_commits.includes(:commit, :test_case).where(
+  #     commit: all_commits, test_case: test_case
+  #   ).to_a.sort! do |a, b|
+  #     commit_shas.index(a.commit.sha) <=> commit_shas.index(b.commit.sha)
+  #   end
+
+  #   loc = tccs.index(test_case_commit)
+  #   start_i = [0, loc - window].max
+  #   stop_i = [tccs.length - 1, loc + window].min
+  #   tccs[(start_i..stop_i)]
+  # end
 
   # update branch membership for all commits in branches
   def update_membership
