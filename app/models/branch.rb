@@ -127,7 +127,7 @@ class Branch < ApplicationRecord
         # branch and reorder them. The commits must already exist in the
         # database; we just need to order them. This is bad since it makes
         # tons of api calls, especially as the repo grows.
-        other_branch.reorder_all_commits if in_both.count < branch.commits.count
+        other_branch.api_reorder_all_commits if in_both.count < branch.commits.count
       end
     end
 
