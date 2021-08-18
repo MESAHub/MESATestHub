@@ -189,13 +189,21 @@
                       =fa_icon('plus-square', title: 'Run Optional') if instance.run_optional
                       =fa_icon('search-plus', title: 'Finer Resolution') if instance.resolution_factor < 0.999
                       =instance.passage_status
-                      - # - unless instance.passed
-                      %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/out.txt", target:'_blank'}
-                        %span.badge.badge-danger.text-monospace out
-                      %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/mk.txt", target:'_blank'}
-                        %span.badge.badge-danger.text-monospace mk
-                      %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/err.txt", target:'_blank'}
-                        %span.badge.badge-danger.text-monospace err
+                      - if instance.passed
+                        %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/out.txt", target:'_blank'}
+                          %span.badge.badge-success.text-monospace out
+                        %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/mk.txt", target:'_blank'}
+                          %span.badge.badge-success.text-monospace mk
+                        %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/err.txt", target:'_blank'}
+                          %span.badge.badge-success.text-monospace err
+                      - else
+                        %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/out.txt", target:'_blank'}
+                          %span.badge.badge-danger.text-monospace out
+                        %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/mk.txt", target:'_blank'}
+                          %span.badge.badge-danger.text-monospace mk
+                        %a.text-reset.d-none.test-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{instance.computer.name}/#{@test_case.name}/err.txt", target:'_blank'}
+                          %span.badge.badge-danger.text-monospace err
+
                     %td.column-computer=link_to(instance.computer, user_computer_path(instance.computer.user, instance.computer))
                     %td.column-date.d-none=format_time(instance.created_at)
                     %td.column-runtime
