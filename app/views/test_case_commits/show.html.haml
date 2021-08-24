@@ -175,8 +175,8 @@
                   %th.column-log_rel_run_E_err.d-none Log Rel. E Err.
                   - if @inlists.length == 1
                     %th.column-model-number.d-none Model Number
-                    %th.column-star-age.d-none Star Age
-                    %th.column-num-retries Inlist Retries
+                    %th.column-star_age.d-none Star Age
+                    %th.column-num_retries Inlist Retries
 
                   - @specific_columns.each do |specific_col, visible|
                     %th.text-monospace{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}= specific_col
@@ -225,11 +225,13 @@
                     %td.column-log_rel_run_E_err.d-none
                       -if instance.log_rel_run_E_err
                         =format('%.2f',instance.log_rel_run_E_err || 0)
+                      -elsif instance.instance_inlists.count == 1
+                        =format('%.2f',instance.instance_inlists.first.log_rel_run_E_err || 0)
                       -else
                         =''
                     - if @inlists.length == 1
-                      %td.column-model-number.d-none= instance.instance_inlists.first ? instance.instance_inlists.first.model_number : ''
-                      %td.column-star-age.d-none
+                      -# %td.column-model-number.d-none= instance.instance_inlists.first ? instance.instance_inlists.first.model_number : ''
+                      %td.column-star_age.d-none
                         -if instance.instance_inlists.first && instance.instance_inlists.first.star_age
                           = format("%.3e", instance.instance_inlists.first.star_age)
                         -else
@@ -264,9 +266,9 @@
                       %th.column-solver_calls_made.d-none Calls Made
                       %th.column-solver_calls_failed.d-none Calls Failed
                       %th.column-log_rel_run_E_err.d-none Log Rel. E Err.
-                      %th.column-model-number.d-none Model Number
-                      %th.column-star-age.d-none Star Age
-                      %th.column-num-retries Inlist Retries
+                      -# %th.column-model-number.d-none Model Number
+                      %th.column-star_age.d-none Star Age
+                      %th.column-num_retries Inlist Retries
                       - @specific_columns.each do |specific_col, visible|
                         %th.text-monospace{class: "column-#{specific_col}" + (visible ? '' : ' d-none')}= specific_col
 
@@ -307,12 +309,12 @@
                           - else
                             =""
                         %td.column-model-number.d-none= data_hash['model_number']
-                        %td.column-star-age.d-none
+                        %td.column-star_age.d-none
                           -if data_hash['star_age']
                             = format("%.3e", data_hash['star_age'])
                           -else
                             = ""
-                        %td.column-num-retries= data_hash['num_retries']
+                        %td.column-num_retries= data_hash['num_retries']
 
 
                         - @specific_columns.each do |specific_col, visible|
