@@ -4,6 +4,31 @@ class MorningMailer < ApplicationMailer
   # def initialize
   #   @client = SendGrid::API.new(api_key: ENV['SENDGRID_API_KEY']).client
   # end
+  
+  RELEASE_DATES = ['2021-12-15'].map do |date_str|
+    Date.parse(date_str)
+  end.freeze
+
+  def countdown_days
+    RELEASE_DATES.each do |release_date|
+      if Date.today < release_date
+        return (release_date - Date.today).to_i
+      end
+    end
+    # if there are no upcoming release days, return nil
+    nil
+  end
+
+  def countdown_color
+    days_left = countdown_days
+    return nil unless countdown_days
+    case countdown_days
+    when 0..7 then :red
+    when 7..28 then :yellow
+    else
+      :green
+    end
+  end
 
   def default_url_options
     if Rails.env.production?
@@ -91,6 +116,26 @@ class MorningMailer < ApplicationMailer
     @make_blue = "style= 'color: rgb(78, 114, 219)'".html_safe
     @make_red = "style='color: rgb(204, 0, 0)'".html_safe
     @make_cyan = "style='color: rgb(79, 159, 181)'".html_safe
+
+    # set up countdown at top of the email
+    @countdown_days = countdown_days
+    @countdown_color = case countdown_color
+    when :red then @make_red
+    when :yellow then @make_yellow
+    when :green then @make_green
+    else
+      nil      
+    end
+
+    # set up issue count
+    @release_blocker_count = nil
+    @release_blocker_count = Commit.api.issues(Commit.repo_path,
+      labels: 'release-blocker', state: 'open').length
+    @release_blocker_color = if @release_blocker_count.zero?
+                               @make_green
+                             else
+                               @make_red
+                             end
 
     # send the message
     mail(to: 'mesa-developers@lists.mesastar.org, p7r3d3c7y5u1u9e8@mesadevelopers.slack.com',

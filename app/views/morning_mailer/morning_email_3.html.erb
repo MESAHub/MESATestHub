@@ -1,3 +1,9 @@
+<% if @countdown_days %>
+  <h2><strong <%= @countdown_color %>><%= @countdown_days %></strong> days until the next public release.</h2>
+<% end %>
+<% if @release_blocker_count %>
+  <h2><strong <%= @release_blocker_color %>><%= @release_blocker_count %></strong> open release blocking issues.</h2>
+<% end %>
 <% @branch_data.keys.select { |branch| branch.name == 'main' }.each do |branch| %>
   <h2> <samp><%= branch.name %></samp></h2>
   <% @branch_data[branch].each do |commit| %>
