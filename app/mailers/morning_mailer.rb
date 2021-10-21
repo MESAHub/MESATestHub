@@ -21,8 +21,8 @@ class MorningMailer < ApplicationMailer
 
   def countdown_color
     days_left = countdown_days
-    return nil unless countdown_days
-    case countdown_days
+    return nil unless days_left
+    case days_left
     when 0..7 then :red
     when 7..28 then :yellow
     else
