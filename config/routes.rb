@@ -29,16 +29,17 @@ Rails.application.routes.draw do
 
   # for viewing data for one test case and one commit
   get '/:branch/commits/:sha/test_cases/:module/:test_case',
-    to: 'test_case_commits#show', as:'test_case_commit', test_case: /[^\/]+/
+    to: 'test_case_commits#show', as:'test_case_commit',
+    constraints: {test_case: /[^\/]+/, branch: /.*/}
 
 
   # for viewing data for one test case over many commits
   get '/:branch/test_cases/:module/:test_case', to: 'test_cases#show',
-  as: 'test_case', test_case: /[^\/]+/
+  as: 'test_case', constraints: {test_case: /[^\/]+/, branch: /.*/}
 
   # put this after the test case commit matcher since this is more general
-  get '/:branch/commits/:sha', to: 'commits#show', as: 'commit'
-  get '/:branch/commits', to: 'commits#index', as: 'commits'
+  get '/:branch/commits/:sha', to: 'commits#show', as: 'commit', constraints: {branch: /.*/}
+  get '/:branch/commits', to: 'commits#index', as: 'commits', constraints: {branch: /.*/}
 
   # for API access to nearby commits/pull requests for a branch/commit
   get '/commits/nearby_commits.json', to: 'commits#nearby_commits'

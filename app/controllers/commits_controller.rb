@@ -6,7 +6,7 @@ class CommitsController < ApplicationController
 
     # populate branch/commit selection menus
     # get all branches that contain this commit, this will be first dropdown
-    @selected_branch = Branch.includes(:head).named(params[:branch])
+    @selected_branch = Branch.includes(:head).named(CGI.unescape(params[:branch]))
     @other_branches = @commit.branches.reject do |branch|
       branch == @selected_branch
     end.sort_by { |c| c.updated_at }
@@ -160,8 +160,8 @@ class CommitsController < ApplicationController
     @page_length = 25
     @branches = Branch.includes(:head).order(:name)
     @branch_names = @branches.pluck(:name)
-    @branch = if @branch_names.include? params[:branch]
-                @branches[@branch_names.index(params[:branch])]
+    @branch = if @branch_names.include? CGI.unescape(params[:branch])
+                @branches[@branch_names.index(CGI.unescape(params[:branch]))]
               else
                 @branches[@branch_names.index('main')]
               end
@@ -291,7 +291,7 @@ class CommitsController < ApplicationController
 
   # API call to allow asynchronous loading of nearby commits
   def nearby_commits
-    branch = Branch.includes(:head).named(params[:branch])
+    branch = Branch.includes(:head).named(CGI.unescape(params[:branch]))
     this_commit = Commit.parse_sha(params[:sha])
     commits = branch.nearby_commits(this_commit)
 
