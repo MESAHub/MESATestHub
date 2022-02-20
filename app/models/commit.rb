@@ -393,7 +393,7 @@ class Commit < ApplicationRecord
   #   is +nil+, indicating that all should be checked, but with a preference
   #   for recent commits in +main+
   def self.test_candidate(computer:, allow_optional: true, allow_fpe: true,
-    allow_skip: false, max_age: 10, branch: nil)
+    allow_converge: true, allow_skip: false, max_age: 10, branch: nil)
     # search iteratively for commits that match the criteria AND do not have
     # submissions from this computer already. Start with commits from the
     # last day, and then search first in main, but then in all branches.
@@ -412,6 +412,7 @@ class Commit < ApplicationRecord
         res = true
         res &= !commit.ci_optional? unless allow_optional
         res &= !commit.ci_fpe? unless allow_fpe
+        res &= !commit.ci_converge? unless allow_converge
         res &= !commit.ci_skip? unless allow_skip
         next unless res
         # make sure commit still lives in a branch
@@ -443,6 +444,7 @@ class Commit < ApplicationRecord
         res = true
         res &= !commit.ci_optional? unless allow_optional
         res &= !commit.ci_fpe? unless allow_fpe
+        res &= !commit.ci_converge? unless allow_converge
         res &= !commit.ci_skip? unless allow_skip
         next unless res
         # make sure commit still lives in a branch
@@ -601,15 +603,29 @@ class Commit < ApplicationRecord
   def ci_skip?
     # ensure that anything including optional or fpe tests is not thought
     # of as being skipped; usually only appears in merge commit messages
-    message =~ /\[ci skip\]/ && !(ci_optional? || ci_fpe?)
+    message =~ /\[\s*ci\s+skip\s*\]/ && !(ci_optional? || ci_fpe?)
   end
 
   def ci_optional?
-    message =~ /\[ci optional\]/
+    message =~ /\[\s*ci\s+optional(\s+\d+)?\s*\]/
+  end
+
+  # extract the number from a run-optional commit, if there is one
+  def ci_optional_n
+    return unless ci_optional?
+    matchgroup = /\[\s*ci\s+optional(\s+\d+)?\s*\]/.match(message)
+    if matchgroup[1]
+      return matchgroup[1].strip.to_i
+    end
+    return nil
   end
 
   def ci_fpe?
-    message =~ /\[ci fpe\]/
+    message =~ /\[\s*ci\s+fpe\s*\]/
+  end
+
+  def ci_converge?
+    message =~ /\[\s*ci\s+converge\s*\]/
   end
 
 

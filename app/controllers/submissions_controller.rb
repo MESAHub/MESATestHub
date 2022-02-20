@@ -134,6 +134,8 @@ class SubmissionsController < ApplicationController
         max_age: age,
         branch: branch
       )
+      # stop if we found a commit, or if we didn't, but we've reached
+      # the max age before quitting
       break if commit || age == max_age
       age = [age * 2, max_age].min
     end
@@ -143,6 +145,8 @@ class SubmissionsController < ApplicationController
         'sha' => commit.sha,
         'skip' => commit.ci_skip?,
         'optional' => commit.ci_optional?,
+        'optional_n' => commit.ci_optional_n || -1,
+        'converge' => commit.ci_converge?,
         'fpe' => commit.ci_fpe?
       }.to_json
 
