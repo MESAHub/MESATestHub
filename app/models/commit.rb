@@ -378,6 +378,85 @@ class Commit < ApplicationRecord
     Commit.includes(includes).find(branch.head_id)
   end
 
+  # determine an optimal commit for testing on a particular computer
+  # Params
+  # +computer+:: computer that is seeking a commit to test
+  # +allow_optional+:: optional boolean designating whether or not to allow
+  #   commits that request all optional inlists are run; default is +true+
+  # +allow_fpe+:: optional boolean designating whether or not to allow commits
+  #   that request fpe checks be on; default is +true+
+  # +allow_skip+:: optional boolean designating whether or not to allow commits
+  #   that indicate they should be skipped; default is +false+
+  # +max_age+:: optional integer that specifies the absolute oldest commits
+  #   to check. Default is 10
+  # +branch+:: optional branch to which commits should be restricted. Default
+  #   is +nil+, indicating that all should be checked, but with a preference
+  #   for recent commits in +main+
+  def self.test_candidate(computer:, allow_optional: true, allow_fpe: true,
+    allow_skip: false, max_age: 10, branch: nil)
+    # search iteratively for commits that match the criteria AND do not have
+    # submissions from this computer already. Start with commits from the
+    # last day, and then search first in main, but then in all branches.
+    # If none are found, double the time window. Do this until we find a
+    # commit or we get to the max age with zero commits.
+    if branch
+      candidates = branch.commits.where(created_at:max_age.days.ago..Time.now)
+                                 .order(created_at: :desc)
+                                 .to_a
+
+      # rule out candidates that ask for optional tests (if we disallow them),
+      # ask for fpe checks (if we disallow them), or ask to be skipped 
+      # (unless we allow them). If the commit is still valid, check for
+      # existing submissions on the commit for the computer
+      candidates.each do |commit|
+        res = true
+        res &= !commit.ci_optional? unless allow_optional
+        res &= !commit.ci_fpe? unless allow_fpe
+        res &= !commit.ci_skip? unless allow_skip
+        next unless res
+        # make sure commit still lives in a branch
+        next if commit.branches.count.zero?
+        if Submission.where(commit: commit, computer: computer).count.zero?
+          return commit
+        end
+      end
+      return nil
+    else
+      # first check main, since it should have highest priority
+      main_candidate = self.test_candidate(computer: computer,
+        allow_optional: allow_optional, allow_fpe: allow_fpe,
+        allow_skip: allow_skip, max_age: max_age, branch: Branch.main)
+      return main_candidate if main_candidate
+
+      # no matching candidates in main? Check elsewhere. Same as
+      # search on specific branch, but we search on all commits (definite
+      # code ducplication happening here)
+      candidates = Commit.where(created_at:max_age.days.ago..Time.now)
+                         .order(created_at: :desc)
+                         .to_a
+
+      # rule out candidates that ask for optional tests (if we disallow them),
+      # ask for fpe checks (if we disallow them), or ask to be skipped 
+      # (unless we allow them). If the commit is still valid, check for
+      # existing submissions on the commit for the computer
+      candidates.each do |commit|
+        res = true
+        res &= !commit.ci_optional? unless allow_optional
+        res &= !commit.ci_fpe? unless allow_fpe
+        res &= !commit.ci_skip? unless allow_skip
+        next unless res
+        # make sure commit still lives in a branch
+        next if commit.branches.count.zero?
+        if Submission.where(commit: commit, computer: computer).count.zero?
+          puts "Found the candidate in other branches."
+          puts "Total submissions:"
+          puts Submissions.where(commit: commit, computer: computer).count
+          return commit
+        end
+      end
+      return nil
+    end
+  end
   ####################
   # INSTANCE METHODS #
   ####################
@@ -514,6 +593,25 @@ class Commit < ApplicationRecord
       where(resolution_factor: 0..0.99).
       pluck(:test_case_id).uniq.count == test_cases.count
   end
+
+  # these simply report if the right flag appears in the commit message
+  # ideally, these should be added to the database so they can be modified
+  # after the fact (and so we can change the convetion). But for now, this
+  # will suffice
+  def ci_skip?
+    # ensure that anything including optional or fpe tests is not thought
+    # of as being skipped; usually only appears in merge commit messages
+    message =~ /\[ci skip\]/ && !(ci_optional? || ci_fpe?)
+  end
+
+  def ci_optional?
+    message =~ /\[ci optional\]/
+  end
+
+  def ci_fpe?
+    message =~ /\[ci fpe\]/
+  end
+
 
   # make this stuff searchable directly on the database without having
   # to summon all the test case commits. This should be called whenever

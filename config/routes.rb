@@ -22,6 +22,7 @@ Rails.application.routes.draw do
   # for accepting new submissions (of any kind) from mesa_test
   resources :submissions, only: [:create, :show], defaults: { formats: :json }
   post 'submissions/create.json', to: 'submissions#create'
+  post 'submissions/request_commit.json', to: 'submissions#request_commit'
 
   # view one submission from a computer
   get '/computers/:computer/submissions/:id', to: 'submissions#show',

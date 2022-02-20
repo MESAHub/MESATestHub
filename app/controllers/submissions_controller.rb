@@ -102,6 +102,62 @@ class SubmissionsController < ApplicationController
 
   end 
   
+  def request_commit
+    return unless submission_authenticated?
+
+    # make sure submission is from valid computer
+    @computer = @user.computers.includes(:user).find_by(
+      name: submitter_params[:computer])
+    if @computer.nil?
+      submission_fail_computer(user, submitter_params[:computer])
+      return nil
+    end
+
+    branch = nil
+    if request_commit_params[:branch]
+      branch = Branch.named(commit_params[:branch])
+    end
+
+    max_age = request_commit_params[:max_age]
+    allow_skip = request_commit_params[:allow_skip]
+    allow_optional = request_commit_params[:allow_optional]
+    allow_fpe = request_commit_params[:allow_fpe]
+
+    age = 1
+    commit = nil
+    while age <= max_age
+      commit = Commit.test_candidate(
+        computer: @computer,
+        allow_optional: allow_optional, 
+        allow_fpe: allow_fpe,
+        allow_skip: allow_skip,
+        max_age: age,
+        branch: branch
+      )
+      break if commit || age == max_age
+      age = [age * 2, max_age].min
+    end
+
+    if commit
+      json_string = {
+        'sha' => commit.sha,
+        'skip' => commit.ci_skip?,
+        'optional' => commit.ci_optional?,
+        'fpe' => commit.ci_fpe?
+      }.to_json
+
+      respond_to do |format|
+        format.json { render json: json_string }
+      end
+
+    else
+      respond_to do |format|
+        format.json { render json: { error: "No untested commits found." } }
+      end
+    end
+
+  end
+
 
   private
 
@@ -235,5 +291,9 @@ class SubmissionsController < ApplicationController
                                       # :inlists, :mem_rn, :success_type,
                                       # :mem_re, :success_type, :checksum,
                                       # :outcome)
+  end
+
+  def request_commit_params
+    params.permit(:allow_optional, :allow_fpe, :allow_skip, :max_age, :branch)
   end
 end
