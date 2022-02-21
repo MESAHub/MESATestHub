@@ -103,6 +103,9 @@ class SubmissionsController < ApplicationController
   end 
   
   def request_commit
+    puts '#' * 20
+    puts '# IN REQUESTION_COMMIT #'
+    puts '#' * 20
     return unless submission_authenticated?
 
     # make sure submission is from valid computer
@@ -122,6 +125,7 @@ class SubmissionsController < ApplicationController
     allow_skip = request_commit_params[:allow_skip]
     allow_optional = request_commit_params[:allow_optional]
     allow_fpe = request_commit_params[:allow_fpe]
+    allow_converge = request_commit_params[:allow_converge]
 
     age = 1
     commit = nil
@@ -131,6 +135,7 @@ class SubmissionsController < ApplicationController
         allow_optional: allow_optional, 
         allow_fpe: allow_fpe,
         allow_skip: allow_skip,
+        allow_converge: allow_converge,
         max_age: age,
         branch: branch
       )
@@ -298,6 +303,7 @@ class SubmissionsController < ApplicationController
   end
 
   def request_commit_params
-    params.permit(:allow_optional, :allow_fpe, :allow_skip, :max_age, :branch)
+    params.permit(:allow_optional, :allow_fpe, :allow_converge, :allow_skip,
+                  :max_age, :branch)
   end
 end

@@ -20,9 +20,9 @@ Rails.application.routes.draw do
   resources :github_webhooks, only: :create, defaults: { formats: :json }
 
   # for accepting new submissions (of any kind) from mesa_test
-  resources :submissions, only: [:create, :show], defaults: { formats: :json }
   post 'submissions/create.json', to: 'submissions#create'
-  post 'submissions/request_commit.json', to: 'submissions#request_commit'
+  get 'submissions/request_commit.json', to: 'submissions#request_commit'
+  resources :submissions, only: [:create, :show], defaults: { formats: :json }
 
   # view one submission from a computer
   get '/computers/:computer/submissions/:id', to: 'submissions#show',

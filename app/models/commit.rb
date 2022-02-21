@@ -603,11 +603,11 @@ class Commit < ApplicationRecord
   def ci_skip?
     # ensure that anything including optional or fpe tests is not thought
     # of as being skipped; usually only appears in merge commit messages
-    message =~ /\[\s*ci\s+skip\s*\]/ && !(ci_optional? || ci_fpe?)
+    !!(message =~ /\[\s*ci\s+skip\s*\]/ && !(ci_optional? || ci_fpe?))
   end
 
   def ci_optional?
-    message =~ /\[\s*ci\s+optional(\s+\d+)?\s*\]/
+    !!(message =~ /\[\s*ci\s+optional(\s+\d+)?\s*\]/)
   end
 
   # extract the number from a run-optional commit, if there is one
@@ -621,11 +621,11 @@ class Commit < ApplicationRecord
   end
 
   def ci_fpe?
-    message =~ /\[\s*ci\s+fpe\s*\]/
+    !!(message =~ /\[\s*ci\s+fpe\s*\]/)
   end
 
   def ci_converge?
-    message =~ /\[\s*ci\s+converge\s*\]/
+    !!(message =~ /\[\s*ci\s+converge\s*\]/)
   end
 
 
