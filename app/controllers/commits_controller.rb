@@ -7,6 +7,16 @@ class CommitsController < ApplicationController
     # populate branch/commit selection menus
     # get all branches that contain this commit, this will be first dropdown
     @selected_branch = Branch.includes(:head).named(CGI.unescape(params[:branch]))
+    unless @selected_branch
+      # show commit on main if it is there (most likely the old branch was merged into main)
+      @selected_branch = Branch.main if @commit.branches.include?(Branch.main)
+      
+      # didn't find the commit in main? Then just use the first branch we can find.
+      @selected_branch ||= @commit.branches.first
+      
+      # redirect to working path if the specified branch is wrong
+      redirect_to(commit_path(sha: @commit.short_sha, branch: @selected_branch.name), alert: "Branch <span class='text-monospace'>#{CGI.unescape(params[:branch])}</span> does not exist. Found commit in <span class='text-monospace'>#{@selected_branch}</span>.") and return
+    end
     @other_branches = @commit.branches.reject do |branch|
       branch == @selected_branch
     end.sort_by { |c| c.updated_at }
@@ -163,7 +173,7 @@ class CommitsController < ApplicationController
     @branch = if @branch_names.include? CGI.unescape(params[:branch])
                 @branches[@branch_names.index(CGI.unescape(params[:branch]))]
               else
-                @branches[@branch_names.index('main')]
+                redirect_to(commits_path(branch: 'main'), alert: "Branch <span class='text-monospace'>#{CGI.unescape(params[:branch])}</span> does not exist; showing commits on <span class='text-monospace'>main</span>.") and return
               end
     # @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.main
 
@@ -325,6 +335,11 @@ class CommitsController < ApplicationController
   def set_commit
     # @commit = parse_sha(includes: {test_case_commits: [:test_case, {test_instances: [:computer, instance_inlists: :inlist_data]}]})
     @commit = parse_sha(includes: :branches)
+
+    # bail to commits index if the commit doesn't exist
+    unless @commit
+      redirect_to(commits_path(branch: 'main'), alert: "Could not locate commit <span class='text-monospace'>#{params[:sha]}</span> in any branch. Showing commits in <span class='text-monospace'>main</span>.") and return
+    end
 
     # avoid polling db for tons of instances and instance data if they passed
     # or haven't been tested. Results in an extra call, but avoiding a dragnet
