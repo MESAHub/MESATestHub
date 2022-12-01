@@ -5,8 +5,8 @@ git_source(:github) do |repo_name|
 end
 ruby '3.0.1'
 # gem 'bundler', '~> 2.1.4'
-gem 'sinatra', '~> 2.0.2'
-gem 'rack', '~> 2.1.4'
+gem 'sinatra', '~> 3.0.4'
+gem 'rack', '~> 2.2.4'
 gem 'rails', '~> 6.0.4.8'
 gem 'puma', '~> 4.3.12'
 gem 'puma_worker_killer'
