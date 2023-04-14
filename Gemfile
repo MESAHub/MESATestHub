@@ -5,8 +5,8 @@ git_source(:github) do |repo_name|
 end
 ruby '3.0.1'
 # gem 'bundler', '~> 2.1.4'
-gem 'sinatra', '~> 2.0.2'
-gem 'rack', '~> 2.1.4'
+gem 'sinatra', '~> 3.0.4'
+gem 'rack', '~> 2.2.6.4'
 gem 'rails', '~> 6.0.4.8'
 gem 'puma', '~> 4.3.12'
 gem 'puma_worker_killer'
@@ -21,9 +21,9 @@ gem 'pg'
 gem 'bcrypt', '~> 3.1.7'
 # gem 'sendgrid-ruby'
 gem 'kaminari'
-gem 'loofah', '~> 2.3.1'
+gem 'loofah', '~> 2.20.0'
 gem 'lograge'
-gem 'rails-html-sanitizer', '~> 1.4'
+gem 'rails-html-sanitizer', '~> 1.5.0'
 gem 'rails_12factor', group: :production
 gem 'scout_apm', group: :production
 # gem 'sprockets', '~> 4.0.0.beta4'
@@ -48,7 +48,7 @@ group :development, :test do
   # gem 'guard-rspec'
   # gem 'guard-cucumber'
   gem 'cucumber-rails', require: false
-  gem 'cucumber-rails-training-wheels'  
+  gem 'cucumber-rails-training-wheels'
   gem 'capybara', '~> 2.13'
   gem 'selenium-webdriver'
   gem 'derailed'
