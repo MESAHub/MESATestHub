@@ -21,9 +21,9 @@ gem 'pg'
 gem 'bcrypt', '~> 3.1.7'
 # gem 'sendgrid-ruby'
 gem 'kaminari'
-gem 'loofah', '~> 2.3.1'
+gem 'loofah', '~> 2.20.0'
 gem 'lograge'
-gem 'rails-html-sanitizer', '~> 1.4'
+gem 'rails-html-sanitizer', '~> 1.5'
 gem 'rails_12factor', group: :production
 gem 'scout_apm', group: :production
 # gem 'sprockets', '~> 4.0.0.beta4'
