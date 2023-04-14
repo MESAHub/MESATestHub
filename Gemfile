@@ -23,7 +23,7 @@ gem 'bcrypt', '~> 3.1.7'
 gem 'kaminari'
 gem 'loofah', '~> 2.3.1'
 gem 'lograge'
-gem 'rails-html-sanitizer', '~> 1.2'
+gem 'rails-html-sanitizer', '~> 1.4'
 gem 'rails_12factor', group: :production
 gem 'scout_apm', group: :production
 # gem 'sprockets', '~> 4.0.0.beta4'
