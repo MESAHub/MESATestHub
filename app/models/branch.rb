@@ -28,7 +28,7 @@ class Branch < ApplicationRecord
     # delete orphaned branches
     to_delete = Branch.where(name: existing_branch_names - github_branch_names)
 
-    # using destroy_all would be simpler, but much more time-consuming, as 
+    # using destroy_all would be simpler, but much more time-consuming, as
     # it would need to issue a delete statement for each affected branch
     # membership. Instead, we delete the branch memberships first, and then
     # kill the branches themseleves with delete_all, which is closer to the
@@ -69,7 +69,7 @@ class Branch < ApplicationRecord
     to_add = github_branch_names - existing_branch_names
     timestamp = Time.zone.now
     branch_hashes_to_insert = to_add.map do |b_name|
-      { 
+      {
         name: b_name,
         created_at: timestamp,
         updated_at: timestamp
@@ -109,10 +109,19 @@ class Branch < ApplicationRecord
     ########################################
     ### STEP 3: DELETE ORPHANED BRANCHES ###
     ########################################
-  
+
+    # TODO: SOMETHING BAD IS HAPPENING HERE. LOTS OF MEMORY GETS USED UP WHEN
+    # DELETING MERGED BRANCHES.
+
     # identify branches to be destroyed (exist in db, but not on GitHub)
     to_delete = Branch.includes(:head).
       where(name: existing_branch_names - github_branch_names).to_a
+
+    # IS THE STEP BELOW NEEDED? I SUSPECT THIS IS WHERE THE MEMORY LEAK HAPPENS
+    # this looks at branches that are not to be deleted that also contain this
+    # [doomed] branch's head commit. The thinking is that if those branches
+    # contain this branch's head commit then it should have all of this branch's
+    # commits
 
     # final check on head commits of orphaned branches. To make sure none of
     # their commits got abandoned too far in the past. Hopefully the head
@@ -133,10 +142,10 @@ class Branch < ApplicationRecord
 
     # all orphaned commits should now be properly situated in new branches. Now
     # we kill off the defunct memberships, and finally, the defunct branches.
-    # Using destroy_all would be simpler, but much more time-consuming, as 
+    # Using destroy_all would be simpler, but much more time-consuming, as
     # it would need to issue a delete statement for each affected branch
     # membership. Instead, we delete the branch memberships first, and then
-    # kill the branches themseleves with delete_all, which is closer to the
+    # kill the branches themselves with delete_all, which is closer to the
     # database, and requires more babysitting (branch memberships are dependent
     # on branches, so they should die when the branch dies)
     unless to_delete.empty?
@@ -166,7 +175,7 @@ class Branch < ApplicationRecord
       # limit of 500 is abitrary, but the madness must stop somewhere if we
       # can't find any existing commits
       call_count = 1
-      while commits.where(sha: commits_data.pluck(:sha)).count.zero? && 
+      while commits.where(sha: commits_data.pluck(:sha)).count.zero? &&
             call_count < 5
         commits_data.concat(
           Branch.api(auto_paginate: false).commits(
@@ -227,7 +236,7 @@ class Branch < ApplicationRecord
     self.save
   end
 
-    
+
 
 
   # Gets list of ALL commits from github and uses it to assign orders to
@@ -246,14 +255,14 @@ class Branch < ApplicationRecord
       sha_to_id[commit.sha] = commit.id
     end
 
-    # create hashses of attributes for branch memberships
+    # create/update hashes of attributes for branch memberships
     membership_hashes = []
     shas.each_with_index do |sha, i|
       membership_hashes << {
         branch_id: self.id,
         commit_id: sha_to_id[sha],
         position: i,
-      } 
+      }
     end
     BranchMembership.upsert_all(membership_hashes,
                                 unique_by: [:commit_id, :branch_id])
@@ -269,7 +278,7 @@ class Branch < ApplicationRecord
     return unless min_pos
     membership_count = branch_memberships.count
     depth = membership_count - min_pos
-    
+
     # build up a list of commit data from GitHub api until we have enough to
     # "go deep enough". Limit calls to 50, just in case things go crazy
     shas = []
@@ -287,7 +296,7 @@ class Branch < ApplicationRecord
       page += 1
       num_cals += 1
     end
-    
+
     # reassign memberships with proper ordering, but first destroy memberships
     # of commits that think they are in this range, but didn't come out of
     # api call
@@ -296,7 +305,7 @@ class Branch < ApplicationRecord
 
 
   end
-  
+
   # UNTESTED
   # earliest position assigned to at least two branch memberships. Useful
   # when knowing when and where to reorder commits (like post-merge)
@@ -308,7 +317,7 @@ class Branch < ApplicationRecord
 
     dups.min
 
-  end                                           
+  end
 
   # convenience methods to get a hold of branches quickly
 
@@ -354,7 +363,7 @@ class Branch < ApplicationRecord
   #   num_found = 0
   #   # commit may not be in the right window. Commit time is time commited, but
   #   # not necessarily when it hit the branch (especially for stale pull
-  #   # requests). There's probably a better way, but for now, just keep 
+  #   # requests). There's probably a better way, but for now, just keep
   #   # expanding the window around the commit time until the commit shows up in
   #   # the list. Don't make more than 3 api calls, though, as this can quickly
   #   # abuse the rate limit.
@@ -387,7 +396,7 @@ class Branch < ApplicationRecord
   #     commit_shas.index(a.sha) <=> commit_shas.index(b.sha)
   #   end
   # end
-  
+
   def nearby_test_case_commits(test_case_commit, window = 2)
     commit = test_case_commit.commit
     test_case = test_case_commit.test_case
@@ -395,7 +404,7 @@ class Branch < ApplicationRecord
       commit_id: test_case_commit.commit.id)
     tccs = [test_case_commit]
     return tccs unless this_membership
-    
+
     position = this_membership.position
 
     # find "older" commits in the branch, and count how many we can expect to
@@ -409,7 +418,7 @@ class Branch < ApplicationRecord
     older_memberships.each do |membership|
       # stop once we have enough test case commits
       break if tccs.length >= num_to_find + 1
-      tcc = TestCaseCommit.find_by(commit_id: membership.commit_id, 
+      tcc = TestCaseCommit.find_by(commit_id: membership.commit_id,
                                    test_case: test_case)
       # place at end of array (we keep going earlier and earlier, but want
       # newest test case commits at top)
@@ -429,9 +438,9 @@ class Branch < ApplicationRecord
 
     newer_memberships.each do |membership|
       if tccs.length >= num_to_find + current_num + 1
-        break 
+        break
       end
-      tcc = TestCaseCommit.find_by(commit_id: membership.commit_id, 
+      tcc = TestCaseCommit.find_by(commit_id: membership.commit_id,
                                    test_case: test_case)
       tccs.unshift(tcc) if tcc
     end
@@ -460,7 +469,7 @@ class Branch < ApplicationRecord
   #   num_found = 0
   #   # commit may not be in the right window. Commit time is time commited, but
   #   # not necessarily when it hit the branch (especially for stale pull
-  #   # requests). There's probably a better way, but for now, just keep 
+  #   # requests). There's probably a better way, but for now, just keep
   #   # expanding the window around the commit time until the commit shows up in
   #   # the list. Don't make more than 3 api calls, though, as this can quickly
   #   # abuse the rate limit.
@@ -534,7 +543,7 @@ class Branch < ApplicationRecord
       # other branch that it was merged into. Create all needed memberships
       not_in = branch_commit_ids - already_in
       memberships_to_insert = not_in.map do |commit_id|
-        { 
+        {
           commit_id: commit_id,
           branch_id: other_branch.id,
           created_at: Time.zone.now,
@@ -545,7 +554,7 @@ class Branch < ApplicationRecord
       # do upsertion, treating any memberships with matching commit/branches
       # as already existing
       unless memberships_to_insert.empty?
-        BranchMembership.upsert_all(memberships_to_insert, 
+        BranchMembership.upsert_all(memberships_to_insert,
                                     unique_by: [:commit_id, :branch_id])
       end
     end
@@ -562,7 +571,7 @@ class Branch < ApplicationRecord
   end
 
   # make sure the root of a branch is the true root of the entire repo
-  # this is bad for the database since it could require repeated 
+  # this is bad for the database since it could require repeated
   def recursive_assign_root(current_root: nil)
     current_root ||= commits.find_by(parents_count: 0) || head
     return if current_root == Commit.root
