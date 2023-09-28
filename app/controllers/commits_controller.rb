@@ -22,6 +22,15 @@ class CommitsController < ApplicationController
     end.sort_by { |c| c.updated_at }
     @branches = [@selected_branch, @other_branches].flatten
 
+    # branches that are open but to not contain this commit
+    @branches_off = Branch.includes(:head).all.where.not(id: @branches.map(&:id))
+    # more recent ones (show these at the top)
+    @branches_off_recent = @branches_off.where('updated_at > ?', 4.week.ago).sort_by(&:name)
+    # older ones (show at bottom)
+    @branches_off_older = @branches_off.where('updated_at <= ?', 4.week.ago).sort_by(&:name)
+
+    # break up "other" branches into 
+
     # Get array of commits made in the same branch around the same time of this
     # commit. For now, get no more than five commits, ideally centered
     # at current commit in time in the branch. That is, if this is the head
