@@ -6,12 +6,21 @@
         %i.fa.fa-step-backward.text-reset
   .col-6.col-md-5.text-right
     .dropdown
-      %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}  
+      %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
         =fa_icon 'code-fork'
         %samp#selected-branch= @selected_branch
-      .dropdown-menu
+      .dropdown-menu{style: "max-height: 50vh; overflow-y: auto;", 'aria-labelledby': 'selected-branch'}
+        %h6.dropdown-header.font-weight-bold.text-dark Branches with this commit
         - @branches.each do |branch|
-          =link_to branch, test_case_commit_path(branch: branch.name, sha: params[:sha], test_case: params[:test_case], module: params[:module]), class: "text-monospace dropdown-item"  
+          =link_to branch, test_case_commit_path(branch: branch.name, sha: params[:sha], test_case: params[:test_case], module: params[:module]), class: "text-monospace dropdown-item" + (branch == @selected_branch ? ' text-light bg-primary' : '')
+        .dropdown-divider
+        %h6.dropdown-header.font-weight-bold.text-dark Other Recent Branches
+        - @not_in_branches[:recent].each do |branch|
+          =link_to branch, test_case_commit_path(branch: branch.name, sha: branch.head.sha, test_case: params[:test_case], module: params[:module]), class: "text-monospace dropdown-item"
+        .dropdown-divider
+        %h6.dropdown-header.font-weight-bold.text-dark Older Branches
+        - @not_in_branches[:older].each do |branch|
+          =link_to branch, test_case_commit_path(branch: branch.name, sha: branch.head.sha, test_case: params[:test_case], module: params[:module]), class: "text-monospace dropdown-item"
   .col-6.col-md-5
     .dropdown
       %button.btn.btn-outline-primary.btn-lg.btn-block.dropdown-toggle#commit-selector{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}

@@ -8,6 +8,8 @@ class TestCasesController < ApplicationController
     @unmerged_branches = Branch.unmerged
     @merged_branches = Branch.merged
     @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.main
+    @recent_branches = Branch.recent
+    @older_branches = Branch.older
 
     # status selection menu options
     @status_menu = {

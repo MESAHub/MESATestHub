@@ -348,6 +348,15 @@ class Branch < ApplicationRecord
     memberships.map(&:commit)
   end
 
+  # get branches that have been updated in the last +weeks+ weeks
+  def self.recent(weeks: 4)
+    Branch.where('updated_at > ?', weeks.weeks.ago).order(:name)
+  end
+
+  def self.older(weeks: 4)
+    Branch.where('updated_at <= ?', weeks.weeks.ago).order(:name)
+  end
+
   # # ordered commits (most recent first; according to GitHub API ordering)
   # # within some window around a particular commit, assumed to be in the branch
   # def nearby_commits(commit, window = 2)

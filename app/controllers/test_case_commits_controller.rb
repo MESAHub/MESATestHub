@@ -8,6 +8,8 @@ class TestCaseCommitsController < ApplicationController
       branch == @selected_branch
     end
     @branches = [@selected_branch, @other_branches].flatten
+    @not_in_branches = @commit.not_in_branches
+    
 
     # populating test case commit dropdown menu. In the future, might want to
     # move this to happen via asynchronous request from javascript to speed up

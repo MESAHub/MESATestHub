@@ -22,14 +22,10 @@ class CommitsController < ApplicationController
     end.sort_by { |c| c.updated_at }
     @branches = [@selected_branch, @other_branches].flatten
 
-    # branches that are open but to not contain this commit
-    @branches_off = Branch.includes(:head).all.where.not(id: @branches.map(&:id))
-    # more recent ones (show these at the top)
-    @branches_off_recent = @branches_off.where('updated_at > ?', 4.week.ago).sort_by(&:name)
-    # older ones (show at bottom)
-    @branches_off_older = @branches_off.where('updated_at <= ?', 4.week.ago).sort_by(&:name)
-
-    # break up "other" branches into 
+    # branches that do not contain this commit. Want these for easy navigation,
+    # but they will redirect to the head commits of their respective branches
+    @branches_off_recent = Branch.recent.where.not(id: @branches.map(&:id))
+    @branches_off_older = Branch.older.where.not(id: @branches.map(&:id))
 
     # Get array of commits made in the same branch around the same time of this
     # commit. For now, get no more than five commits, ideally centered
@@ -185,10 +181,8 @@ class CommitsController < ApplicationController
                 redirect_to(commits_path(branch: 'main'), alert: "Branch <span class='text-monospace'>#{CGI.unescape(params[:branch])}</span> does not exist; showing commits on <span class='text-monospace'>main</span>.") and return
               end
     # @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.main
-    # branches updated in the last four weeks
-    @branches_recent = @branches.where('updated_at > ?', 4.week.ago).sort_by(&:name)
-    # older branches
-    @branches_older = @branches.where('updated_at <= ?', 4.week.ago).sort_by(&:name)
+    @branches_recent = Branch.recent
+    @branches_older = Branch.older
     # which page of commits do we want?
     @page = (params[:page] || 1).to_i
 

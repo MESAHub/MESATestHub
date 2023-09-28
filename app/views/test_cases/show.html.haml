@@ -10,7 +10,7 @@
             %small.text-muted
               =surround '(', ')' do
                 %span.text-monospace=@test_case.module
-          .dropdown-menu{'aria-labelledby' => 'test-case-select'}
+          .dropdown-menu{'aria-labelledby' => 'test-case-select', 'style' => 'max-height: 50vh; overflow-y: auto;'}
             %form.px-2.my-0
               .form-group
                 %input.form-control-lg.w-100#tc-search{type: 'text', placeholder: 'Search Test Cases'}
@@ -26,9 +26,14 @@
           %button.btn.btn-outline-primary.btn-lg.dropdown-toggle#branch-select{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
             =fa_icon 'code-fork'
             %samp= @branch
-          .dropdown-menu{'aria-labelledby' => 'branch-select'}
-            - @unmerged_branches.each do |branch|
-              =link_to branch, test_case_path(branch: branch.name, test_case: params[:test_case], module: params[:module]), class: "dropdown-item text-monospace text-primary#{branch == params[:branch] ? 'active' : ''}"
+          .dropdown-menu{'aria-labelledby' => 'branch-select', 'style' => 'max-height: 50vh; overflow-y: auto;'}
+            %h6.dropdown-header.font-weight-bold.text-dark Recently Updated Branches
+            - @recent_branches.each do |branch|
+              =link_to branch, test_case_path(branch: branch.name, test_case: params[:test_case], module: params[:module]), class: "dropdown-item text-monospace #{branch.name == params[:branch] ? 'bg-primary text-light' : 'text-primary'}"
+            .dropdown-divider
+            %h6.dropdown-header.font-weight-bold.text-dark Older Branches
+            - @older_branches.each do |branch|
+              =link_to branch, test_case_path(branch: branch.name, test_case: params[:test_case], module: params[:module]), class: "dropdown-item text-monospace #{branch.name == params[:branch] ? 'bg-primary text-light' : 'text-primary'}"
         
 .row.mb-4
   .col

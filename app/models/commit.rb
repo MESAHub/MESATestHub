@@ -693,6 +693,29 @@ class Commit < ApplicationRecord
     submissions.pluck(:compiled).count(false)
   end
 
+  # branches that this commit is NOT in, in two categories:
+  # - branches that have been recently updated
+  # - branches that have not been recently updated
+  # each collection is sorted by name
+  def not_in_branches(weeks: 4)
+    # query for all branches that this commit is not in
+    bs = Branch.includes(:head).where.not(id: branches.pluck(:id))
+    # sort into two categories
+    recently_updated = []
+    not_recently_updated = []
+    bs.each do |b|
+      if b.head.commit_time > weeks.weeks.ago
+        recently_updated << b
+      else
+        not_recently_updated << b
+      end
+    end
+    # sort each category by name
+    recently_updated.sort_by!(&:name)
+    not_recently_updated.sort_by!(&:name)
+    {recent: recently_updated, older: not_recently_updated}
+  end
+
   # sort commits according to their datetimes, with recent commits FIRST
   def <=>(commit_1, commit_2)
     commit_2.commit_time <=> commit_1.commit_time
