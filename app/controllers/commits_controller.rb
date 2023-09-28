@@ -185,7 +185,10 @@ class CommitsController < ApplicationController
                 redirect_to(commits_path(branch: 'main'), alert: "Branch <span class='text-monospace'>#{CGI.unescape(params[:branch])}</span> does not exist; showing commits on <span class='text-monospace'>main</span>.") and return
               end
     # @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.main
-
+    # branches updated in the last four weeks
+    @branches_recent = @branches.where('updated_at > ?', 4.week.ago).sort_by(&:name)
+    # older branches
+    @branches_older = @branches.where('updated_at <= ?', 4.week.ago).sort_by(&:name)
     # which page of commits do we want?
     @page = (params[:page] || 1).to_i
 

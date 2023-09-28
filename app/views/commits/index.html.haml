@@ -7,10 +7,18 @@
       %button.btn.btn-outline-primary.btn-lg.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
         =fa_icon 'code-fork'
         %samp= @branch
-      .dropdown-menu
-        - @branches.each do |branch|
+      .dropdown-menu{style: "max-height: 50vh; overflow-y: auto;", 'aria-labelledby': 'selected-branch'}
+        %h6.dropdown-header.font-weight-bold.text-dark Recently Updated Branches
+        - @branches_recent.each do |branch|
           -if branch == @branch
-            =link_to branch, commits_path(branch: branch.name), class: "dropdown-item text-monospace active text-reset"
+            =link_to branch, commits_path(branch: branch.name), class: "dropdown-item text-monospace active text-light bg-primary"
+          -else
+            =link_to branch, commits_path(branch: branch.name), class: "dropdown-item text-monospace text-reset"
+        .dropdown-divider
+        %h6.dropdown-header.font-weight-bold.text-dark Older Branches
+        - @branches_older.each do |branch|
+          -if branch == @branch
+            =link_to branch, commits_path(branch: branch.name), class: "dropdown-item text-monospace active text-reset text-light bg-primary"
           -else
             =link_to branch, commits_path(branch: branch.name), class: "dropdown-item text-monospace text-reset"
   .col-12.col-md-6
