@@ -5,7 +5,7 @@
     "coffeescript": "<=1.999"
   },
   "engines": {
-    "yarn": ">=1.9",
+    "yarn": "1.22.x",
     "node": "18.x"
   }
 }
