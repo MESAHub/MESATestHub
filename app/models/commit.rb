@@ -73,6 +73,11 @@ class Commit < ApplicationRecord
     commit
   end
 
+  ### NOTE: I don't think the function below is ever used anymore. At some
+  # point, we should confirm it's not needed and delete it. This functionality
+  # is now accounted for in the Branch model. Most notably, the inserted
+  # branch memberships don't know their positions.
+
   # gather all commits from GitHub and update database to include and/or
   # update them. Does the following:
   # - Get all commits to some time before the most recent commit (or to the
@@ -154,13 +159,13 @@ class Commit < ApplicationRecord
       # add branch memberships. Just use insert_all since we know they
       # shouldn't exist yet. Create a generic timestamp for the various
       # insertion statements we'll be using
-      timestamp = Time.zone.now
+      
+      # used to try to include timestamps, but they aren't even attributes anymore
+      # timestamp = Time.zone.now
       membership_hashes_to_insert = ids.map do |commit_id|
         {
           branch_id: branch.id,
-          commit_id: commit_id,
-          created_at: timestamp,
-          updated_at: timestamp
+          commit_id: commit_id
         }
       end
 
