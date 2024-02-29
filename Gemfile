@@ -6,7 +6,7 @@ end
 ruby '3.0.6'
 # gem 'bundler', '~> 2.1.4'
 gem 'sinatra', '~> 3.0.4'
-gem 'rack', '~> 2.2.6.4'
+gem 'rack', '~> 2.2.8.1'
 gem 'rails', '~> 6.1.7.5'
 gem 'puma', '>= 5.6.7'
 gem 'puma_worker_killer'
