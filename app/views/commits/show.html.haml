@@ -113,12 +113,12 @@
                   %span.font-weight-bold.text-success Succeeded
                 - when :failure
                   %span.font-weight-bold.text-danger.my-2 Failed
-                  %a.text-reset.d-none.build-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{entry[:computer].name}/build.log", target:'_blank', 'data-commit': @commit.sha, 'data-computer': entry[:computer].name}
+                  %a.text-reset.d-none.build-log-link{href: "https://mesa-logs.flatironinstitute.org/#{@commit.sha}/#{entry[:computer].name}/build.log", target:'_blank', 'data-commit': @commit.sha, 'data-computer': entry[:computer].name}
                     %button.btn.btn-light.btn-sm
                       %i.fa.fa-file-text-o
                 - when :mixed
                   %span.font-weight-bold.text-warning.my-2 Mixed
-                  %a.text-reset.d-none.build-log-link{href: "https://logs.mesastar.org/#{@commit.sha}/#{entry[:computer].name}/build.log", target:'_blank', 'data-commit': @commit.sha, 'data-computer': entry[:computer].name}
+                  %a.text-reset.d-none.build-log-link{href: "https://mesa-logs.flatironinstitute.org/#{@commit.sha}/#{entry[:computer].name}/build.log", target:'_blank', 'data-commit': @commit.sha, 'data-computer': entry[:computer].name}
                     %button.btn.btn-light.btn-sm{'data-toggle' => 'modal', 'data-target' => '#buildModal'}
                       %i.fa.fa-file-text-o
                 - else
