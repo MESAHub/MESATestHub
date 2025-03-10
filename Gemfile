@@ -5,8 +5,9 @@ git_source(:github) do |repo_name|
 end
 ruby '3.2.2'
 # gem 'bundler', '~> 2.1.4'
-gem 'sinatra', '~> 3.0.4'
-gem 'rack', '~> 2.2.8.1'
+gem 'sinatra', '~> 3.2.0'
+gem "webrick", ">= 1.8.2"
+gem 'rack', '>= 2.2.12'
 gem 'rails', '~> 6.1.7.7'
 gem 'puma', '>= 6.4.2'
 gem 'puma_worker_killer'
@@ -18,12 +19,14 @@ gem 'coffee-rails', '~> 4.2'
 gem 'turbolinks', '~> 5'
 gem 'jbuilder', '~> 2.5'
 gem 'pg'
+gem "rexml", ">= 3.3.9"
 gem 'bcrypt', '~> 3.1.7'
+gem "net-imap", ">= 0.3.8"
 # gem 'sendgrid-ruby'
 gem 'kaminari'
-gem 'loofah', '~> 2.20.0'
+gem 'loofah', '~> 2.21'
 gem 'lograge'
-gem 'rails-html-sanitizer', '~> 1.5.0'
+gem 'rails-html-sanitizer', '~> 1.6.2'
 gem 'rails_12factor', group: :production
 gem 'scout_apm', group: :production
 # gem 'sprockets', '~> 4.0.0.beta4'
@@ -36,7 +39,7 @@ gem 'font-awesome-rails'
 gem 'octokit', "~> 4.0"
 gem 'faraday-http-cache'
 gem 'github_webhook', '~> 1.1'
-gem 'rack-cors', require: 'rack/cors'
+gem 'rack-cors', '>=2.0.2', require: 'rack/cors'
 
 # heroku metrics
 gem 'barnes'
