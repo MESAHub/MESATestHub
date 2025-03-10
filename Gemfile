@@ -3,7 +3,7 @@ git_source(:github) do |repo_name|
   repo_name = "#{repo_name}/#{repo_name}" unless repo_name.include?("/")
   "https://github.com/#{repo_name}.git"
 end
-ruby '3.0.6'
+ruby '3.2.2'
 # gem 'bundler', '~> 2.1.4'
 gem 'sinatra', '~> 3.0.4'
 gem 'rack', '~> 2.2.6.4'
