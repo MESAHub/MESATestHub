@@ -42,11 +42,13 @@ class ComputersController < ApplicationController
     @submissions.each do |submission|
       @counts[submission] = submission.test_instances.length
     end
-
-    @earliest = @computer.test_instances.order(:created_at).first.created_at
-
+  
+    # Check if there are any test instances before trying to get the earliest one
+    first_instance = @computer.test_instances.order(:created_at).first
+    @earliest = first_instance ? first_instance.created_at : @computer.created_at
+  
     @cpu_times = {}
-
+  
     @cpu_times[:day] =  @computer.test_instances.
       where(created_at: 1.day.ago..Time.now).sum(:cpu_hours)
     @cpu_times[:year] = @computer.test_instances.
