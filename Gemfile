@@ -7,9 +7,9 @@ ruby '3.2.2'
 # gem 'bundler', '~> 2.1.4'
 gem 'sinatra', '~> 3.2.0'
 gem "webrick", ">= 1.8.2"
-gem 'rack', '>= 2.2.12'
+gem 'rack', '>= 2.2.14'
 gem 'rack-attack'
-gem 'rails', '~> 6.1.7.7'
+gem 'rails', '~> 6.1.7.8'
 gem 'puma', '>= 6.4.2'
 gem 'puma_worker_killer'
 gem 'bootsnap',  '~> 1.7'
@@ -22,7 +22,8 @@ gem 'jbuilder', '~> 2.5'
 gem 'pg'
 gem "rexml", ">= 3.3.9"
 gem 'bcrypt', '~> 3.1.7'
-gem "net-imap", ">= 0.3.8"
+gem "net-imap", ">= 0.5.7"
+gem 'nokogiri', '>= 1.18.9'
 # gem 'sendgrid-ruby'
 gem 'kaminari'
 gem 'loofah', '~> 2.21'
