@@ -8,6 +8,7 @@ ruby '3.2.2'
 gem 'sinatra', '~> 3.2.0'
 gem "webrick", ">= 1.8.2"
 gem 'rack', '>= 2.2.12'
+gem 'rack-attack'
 gem 'rails', '~> 6.1.7.7'
 gem 'puma', '>= 6.4.2'
 gem 'puma_worker_killer'
