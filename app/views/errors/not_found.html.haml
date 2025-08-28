@@ -1,0 +1,39 @@
+- content_for :title, 'Page Not Found'
+
+.container-fluid.mt-4
+  .row
+    .col-12
+      .card
+        .card-header
+          %h1.h3.mb-0
+            %i.fa.fa-exclamation-triangle.text-warning.me-2
+            Page Not Found
+        .card-body
+          %p.lead
+            We couldn't find what you were looking for.
+          
+          - if flash[:error]
+            .alert.alert-warning.alert-dismissible.fade.show{ role: 'alert' }
+              %strong Issue:
+              = flash[:error]
+              %button.btn-close{ type: 'button', data: { bs_dismiss: 'alert' }, aria: { label: 'Close' } }
+          
+          %p
+            This could happen for several reasons:
+          %ul
+            %li The commit SHA you're looking for doesn't exist
+            %li The branch name is incorrect
+            %li The test case name or module is misspelled
+            %li No test results have been submitted for this combination yet
+          
+          %p
+            %strong What you can try:
+          %ul
+            %li Check that the commit SHA is correct and exists in the repository
+            %li Verify the branch name is spelled correctly
+            %li Make sure the test case and module names are accurate
+            %li Browse available test results from the main page
+          
+          .mt-4
+            = link_to 'Return to Main Page', root_path, class: 'btn btn-primary me-2'
+            = link_to 'Browse Test Cases', test_cases_path, class: 'btn btn-outline-secondary'

@@ -4,7 +4,7 @@ class TestCaseCommitsController < ApplicationController
   def show
     # set up branch/commit selector
     @selected_branch = Branch.named(params[:branch])
-    return render_404 unless @selected_branch
+    return render_404("Branch '#{params[:branch]}' not found") unless @selected_branch
     
     @other_branches = @commit.branches.reject do |branch|
       branch == @selected_branch
@@ -21,9 +21,11 @@ class TestCaseCommitsController < ApplicationController
     # get nearby commits for populating dropdown menu
     # @nearby_commits = @selected_branch.nearby_commits(@commit)
     @nearby_tccs = @selected_branch.nearby_test_case_commits(@test_case_commit)
+    return render_404("No test case commits found for #{@test_case.module}/#{@test_case.name} on branch #{@selected_branch.name}") unless @nearby_tccs && !@nearby_tccs.empty?
 
     @next_tcc, @previous_tcc = nil, nil
     loc = @nearby_tccs.pluck(:id).index(@test_case_commit.id)
+    return render_404("Test case commit not found in branch commit history") unless loc
 
     # we've reversed nearby commits, so the "next" one is later in time, and
     # thus EARLIER in the array. Clunky, but I think it works in practice
@@ -131,7 +133,9 @@ class TestCaseCommitsController < ApplicationController
     }
 
     @specific_columns = {}
-    data_names = @test_case_commit.inlist_data.pluck(:name).uniq
+    inlist_data = @test_case_commit.inlist_data
+    return render_404("No inlist data found for this test case commit") unless inlist_data
+    data_names = inlist_data.pluck(:name).uniq
 
     # only show special data by default if we only have one or two. Otherwise
     # rely on users to click the checkboxes they want to use
@@ -235,21 +239,17 @@ class TestCaseCommitsController < ApplicationController
   # Use callbacks to share common setup or constraints between actions.
   def set_test_case_commit
     @commit = parse_sha(includes: { test_case_commits: :test_case })
-    return render_404 unless @commit
+    return render_404("Commit '#{params[:sha]}' not found") unless @commit
     
     @test_case = TestCase.find_by(name: params[:test_case], module: params[:module])
-    return render_404 unless @test_case
+    return render_404("Test case '#{params[:module]}/#{params[:test_case]}' not found") unless @test_case
     
     @test_case_commit = TestCaseCommit.includes(
       test_instances: { instance_inlists: :inlist_data, computer: :user }
     ).find_by(commit: @commit, test_case: @test_case)
-    return render_404 unless @test_case_commit
+    return render_404("No test results found for '#{@test_case.module}/#{@test_case.name}' on commit '#{@commit.short_sha}'") unless @test_case_commit
   end
   
-  def render_404
-    render file: "#{Rails.root}/public/404.html", status: :not_found, layout: false
-  end
-
   # get a bootstrap text class and an appropriate string to convert integer
   # passing status to useful web output
 

@@ -45,6 +45,11 @@ class ApplicationController < ActionController::Base
     Commit.parse_sha(params[:sha], branch: params[:branch], includes: includes)
   end
 
+  def render_404(message = "Page not found")
+    flash.now[:error] = message
+    render template: "errors/not_found", status: :not_found, layout: "application"
+  end
+
   helper_method :current_user
   helper_method :time_zone
   helper_method :format_time
