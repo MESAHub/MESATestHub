@@ -12,12 +12,6 @@
           %p.lead
             We couldn't find what you were looking for.
           
-          - if flash[:error]
-            .alert.alert-warning.alert-dismissible.fade.show{ role: 'alert' }
-              %strong Issue:
-              = flash[:error]
-              %button.btn-close{ type: 'button', data: { bs_dismiss: 'alert' }, aria: { label: 'Close' } }
-          
           %p
             This could happen for several reasons:
           %ul
@@ -34,6 +28,11 @@
             %li Make sure the test case and module names are accurate
             %li Browse available test results from the main page
           
-          .mt-4
-            = link_to 'Return to Main Page', root_path, class: 'btn btn-primary me-2'
-            = link_to 'Browse Test Cases', test_cases_path, class: 'btn btn-outline-secondary'
+          - if @fallback_links && @fallback_links.any?
+            .mt-4
+              %strong Suggested actions:
+              .btn-group.mt-2{ role: 'group', aria: { label: 'Suggested actions' } }
+                - @fallback_links.each_with_index do |link, index|
+                  = link_to link[:path], class: "btn #{index == 0 ? 'btn-outline-primary' : 'btn-outline-secondary'}" do
+                    %i.fa{ class: "fa-#{link[:icon]}" }<>
+                    = link[:text]

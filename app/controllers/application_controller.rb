@@ -47,6 +47,53 @@ class ApplicationController < ActionController::Base
 
   def render_404(message = "Page not found")
     flash.now[:error] = message
+    
+    # Generate contextual fallback links based on what objects are available
+    @fallback_links = []
+    
+    begin
+      # Try to get branch from @selected_branch or fall back to params[:branch]
+      branch_name = @selected_branch&.name || params[:branch]
+      branch_obj = @selected_branch || (branch_name && Branch.named(branch_name))
+      
+      # If we have both commit and branch, link to the commit page
+      if @commit && branch_obj
+        @fallback_links << {
+          path: commit_path(branch_obj.name, @commit.short_sha),
+          text: "View commit #{@commit.short_sha} on #{branch_obj.name}",
+          icon: "code-branch"
+        }
+      end
+      
+      # If we have test case and branch, link to test case page
+      if @test_case && branch_obj
+        @fallback_links << {
+          path: test_case_path(branch_obj.name, @test_case.module, @test_case.name),
+          text: "View #{@test_case.module}/#{@test_case.name} test case",
+          icon: "flask"
+        }
+      end
+      
+      # If we have just a branch, link to branch commits
+      if branch_obj && !(@commit && @test_case)
+        @fallback_links << {
+          path: commits_path(branch_obj.name),
+          text: "Browse #{branch_obj.name} branch commits",
+          icon: "list-ul"
+        }
+      end
+    rescue => e
+      # If any path generation fails, we'll just skip those links
+      Rails.logger.warn "Error generating fallback links in render_404: #{e.message}"
+    end
+    
+    # Always provide a safe fallback to root
+    @fallback_links << {
+      path: root_path,
+      text: "Return to Main Page",
+      icon: "home"
+    }
+    
     render template: "errors/not_found", status: :not_found, layout: "application"
   end
 
