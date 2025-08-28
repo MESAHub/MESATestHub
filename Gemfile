@@ -9,7 +9,7 @@ gem 'sinatra', '~> 3.2.0'
 gem "webrick", ">= 1.8.2"
 gem 'rack', '>= 2.2.14'
 gem 'rack-attack'
-gem 'rails', '~> 6.1.7.8'
+gem 'rails', '~> 6.1.7.7'
 gem 'puma', '>= 6.4.2'
 gem 'puma_worker_killer'
 gem 'bootsnap',  '~> 1.7'
@@ -43,8 +43,8 @@ gem 'faraday-http-cache'
 gem 'github_webhook', '~> 1.1'
 gem 'rack-cors', '>=2.0.2', require: 'rack/cors'
 
-# heroku metrics (temporarily removed due to Rails 6.1.7.10 compatibility)
-# gem 'barnes'
+# heroku metrics
+gem 'barnes'
 
 group :development, :test do
   gem 'byebug', platforms: [:mri, :mingw, :x64_mingw]
