@@ -43,8 +43,8 @@ gem 'faraday-http-cache'
 gem 'github_webhook', '~> 1.1'
 gem 'rack-cors', '>=2.0.2', require: 'rack/cors'
 
-# heroku metrics
-gem 'barnes'
+# heroku metrics (temporarily removed due to Rails 6.1.7.10 compatibility)
+# gem 'barnes'
 
 group :development, :test do
   gem 'byebug', platforms: [:mri, :mingw, :x64_mingw]
