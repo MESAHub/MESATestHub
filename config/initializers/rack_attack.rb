@@ -94,8 +94,12 @@ class Rack::Attack
     ]
   end
 
-  # Log blocked and throttled requests
-  ActiveSupport::Notifications.subscribe('rack.attack') do |name, start, finish, request_id, req|
-    Rails.logger.warn "[Rack::Attack] #{req.env['rack.attack.match_type']} #{req.ip} #{req.request_method} #{req.fullpath}"
+  # Log blocked and throttled requests (simplified to avoid notification issues)
+  ActiveSupport::Notifications.subscribe('rack.attack') do |name, start, finish, request_id, payload|
+    if payload.is_a?(Hash) && payload[:request]
+      req = payload[:request]
+      match_type = req.env['rack.attack.match_type'] || 'unknown'
+      Rails.logger.warn "[Rack::Attack] #{match_type} #{req.ip} #{req.request_method} #{req.fullpath}"
+    end
   end
 end

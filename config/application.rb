@@ -12,7 +12,7 @@ module MESATestHub
     config.load_defaults 5.1
     config.cache_store = :memory_store, { size: 64.megabytes }
 
-    # Enable rack-attack middleware
+    # Enable rack-attack middleware (configured in initializers/rack_attack.rb)
     config.middleware.use Rack::Attack
 
     # Settings in config/environments/* take precedence over those specified here.
