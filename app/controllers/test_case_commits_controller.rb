@@ -4,6 +4,8 @@ class TestCaseCommitsController < ApplicationController
   def show
     # set up branch/commit selector
     @selected_branch = Branch.named(params[:branch])
+    return render_404 unless @selected_branch
+    
     @other_branches = @commit.branches.reject do |branch|
       branch == @selected_branch
     end
@@ -233,10 +235,19 @@ class TestCaseCommitsController < ApplicationController
   # Use callbacks to share common setup or constraints between actions.
   def set_test_case_commit
     @commit = parse_sha(includes: { test_case_commits: :test_case })
+    return render_404 unless @commit
+    
     @test_case = TestCase.find_by(name: params[:test_case], module: params[:module])
+    return render_404 unless @test_case
+    
     @test_case_commit = TestCaseCommit.includes(
       test_instances: { instance_inlists: :inlist_data, computer: :user }
     ).find_by(commit: @commit, test_case: @test_case)
+    return render_404 unless @test_case_commit
+  end
+  
+  def render_404
+    render file: "#{Rails.root}/public/404.html", status: :not_found, layout: false
   end
 
   # get a bootstrap text class and an appropriate string to convert integer

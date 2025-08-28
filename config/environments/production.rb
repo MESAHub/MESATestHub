@@ -4,6 +4,11 @@ Rails.application.configure do
   # better logging data
   config.lograge.enabled = true
   config.lograge.ignore_actions = ['Commit#show']
+  
+  # Ignore 404 responses to reduce log noise from bot crawlers
+  config.lograge.ignore_custom = ->(event) {
+    event.payload[:status] == 404
+  }
 
   # Code is not reloaded between requests.
   config.cache_classes = true
