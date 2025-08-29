@@ -19,10 +19,18 @@ class Rack::Attack
   #   # ['1.2.3.4', '5.6.7.8'].include?(req.ip)
   # end
 
+  # Block suspicious IP ranges that generate 404 scraper traffic
+  blocklist('block suspicious ranges') do |req|
+    suspicious_ranges = [
+      /^47\.79\./, /^159\.138\./, /^119\.(8|12|13)\./, /^189\.1\./
+    ]
+    suspicious_ranges.any? { |range| req.ip.match?(range) }
+  end
+
   # Throttle general requests by IP (only for unauthenticated users)
-  # Allow 300 requests per 5 minutes per IP
+  # Allow 100 requests per 5 minutes per IP (tightened from 300 to reduce scraper abuse)
   # Authenticated users are safelisted above and bypass this limit
-  throttle('req/ip', limit: 300, period: 5.minutes) do |req|
+  throttle('req/ip', limit: 100, period: 5.minutes) do |req|
     req.ip
   end
 
@@ -47,6 +55,14 @@ class Rack::Attack
   # Allow 30 search requests per 5 minutes per IP  
   throttle('search/ip', limit: 30, period: 5.minutes) do |req|
     if req.path.include?('search')
+      req.ip
+    end
+  end
+
+  # Throttle IPs generating many 404s on test_cases paths
+  # This catches scrapers trying invalid test case combinations
+  throttle('404s/ip', limit: 5, period: 1.hour) do |req|
+    if req.env['PATH_INFO'].to_s.match?(/test_cases/) && !req.session[:user_id].present?
       req.ip
     end
   end
