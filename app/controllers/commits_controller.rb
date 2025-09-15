@@ -1,4 +1,5 @@
 class CommitsController < ApplicationController
+  skip_before_action :authorize_user, only: :show, if: :root_page?
   before_action :set_commit, only: :show
 
   def show
@@ -337,6 +338,10 @@ class CommitsController < ApplicationController
   end
 
   private
+
+  def root_page?
+    params[:sha] == 'head' && params[:branch] == 'main'
+  end
 
   def set_commit
     # @commit = parse_sha(includes: {test_case_commits: [:test_case, {test_instances: [:computer, instance_inlists: :inlist_data]}]})

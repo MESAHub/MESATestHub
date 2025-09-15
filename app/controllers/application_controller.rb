@@ -1,5 +1,6 @@
 class ApplicationController < ActionController::Base
   protect_from_forgery with: :exception
+  before_action :authorize_user
   # before_action :set_all_test_cases
 
   private
@@ -109,7 +110,7 @@ class ApplicationController < ActionController::Base
   # filters for accessing resources reserved for users or admins
   def authorize_user
     return unless current_user.nil?
-    redirect_to login_url, alert: 'Must be logged in for that action.'
+    redirect_to login_url, alert: 'Most pages are restricted to logged-in users. New accounts can only be created by an admin.'
   end
 
   def authorize_admin

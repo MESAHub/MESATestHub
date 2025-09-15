@@ -7,6 +7,7 @@ class ComputersController < ApplicationController
                                                    destroy]
   before_action :authorize_admin, only: %i[index_all]
 
+  skip_before_action :authorize_user, only: [:check_computer]
   skip_before_action :verify_authenticity_token, only: [:check_computer]
 
   # GET /computers
