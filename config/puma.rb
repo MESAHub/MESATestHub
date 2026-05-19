@@ -1,5 +1,3 @@
-require 'barnes'
-
 # Puma can serve each request in a thread from an internal thread pool.
 # The `threads` method setting takes two numbers: a minimum and maximum.
 # Any libraries that use thread pools should be configured to match
@@ -18,9 +16,6 @@ port        ENV.fetch("PORT") { 3000 }
 #
 environment ENV.fetch("RAILS_ENV") { "development" }
 
-# Specifies the `pidfile` that Puma will use.
-pidfile ENV.fetch("PIDFILE") { "tmp/pids/server.pid" }
-
 # Specifies the number of `workers` to boot in clustered mode.
 # Workers are forked web server processes. If using threads and workers together
 # the concurrency of the application would be max `threads` * `workers`.
@@ -38,11 +33,3 @@ pidfile ENV.fetch("PIDFILE") { "tmp/pids/server.pid" }
 
 # Allow puma to be restarted by `rails restart` command.
 plugin :tmp_restart
-
-# to enable ruby metrics on heroku (I think this is the right file for this)
-# stolen from https://devcenter.heroku.com/articles/language-runtime-metrics-ruby#getting-started
-before_fork do
-  # worker specific setup
-
-  Barnes.start # Must have enabled worker mode for this to block to be called
-end

@@ -74,23 +74,9 @@ NearbyCommits =
   commit_sha: ''
   branch: ''
   retrieve_commits: ->
-    # use this for development if making changes not present on server
-    # $.get({
-    #   url: 'http://localhost:3000/commits/nearby_commits.json',
-    #   contentType: 'application/json',
-    #   crossDomain: true,
-    #   dataType: 'json',
-    #   data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha},
-    #   success: (returned_data) ->
-    #     NearbyCommits.commits = returned_data.commits
-    #     if NearbyCommits.commits && NearbyCommits.commits.length > 0
-    #       NearbyCommits.add_commits()
-    # })
     $.get({
-      url: 'https://testhub.mesastar.org/commits/nearby_commits.json',
+      url: '/commits/nearby_commits.json',
       contentType: 'application/json',
-      # headers: { 'Access-Control-Allow-Origin': '*' },
-      crossDomain: true,
       dataType: 'json',
       data: {branch: NearbyCommits.branch, sha: NearbyCommits.commit_sha},
       success: (returned_data) ->

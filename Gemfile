@@ -31,8 +31,6 @@ gem 'kaminari'
 gem 'loofah', '~> 2.21'
 gem 'lograge'
 gem 'rails-html-sanitizer', '~> 1.6.2'
-gem 'rails_12factor', group: :production
-gem 'scout_apm', group: :production
 # gem 'sprockets', '~> 4.0.0.beta4'
 # gem 'libv8', '~> 8.3'
 # gem 'mini_racer', '~>0.3.1 ' #, :require => nil
@@ -42,11 +40,9 @@ gem 'font-awesome-rails'
 # Git stuff
 gem 'octokit', "~> 4.0"
 gem 'faraday-http-cache'
+gem 'faraday-retry'
 gem 'github_webhook', '~> 1.1'
 gem 'rack-cors', '>=2.0.2', require: 'rack/cors'
-
-# heroku metrics
-gem 'barnes'
 
 group :development, :test do
   gem 'byebug', platforms: [:mri, :mingw, :x64_mingw]
