@@ -46,20 +46,43 @@ RSpec.describe Commit, 'payload ingestion' do
         .not_to change(Commit, :count)
     end
 
-    it 'is idempotent: existing commits are updated, not duplicated' do
-      payload = [gh_commit(sha: sha40('cccc3'), author: 'Original')]
-      Commit.ingest_payload_commits(payload)
+    it 'is idempotent: re-ingesting an existing commit preserves its row' do
+      # Real GitHub commits are immutable, so insert-then-skip is the
+      # correct semantics. Crucially this means we never clobber the
+      # test_case_count / passed_count / status scalars maintained by
+      # update_scalars for commits ingested before Phase 3.5. We use
+      # update_columns here to skip the before_save callback that
+      # would otherwise overwrite the test scalars based on the
+      # (empty) test_case_commits association.
+      original = create(:commit, sha: sha40('cccc3'),
+                                 short_sha: sha40('cccc3')[0, 7],
+                                 author: 'Original Author')
+      original.update_columns(status: 0, test_case_count: 5, passed_count: 5)
 
-      payload[0] = gh_commit(sha: sha40('cccc3'), author: 'Revised')
+      payload = [gh_commit(sha: sha40('cccc3'), author: 'Different')]
 
       expect { Commit.ingest_payload_commits(payload) }
         .not_to change(Commit, :count)
 
-      expect(Commit.find_by(sha: sha40('cccc3')).author).to eq('Revised')
+      original.reload
+      expect(original.author).to eq('Original Author')
+      expect(original.status).to eq(0)
+      expect(original.test_case_count).to eq(5)
+      expect(original.passed_count).to eq(5)
+    end
+
+    it 'sets status to -1 ("untested") on newly inserted commits' do
+      # The schema default is 0, which the view treats as "passing"
+      # (btn-success). Bypassing the update_scalars callback means
+      # we'd get 0 by default; explicit -1 makes new commits look
+      # untested until test data arrives.
+      Commit.ingest_payload_commits([gh_commit(sha: sha40('newone'))])
+
+      expect(Commit.find_by(sha: sha40('newone')).status).to eq(-1)
     end
 
     it 'does not fire api_update_test_cases on freshly inserted commits' do
-      # upsert_all bypasses validations and callbacks. That's the whole
+      # insert_all bypasses validations and callbacks. That's the whole
       # point — we don't want every webhook ingestion to fan out into
       # api.content() calls per commit per module.
       expect_any_instance_of(Commit).not_to receive(:api_update_test_cases)

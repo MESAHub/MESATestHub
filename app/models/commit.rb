@@ -48,9 +48,21 @@ class Commit < ApplicationRecord
   # These helpers then upsert the commit rows and the
   # parent->child edges in two bulk operations.
 
-  # Bulk-upsert commits from a GitHub API response (commits or compare
+  # Bulk-insert commits from a GitHub API response (commits or compare
   # endpoint, both use the same nested shape). Returns a hash mapping
-  # sha => id for every commit ingested.
+  # sha => id for every commit ingested OR already present.
+  #
+  # Uses insert_all (DO NOTHING on conflict), not upsert_all: real
+  # GitHub commits are immutable, and overwriting them via upsert risks
+  # clobbering test-case scalars (test_case_count, passed_count, status,
+  # etc.) that were maintained by the original update_scalars callback
+  # for commits ingested before Phase 3.5.
+  #
+  # status is explicitly set to -1 ("untested") so newly-inserted
+  # commits don't show as passing — the schema default of 0 means
+  # "passing", which is wrong for a commit that has no test data yet.
+  # update_scalars will rewrite status once test cases and instances
+  # arrive.
   #
   # Bypasses ActiveRecord validations and the `after_create
   # :api_update_test_cases` callback — test-case ingestion is the
@@ -61,11 +73,14 @@ class Commit < ApplicationRecord
 
     timestamp = Time.zone.now
     rows = commit_hashes.map do |gh|
-      hash_from_github(gh).merge(created_at: timestamp,
-                                 updated_at: timestamp)
+      hash_from_github(gh).merge(
+        created_at: timestamp,
+        updated_at: timestamp,
+        status: -1
+      )
     end
 
-    Commit.upsert_all(rows, unique_by: :sha)
+    Commit.insert_all(rows, unique_by: :sha)
 
     Commit.where(sha: commit_hashes.map { |gh| gh[:sha] })
           .pluck(:sha, :id)
@@ -694,21 +709,32 @@ class Commit < ApplicationRecord
   # note: future optimization would be to make these three "questions" be
   # scalars that are updated at save time. They are all summoned every time we
   # load an index view, meaning we have a 3n+1 situation
+  #
+  # Each predicate has an early "no test cases yet" guard: without it, the
+  # `pluck(...).uniq.count == test_cases.count` form returns `0 == 0` → true
+  # for any commit ingested before its test cases land (e.g., commits
+  # ingested by the new webhook flow before Step 6 wires up test-case
+  # copying). That made every recent commit on the index page light up
+  # with all three icons.
+
   # determine if each test case has been run with all optional inlists
   def run_optional?
+    return false if test_cases.empty?
     test_instances.
       where(run_optional: true).
       pluck(:test_case_id).uniq.count == test_cases.count
   end
 
-  # determine if each test case has been run with all optional inlists
+  # determine if each test case has been run with FPE checks enabled
   def fpe_checks?
+    return false if test_cases.empty?
     test_instances.
       where(fpe_checks: true).
       pluck(:test_case_id).uniq.count == test_cases.count
   end
 
   def fine_resolution?
+    return false if test_cases.empty?
     test_instances.
       where(resolution_factor: 0..0.99).
       pluck(:test_case_id).uniq.count == test_cases.count

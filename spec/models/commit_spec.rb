@@ -39,4 +39,26 @@ RSpec.describe Commit, type: :model do
       end
     end
   end
+
+  describe 'flag predicates on commits with no test cases' do
+    # Regression: each of run_optional?, fpe_checks?, fine_resolution?
+    # used to return true on a commit with zero test cases because
+    # `0 == 0` in `pluck(...).uniq.count == test_cases.count`. That
+    # made every freshly-ingested commit on the index page light up
+    # with the wrench / plus-square / search-plus icons.
+    let(:commit) { create(:commit) }
+
+    it 'run_optional? is false when there are no test cases' do
+      expect(commit.test_cases).to be_empty
+      expect(commit.run_optional?).to be false
+    end
+
+    it 'fpe_checks? is false when there are no test cases' do
+      expect(commit.fpe_checks?).to be false
+    end
+
+    it 'fine_resolution? is false when there are no test cases' do
+      expect(commit.fine_resolution?).to be false
+    end
+  end
 end
