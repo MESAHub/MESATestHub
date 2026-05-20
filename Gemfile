@@ -11,11 +11,11 @@ gem 'puma_worker_killer'
 gem 'rack', '>= 2.2.14'
 gem 'rack-attack'
 gem 'rack-cors', '>=2.0.2', require: 'rack/cors'
-gem 'bootsnap',  '~> 1.7'
-gem 'msgpack', '~>1.2'
-gem 'uglifier', '>= 1.3.0'
+gem 'bootsnap', '~> 1.18'
+gem 'msgpack', '~> 1.7'
+gem 'terser', '~> 1.2'
 gem 'turbolinks', '~> 5'
-gem 'jbuilder', '~> 2.5'
+gem 'jbuilder', '~> 2.13'
 gem 'pg'
 gem "rexml", ">= 3.3.9"
 gem 'bcrypt', '~> 3.1.7'
@@ -25,14 +25,13 @@ gem 'kaminari'
 gem 'loofah', '~> 2.21'
 gem 'lograge'
 gem 'rails-html-sanitizer', '~> 1.6.2'
-gem 'rubyzip', '~>1.3.0'
 gem 'font-awesome-rails'
 
 # Git stuff
 gem 'octokit', "~> 4.0"
 gem 'faraday-http-cache'
 gem 'faraday-retry'
-gem 'github_webhook', '~> 1.1'
+gem 'github_webhook', '~> 1.4'
 
 # Frontend (Phase 4 retires these)
 gem 'bootstrap', '~> 4.5'
