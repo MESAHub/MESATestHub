@@ -1,0 +1,204 @@
+/* MESA Test Hub — shared design tokens
+   --------------------------------------
+   Light + dark theming via CSS custom properties. Toggle by setting
+   data-theme="light" | "dark" on <html>. system preference is the default. */
+
+:root {
+  /* Brand */
+  --brand: #3A56FD;
+  --brand-hover: #2E48E5;
+  --brand-pressed: #2438C2;
+  --brand-soft: #EBEEFF;
+  --brand-soft-text: #1E2EBF;
+  --brand-ring: rgba(58, 86, 253, 0.35);
+
+  /* Surfaces — light */
+  --bg: #ffffff;
+  --bg-subtle: #f7f8fa;
+  --bg-muted: #eceef2;
+  --bg-elev: #ffffff;
+  --border: #d8dde4;
+  --border-strong: #b7bec9;
+  --border-subtle: #e6e8ec;
+
+  /* Foreground */
+  --fg: #1f2328;
+  --fg-muted: #57606a;
+  --fg-subtle: #8b949e;
+  --fg-on-brand: #ffffff;
+
+  /* Status */
+  --success: #1a7f37;
+  --success-fg: #ffffff;
+  --success-soft: #d8f5df;
+  --success-soft-text: #0a5825;
+  --danger: #cf222e;
+  --danger-fg: #ffffff;
+  --danger-soft: #ffe4e6;
+  --danger-soft-text: #a40e26;
+  --warning: #9a6700;
+  --warning-soft: #fef6cf;
+  --warning-soft-text: #6b4900;
+  --skipped: #6a737d;
+  --skipped-soft: #eceef2;
+
+  /* Build-fail: distinct from test-fail so we can disambiguate states.
+     Deeper, more "dead" than danger. */
+  --buildfail: #6e1818;
+  --buildfail-soft: #f3dada;
+  --buildfail-soft-text: #6e1818;
+
+  /* Info: used for purely-informational flags like "ran full inlists". */
+  --info: #1f6feb;
+  --info-soft: #ddeaff;
+  --info-soft-text: #0a3a8f;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 0 rgba(31,35,40,0.04);
+  --shadow-md: 0 1px 3px rgba(31,35,40,0.06), 0 8px 24px rgba(31,35,40,0.05);
+  --shadow-lg: 0 8px 32px rgba(31,35,40,0.10);
+  --shadow-focus: 0 0 0 3px var(--brand-ring);
+
+  /* Radius */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-xl: 14px;
+
+  /* Type */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Layout */
+  --nav-h: 52px;
+  --maxw: 1320px;
+}
+
+html[data-theme="dark"] {
+  --bg: #0d1117;
+  --bg-subtle: #0a0e14;
+  --bg-muted: #161b22;
+  --bg-elev: #161b22;
+  --border: #2a3038;
+  --border-strong: #3d444d;
+  --border-subtle: #21262d;
+
+  --fg: #e6edf3;
+  --fg-muted: #9198a1;
+  --fg-subtle: #6e7681;
+
+  --brand: #6B82FF;
+  --brand-hover: #8195FF;
+  --brand-pressed: #4F6AFD;
+  --brand-soft: rgba(107, 130, 255, 0.14);
+  --brand-soft-text: #a8b6ff;
+  --brand-ring: rgba(107, 130, 255, 0.35);
+
+  --success: #3fb950;
+  --success-soft: rgba(63, 185, 80, 0.15);
+  --success-soft-text: #4ac263;
+  --danger: #f85149;
+  --danger-soft: rgba(248, 81, 73, 0.15);
+  --danger-soft-text: #ff7b73;
+  --warning: #d29922;
+  --warning-soft: rgba(210, 153, 34, 0.15);
+  --warning-soft-text: #e3b341;
+  --skipped: #6e7681;
+  --skipped-soft: rgba(110, 118, 129, 0.18);
+
+  --buildfail: #9d2929;
+  --buildfail-soft: rgba(157, 41, 41, 0.22);
+  --buildfail-soft-text: #ff9b9b;
+
+  --info: #6b82ff;
+  --info-soft: rgba(107, 130, 255, 0.18);
+  --info-soft-text: #a8b6ff;
+
+  --shadow-sm: 0 1px 0 rgba(0,0,0,0.4);
+  --shadow-md: 0 1px 3px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.3);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.5);
+}
+
+/* Base */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01", "ss03";
+  color: var(--fg);
+  background: var(--bg-subtle);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 14px;
+  line-height: 1.5;
+}
+a { color: var(--brand); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+button { font-family: inherit; }
+
+/* Reusable atoms */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 500 13px/1 var(--font-sans);
+  padding: 7px 12px; border-radius: var(--r-md);
+  border: 1px solid var(--border); background: var(--bg-elev);
+  color: var(--fg); cursor: pointer; transition: background .12s, border-color .12s, color .12s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--bg-muted); }
+.btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.btn-primary {
+  background: var(--brand); border-color: var(--brand); color: var(--fg-on-brand);
+}
+.btn-primary:hover { background: var(--brand-hover); border-color: var(--brand-hover); }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--fg-muted); }
+.btn-ghost:hover { background: var(--bg-muted); color: var(--fg); }
+.btn-sm { padding: 4px 8px; font-size: 12px; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font: 500 11px/1 var(--font-sans);
+  padding: 3px 8px; border-radius: 999px;
+  border: 1px solid transparent;
+}
+.pill-success { background: var(--success-soft); color: var(--success-soft-text); }
+.pill-danger  { background: var(--danger-soft);  color: var(--danger-soft-text); }
+.pill-warning { background: var(--warning-soft); color: var(--warning-soft-text); }
+.pill-muted   { background: var(--bg-muted);     color: var(--fg-muted); }
+.pill-brand   { background: var(--brand-soft);   color: var(--brand-soft-text); }
+.pill-buildfail { background: var(--buildfail-soft); color: var(--buildfail-soft-text); }
+.pill-info    { background: var(--info-soft);    color: var(--info-soft-text); }
+.pill-sm      { padding: 2px 6px; font-size: 10px; }
+
+.dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; flex: 0 0 8px; }
+.dot-success { background: var(--success); }
+.dot-danger  { background: var(--danger); }
+.dot-warning { background: var(--warning); }
+.dot-skipped { background: var(--skipped); }
+.dot-brand   { background: var(--brand); }
+.dot-buildfail { background: var(--buildfail); }
+
+.card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.card-pad { padding: 16px; }
+
+.kbd {
+  font: 500 11px/1 var(--font-mono);
+  padding: 2px 5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg-elev);
+  color: var(--fg-muted);
+}
+
+/* Scrollbars (subtle, themed) */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+::-webkit-scrollbar-track { background: transparent; }

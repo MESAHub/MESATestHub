@@ -31,6 +31,11 @@ Before doing non-trivial work, read the appropriate doc:
 - **[`docs/sync-overhaul.md`](docs/sync-overhaul.md)** — Phase 3.5
   GitHub sync rewrite (topology-driven ordering, webhook payload-driven
   sync). Complete on the `perf-sync-topology` branch.
+- **[`docs/frontend-modernization.md`](docs/frontend-modernization.md)**
+  — plan for the Phase 4 frontend rewrite (Bootstrap+jQuery →
+  Tailwind+Turbo+Stimulus, plus port of the design in
+  `docs/design_handoff_mesa_testhub/`). Spans multiple sessions on
+  the `frontend-tailwind` branch (not yet created).
 
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.

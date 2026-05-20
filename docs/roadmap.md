@@ -148,10 +148,17 @@ Suite grew from 78 to 158 specs over this phase.
 
 ## Phase 4 — Frontend modernization
 
-**Branch:** `frontend-tailwind`
-**Status:** not started
+**Branch:** `frontend-tailwind` (not yet created)
+**Status:** planned, plan doc captured
 **Estimate:** 4–8 days (incremental, page by page; less now that
 CoffeeScript was pulled forward to Phase 1.5)
+
+See [`docs/frontend-modernization.md`](frontend-modernization.md) for
+the full plan, and
+[`docs/design_handoff_mesa_testhub/`](design_handoff_mesa_testhub/)
+for the visual reference (commits list, commit detail, test-on-commit
+prototyped at high fidelity; other pages get "winged" using the same
+tokens and components).
 
 Goal: drop the rest of the legacy frontend stack in favor of a modern one.
 
