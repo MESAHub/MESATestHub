@@ -24,7 +24,7 @@ RSpec.describe 'GitHub webhooks', type: :request do
     'sha256=' + OpenSSL::HMAC.hexdigest(OpenSSL::Digest.new('sha256'), secret, body)
   end
 
-  it 'accepts a valid push event and enqueues the branch sync job' do
+  it 'accepts a valid push event and enqueues the branch sync job with the payload' do
     expect {
       post '/github_webhooks', params: payload,
                                headers: {
@@ -32,16 +32,22 @@ RSpec.describe 'GitHub webhooks', type: :request do
                                  'X-GitHub-Event' => 'push',
                                  'X-Hub-Signature-256' => signature_for(payload)
                                }
-    }.to have_enqueued_job(BranchSyncJob)
+    }.to have_enqueued_job(BranchSyncJob).with(a_hash_including(
+      'ref' => 'refs/heads/main',
+      'before' => '0' * 40,
+      'after' => 'a' * 40
+    ))
 
     expect(response).to have_http_status(:ok)
   end
 
-  it 'does not call Branch.api_update_branches inline during the request' do
+  it 'does not perform GitHub sync inline during the request' do
     # The whole point of the job indirection is that the controller returns
     # before the GitHub sync happens. If someone deletes the job and puts
     # the inline call back, the webhook will start timing out on big pushes.
-    allow(Branch).to receive(:api_update_branches)
+    # We watch for Commit.api here because that's the call BranchSyncJob
+    # makes — the controller must not reach it.
+    allow(Commit).to receive(:api)
 
     post '/github_webhooks', params: payload,
                              headers: {
@@ -50,22 +56,39 @@ RSpec.describe 'GitHub webhooks', type: :request do
                                'X-Hub-Signature-256' => signature_for(payload)
                              }
 
-    expect(Branch).not_to have_received(:api_update_branches)
+    expect(Commit).not_to have_received(:api)
   end
 
-  it 'executes Branch.api_update_branches when the queued job runs' do
-    allow(Branch).to receive(:api_update_branches)
+  it 'forwards only the payload fields BranchSyncJob actually uses' do
+    # Bloating the job queue with the full webhook payload (which
+    # includes repository metadata, pusher info, sender info, the
+    # head_commit duplicate, etc.) is unnecessary; we slice down to
+    # the keys the job dispatches on.
+    fat_payload = {
+      ref: 'refs/heads/main',
+      before: '0' * 40,
+      after: 'a' * 40,
+      created: true,
+      deleted: false,
+      forced: false,
+      commits: [],
+      repository: { full_name: 'MESAHub/mesa', other: 'noise' },
+      pusher: { name: 'someone', email: 'someone@example.com' },
+      head_commit: { id: 'a' * 40 }
+    }.to_json
 
-    perform_enqueued_jobs do
-      post '/github_webhooks', params: payload,
+    expect {
+      post '/github_webhooks', params: fat_payload,
                                headers: {
                                  'Content-Type' => 'application/json',
                                  'X-GitHub-Event' => 'push',
-                                 'X-Hub-Signature-256' => signature_for(payload)
+                                 'X-Hub-Signature-256' => signature_for(fat_payload)
                                }
-    end
-
-    expect(Branch).to have_received(:api_update_branches)
+    }.to have_enqueued_job(BranchSyncJob).with { |arg|
+      expect(arg.keys).to contain_exactly(
+        'ref', 'before', 'after', 'created', 'deleted', 'forced', 'commits'
+      )
+    }
   end
 
   # The github_webhook gem signals signature failures by raising

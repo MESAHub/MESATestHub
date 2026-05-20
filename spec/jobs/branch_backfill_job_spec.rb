@@ -127,26 +127,23 @@ RSpec.describe BranchBackfillJob, type: :job do
       end.reverse
     end
 
-    it 'stops paginating once a page produces no new edges' do
-      # Build two pages worth of commits. Pre-record the edges for page 2
-      # (the "older" half) so it'll be all-known when the job sees it.
+    it 'stops paginating once a page produces no new edges or memberships' do
+      # Build two pages worth of commits. Pre-record both edges and
+      # memberships for page 2 (the "older" half) so it's fully
+      # saturated when the job sees it — both must be zero for the
+      # short-circuit to fire.
       tip_first = chain_of(per_page * 2 + 5)
 
-      # Tip-first: index 0 is newest. parent of i is i+1.
-      tip_first.each_cons(2) do |child, parent|
-        # nothing yet — we'll record SOME of these below
-      end
-
-      # Pre-record edges for everything from page 2 onward (older commits).
-      # That's commits at indices [per_page, per_page*2+4].
       older = tip_first[per_page..]
       older.each_cons(2) do |child, parent|
         CommitRelation.create!(parent: parent, child: child, parent_index: 0)
       end
+      BranchMembership.insert_all(
+        older.map { |c| { branch_id: branch.id, commit_id: c.id } }
+      )
 
       pages = tip_first.each_slice(per_page).map do |slice|
-        slice.each_with_index.map do |c, i_in_page|
-          # Find this commit's parent in the chain
+        slice.map do |c|
           idx_in_chain = tip_first.index(c)
           parent = tip_first[idx_in_chain + 1]
           fake_commit(sha: c.sha, parent_shas: parent ? [parent.sha] : [])
@@ -156,7 +153,7 @@ RSpec.describe BranchBackfillJob, type: :job do
       client = stub_pages(pages)
       described_class.new.perform(branch.id)
 
-      # Page 1 was fetched. Page 2 was fetched (and found to be all-known).
+      # Page 1 was fetched. Page 2 was fetched and found fully saturated.
       # Page 3 should NOT have been fetched.
       expect(client).to have_received(:commits)
         .with(Commit.repo_path, sha: 'main', per_page: per_page, page: 1).once
@@ -164,6 +161,40 @@ RSpec.describe BranchBackfillJob, type: :job do
         .with(Commit.repo_path, sha: 'main', per_page: per_page, page: 2).once
       expect(client).not_to have_received(:commits)
         .with(Commit.repo_path, sha: 'main', per_page: per_page, page: 3)
+    end
+
+    it 'keeps paginating when edges are saturated but memberships are not' do
+      # This is the branch-creation case: edges are already in the DB
+      # (because main's backfill covered them), but the new branch has
+      # no memberships yet. The walk must continue to add memberships
+      # for every commit reachable from the new branch's head.
+      tip_first = chain_of(per_page * 2 + 5)
+
+      # All edges already present
+      tip_first.each_cons(2) do |child, parent|
+        CommitRelation.create!(parent: parent, child: child, parent_index: 0)
+      end
+      # No memberships for `branch` yet — that's the point.
+
+      pages = tip_first.each_slice(per_page).map do |slice|
+        slice.map do |c|
+          idx_in_chain = tip_first.index(c)
+          parent = tip_first[idx_in_chain + 1]
+          fake_commit(sha: c.sha, parent_shas: parent ? [parent.sha] : [])
+        end
+      end
+
+      client = stub_pages(pages)
+
+      expect { described_class.new.perform(branch.id) }
+        .to change { branch.branch_memberships.count }
+        .from(0).to(tip_first.size)
+
+      # All three pages were fetched (2 full + 1 empty terminator).
+      [1, 2, 3].each do |n|
+        expect(client).to have_received(:commits)
+          .with(Commit.repo_path, sha: 'main', per_page: per_page, page: n).once
+      end
     end
 
     it 'stops paginating once a partial page signals the end of history' do

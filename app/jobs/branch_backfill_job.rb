@@ -5,18 +5,22 @@ class BranchBackfillJob < ApplicationJob
 
   # One-shot topology catch-up for a single branch. Walks the branch on
   # GitHub one page at a time, writing parent->child edges into
-  # commit_relations for every commit pair where both ends are already in
+  # commit_relations and (branch, commit) rows into branch_memberships
+  # for every commit pair / commit where both ends / the commit is in
   # the local DB.
   #
-  # The walk short-circuits once a page produces zero new edges: that
-  # means every commit on the page already has its parent edges recorded,
-  # so every older page would too. Without this, backfilling a side
-  # branch that shares almost all of its history with `main` would cost
-  # ~100 API calls; with it, it's typically 1–5.
+  # The walk short-circuits once a page produces zero new edges AND
+  # zero new memberships: that means every commit on the page is fully
+  # caught up, so every older page would be too. Without the
+  # memberships check the short-circuit would fire too early on
+  # newly-created branches whose ancestors are already edged from
+  # main's backfill but have no membership rows yet for the new branch.
   #
-  # Idempotent — the unique index on (child_id, parent_id) plus
-  # insert_all's `unique_by:` makes reruns a no-op for edges already
-  # present, even if the short-circuit happens to miss them on one pass.
+  # Backfilling a side branch that shares almost all of its history
+  # with `main` typically costs 1–5 API calls thanks to the
+  # short-circuit. Idempotent — the unique indexes on
+  # (child_id, parent_id) and (commit_id, branch_id) plus insert_all's
+  # `unique_by:` make reruns no-ops for rows already present.
   def perform(branch_id)
     branch = Branch.find(branch_id)
     client = Commit.api(auto_paginate: false)
@@ -29,11 +33,12 @@ class BranchBackfillJob < ApplicationJob
                             page: page_num)
       break if page.blank?
 
-      inserted = ingest_page(page)
+      new_edges, new_memberships = ingest_page(page, branch)
 
-      # Walked into history we've already edged. Every subsequent page
-      # would cost an API call to learn the same thing.
-      break if inserted.zero?
+      # Walked into territory where every commit is already edged and
+      # already a member. Every subsequent page would cost an API call
+      # to learn the same thing.
+      break if new_edges.zero? && new_memberships.zero?
 
       # GitHub returns a short final page when we've hit the root.
       break if page.length < PER_PAGE
@@ -44,11 +49,16 @@ class BranchBackfillJob < ApplicationJob
 
   private
 
-  def ingest_page(commits_data)
+  def ingest_page(commits_data, branch)
     sha_to_id = Commit.where(sha: collect_shas(commits_data))
                       .pluck(:sha, :id)
                       .to_h
 
+    [insert_edges(commits_data, sha_to_id),
+     insert_memberships(branch, commits_data, sha_to_id)]
+  end
+
+  def insert_edges(commits_data, sha_to_id)
     edges = build_edges(commits_data, sha_to_id)
     return 0 if edges.empty?
 
@@ -56,6 +66,15 @@ class BranchBackfillJob < ApplicationJob
     # skips, so .length is the count of edges that were actually new.
     CommitRelation.insert_all(edges,
                               unique_by: %i[child_id parent_id]).length
+  end
+
+  def insert_memberships(branch, commits_data, sha_to_id)
+    commit_ids = commits_data.map { |c| sha_to_id[c[:sha]] }.compact
+    return 0 if commit_ids.empty?
+
+    rows = commit_ids.map { |id| { branch_id: branch.id, commit_id: id } }
+    BranchMembership.insert_all(rows,
+                                unique_by: %i[commit_id branch_id]).length
   end
 
   def collect_shas(commits_data)
