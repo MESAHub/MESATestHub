@@ -215,25 +215,9 @@ RSpec.describe TestCase, type: :model do
   #   end
   # end
 
-  describe 'specifying custom data' do
-    before :each do
-      @test.datum_1_name = 'num_steps'
-      @test.datum_1_type = 'integer'
-      @test.datum_2_name = 'num_retries'
-      @test.datum_2_type = 'integer'
-      @test.datum_4_name = 'num_backups'
-      @test.datum_4_type = 'integer'
-      @test.datum_5_name = 'log_L_final'
-      @test.datum_5_type = 'float'
-    end
-
-    it 'finds the used data names' do
-      expect(@test.data_names).to eq(['num_steps', 'num_retries',
-        'num_backups', 'log_L_final'])
-    end
-
-    it 'finds the data type of a data name' do
-      expect(@test.data_type('num_steps')).to eq 'integer'
-    end
-  end
+  # The "specifying custom data" examples that used to live here referenced
+  # `datum_N_name=` columns that have since been removed from the TestCase
+  # model. They have not been runnable for years. Remove rather than leave
+  # broken-pending — the underlying behavior is now handled differently and
+  # would need a fresh spec when someone touches that code.
 end
