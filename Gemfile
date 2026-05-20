@@ -4,18 +4,15 @@ git_source(:github) do |repo_name|
   "https://github.com/#{repo_name}.git"
 end
 ruby '3.2.2'
-# Pin concurrent-ruby to fix Rails 6.1 compatibility issue with Logger
-gem 'concurrent-ruby', '1.3.4'
-# gem 'bundler', '~> 2.1.4'
-gem "webrick", ">= 1.8.2"
-gem 'rack', '>= 2.2.14'
-gem 'rack-attack'
+
 gem 'rails', '~> 8.0.0'
 gem 'puma', '>= 6.4.2'
 gem 'puma_worker_killer'
+gem 'rack', '>= 2.2.14'
+gem 'rack-attack'
+gem 'rack-cors', '>=2.0.2', require: 'rack/cors'
 gem 'bootsnap',  '~> 1.7'
 gem 'msgpack', '~>1.2'
-# gem 'sass-rails', '~> 5.0'
 gem 'uglifier', '>= 1.3.0'
 gem 'turbolinks', '~> 5'
 gem 'jbuilder', '~> 2.5'
@@ -24,61 +21,45 @@ gem "rexml", ">= 3.3.9"
 gem 'bcrypt', '~> 3.1.7'
 gem "net-imap", ">= 0.5.7"
 gem 'nokogiri', '>= 1.18.9'
-# gem 'sendgrid-ruby'
 gem 'kaminari'
 gem 'loofah', '~> 2.21'
 gem 'lograge'
 gem 'rails-html-sanitizer', '~> 1.6.2'
-# gem 'sprockets', '~> 4.0.0.beta4'
-# gem 'libv8', '~> 8.3'
-# gem 'mini_racer', '~>0.3.1 ' #, :require => nil
 gem 'rubyzip', '~>1.3.0'
 gem 'font-awesome-rails'
+
 # Git stuff
 gem 'octokit', "~> 4.0"
 gem 'faraday-http-cache'
 gem 'faraday-retry'
 gem 'github_webhook', '~> 1.1'
-gem 'rack-cors', '>=2.0.2', require: 'rack/cors'
 
-group :development, :test do
-  gem 'byebug', platforms: [:mri, :mingw, :x64_mingw]
-  gem 'capybara'
-  gem 'selenium-webdriver'
-  gem 'derailed'
-end
-group :development do
-  gem 'web-console', '>= 3.3.0'
-  gem 'listen', '~> 3.5'
-  gem 'spring'
-  gem 'spring-watcher-listen', '~> 2.0.0'
-end
-gem 'tzinfo-data', platforms: [:mingw, :mswin, :x64_mingw, :jruby]
+# Frontend (Phase 4 retires these)
 gem 'bootstrap', '~> 4.5'
 gem 'bootstrap_form'
 gem 'haml', '~> 6.1.2'
 gem 'haml-rails'
 gem 'high_voltage'
 gem 'jquery-rails'
-group :development do
-  gem 'better_errors'
-  gem 'html2haml'
-  gem 'rails_layout'
-  gem 'rb-fchange', :require=>false
-  gem 'rb-fsevent', :require=>false
-  gem 'rb-inotify', :require=>false
-  gem 'spring-commands-rspec'
-end
+
+gem 'tzinfo-data', platforms: [:mingw, :mswin, :x64_mingw, :jruby]
+
 group :development, :test do
+  gem 'debug', platforms: %i[mri windows]
+  gem 'capybara'
+  gem 'selenium-webdriver'
+  gem 'derailed'
   gem 'factory_bot_rails'
   gem 'faker'
   gem 'rspec-rails'
-  gem 'sqlite3'
 end
-# group :production do
-#   gem 'pg'
-# end
+
+group :development do
+  gem 'web-console', '>= 3.3.0'
+  gem 'listen', '~> 3.5'
+  gem 'better_errors'
+end
+
 group :test do
   gem 'database_cleaner'
-  gem 'launchy'
 end
