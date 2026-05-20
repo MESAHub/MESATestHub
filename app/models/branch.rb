@@ -8,6 +8,68 @@ class Branch < ApplicationRecord
   scope :merged, -> { where(merged: true) }
   scope :unmerged, -> { where(merged: false) }
 
+  ZERO_SHA = '0' * 40
+
+  ###############################################
+  # PHASE 3.5 RECONCILE-WITH-GITHUB ENTRY POINT #
+  ###############################################
+  #
+  # Catch-up path for when local state has drifted from GitHub —
+  # missed webhooks, cold-start after deploy, periodic safety net.
+  # Synthesizes webhook-shaped events from the diff between
+  # local state and `api.branches`, then dispatches each one
+  # through BranchSyncJob exactly like a real webhook would.
+  # That way the two code paths can't diverge in subtle ways.
+  #
+  # API cost: 1 `api.branches` call + 1 `api.compare` per branch
+  # whose head has moved. On a healthy system most branches are
+  # unchanged and skipped.
+  def self.reconcile_with_github
+    github = api_branches.index_by(&:name)
+    local  = Branch.all.index_by(&:name)
+
+    moved, created = 0, 0
+
+    github.each do |name, gh_branch|
+      gh_head = gh_branch[:commit][:sha]
+      local_branch = local[name]
+
+      if local_branch.nil?
+        BranchSyncJob.perform_now(synthetic_event(name, after: gh_head,
+                                                        created: true))
+        created += 1
+      elsif local_branch.head&.sha != gh_head
+        before_sha = local_branch.head&.sha || ZERO_SHA
+        BranchSyncJob.perform_now(synthetic_event(name, before: before_sha,
+                                                        after: gh_head,
+                                                        created: before_sha == ZERO_SHA))
+        moved += 1
+      end
+    end
+
+    deleted = 0
+    (local.keys - github.keys).each do |orphan_name|
+      BranchSyncJob.perform_now(synthetic_event(orphan_name, deleted: true))
+      deleted += 1
+    end
+
+    { created: created, moved: moved, deleted: deleted,
+      unchanged: github.size - created - moved }
+  end
+
+  def self.synthetic_event(branch_name, before: ZERO_SHA, after: ZERO_SHA,
+                           created: false, deleted: false)
+    {
+      'ref'     => "refs/heads/#{branch_name}",
+      'before'  => before,
+      'after'   => after,
+      'created' => created,
+      'deleted' => deleted,
+      'forced'  => false,
+      'commits' => []
+    }
+  end
+
   #####################################
   # PHASE 3.5 MEMBERSHIP MAINTENANCE  #
   #####################################
