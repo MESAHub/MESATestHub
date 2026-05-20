@@ -80,7 +80,7 @@ _Coffee-rails risk was eliminated by completing Phase 1.5 first._
 ## Phase 3 — Performance and bug fixes
 
 **Branch:** `perf-github-sync`
-**Status:** not started
+**Status:** in progress
 **Estimate:** 2–3 days
 
 Known issues to address:
@@ -174,19 +174,18 @@ Add items here as they come up so they don't get lost.
 
 - _(none yet — placeholder for future work)_
 
-## Bugs surfaced by Phase 1 specs (queued for Phase 3)
+## Bugs surfaced by Phase 1 specs (fixed in Phase 3)
 
-- `Commit.test_candidate` infinite-recurses when `Branch.main` returns nil
-  (`app/models/commit.rb:432`). The spec currently stubs it; the real fix
-  is to guard the recursive call.
-- `app/views/commits/_commit.json.jbuilder:5` calls
-  `commit_url(commit.branches[0], ...)` — if a commit has no branches yet,
-  this raises a route-generation error. The submissions API hits this on
-  empty submissions for newly-ingested commits.
-- `BranchMembership.position` can be nil, but `Branch#nearby_test_case_commits`
-  ([`app/models/branch.rb:451`](app/models/branch.rb:451)) calls `position + 1`
-  without a nil check, breaking the `test_case_commits#show` page for those
-  memberships.
+All three landed at the head of the `perf-github-sync` branch, each with a
+regression spec:
+
+- `Commit.test_candidate` no longer infinite-recurses when `Branch.main` is
+  nil. Drive-by: removed three stale debug `puts`, one of which referenced
+  an undefined `Submissions` constant and crashed the fallback path.
+- `_commit.json.jbuilder` now skips the `url` field when a commit has no
+  branch memberships yet, instead of raising on `commit_url(nil, ...)`.
+- `Branch#nearby_test_case_commits` returns just the seed TCC when the
+  membership has a `nil` position, instead of raising on `position + 1`.
 
 ## Bugs/UX issues surfaced during Phase 1.5 smoke testing
 
