@@ -56,7 +56,7 @@ gem-resolver risk path.
 ## Phase 2 — Rails 6.1 → 8.0 upgrade
 
 **Branch:** `rails-upgrade`
-**Status:** not started
+**Status:** complete
 **Estimate:** 2–4 days (with Phase 1 tests in place and Phase 1.5 done)
 
 See [`docs/rails-upgrade.md`](rails-upgrade.md) for the detailed phased plan,
@@ -202,6 +202,16 @@ conversion. Captured here so they don't get lost.
 
 ## Done
 
+- **Rails 6.1 → 8.0 upgrade** (Phase 2). Eight commits on the
+  `rails-upgrade` branch: Phase 0 (`update_attributes` → `update`),
+  Phases 1–3 (flip `load_defaults` 5.1 → 5.2 → 6.0 → 6.1), Phase 4
+  (Rails 7.0 + `load_defaults` 7.0), Phase 5 (Rails 7.1 + Rack 3
+  `:unprocessable_entity` → `:unprocessable_content` rename), Phase 6
+  (Rails 7.2, drop `config/secrets.yml`, `show_exceptions = :none`,
+  bump `database_cleaner` for the `schema_migration` API change),
+  Phase 7 (Rails 8.0, bump `jbuilder` for the `ProxyObject` removal,
+  drop the Cucumber gems that were holding the resolver back). All
+  24 specs green throughout. Smoke-tested in dev on Rails 8.0.5.
 - Migrate from Heroku to Railway hosting
 - Set up Railway Postgres and restore Heroku snapshot
 - Strip Heroku-specific gems (`barnes`, `scout_apm`, `rails_12factor`)

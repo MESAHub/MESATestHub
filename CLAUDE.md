@@ -24,20 +24,23 @@ Before doing non-trivial work, read the appropriate doc:
   modernization work (test foundation → Rails 7 upgrade → perf → frontend).
   Active phase and branch are noted there. **Check this first** before
   proposing structural changes; the plan may already cover them.
-- **[`docs/rails-upgrade.md`](docs/rails-upgrade.md)** — detailed Rails
-  6.1 → 7.x upgrade plan, remaining Dependabot advisories, gem
-  compatibility analysis, real-world exposure assessment.
+- **[`docs/rails-upgrade.md`](docs/rails-upgrade.md)** — record of the
+  Rails 6.1 → 8.0 upgrade (now complete on the `rails-upgrade` branch),
+  including the deviations from the original phased plan that actually
+  needed code changes.
 
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.
 
 ## Reality checks (things the codebase *looks* like but isn't)
 
-- The Rails 5.1 `config.load_defaults 5.1` in `config/application.rb` is real.
-  The app runs on Rails 6.1 code but with Rails 5.1 default behaviors. Both
-  `new_framework_defaults_5_2.rb` and `new_framework_defaults_6_0.rb` exist
-  with every option commented out. This will be flipped phase-by-phase
-  during the Rails upgrade (Phase 2 in `docs/roadmap.md`).
+- The app runs on **Rails 8.0** with `config.load_defaults 8.0`. The
+  6.1 → 8.0 upgrade landed on the `rails-upgrade` branch as eight
+  sequential commits (Phase 0 prep through Phase 7). See
+  [`docs/rails-upgrade.md`](docs/rails-upgrade.md) for the deviations
+  from the original plan — Rack 3's `:unprocessable_entity` →
+  `:unprocessable_content` rename, `show_exceptions` becoming an enum,
+  and the gems that needed bumps or removal for the resolver to settle.
 - **The test suite is small but real.** 24 request specs cover auth,
   submissions API, GitHub webhook, and high-traffic page renders. They are
   the regression safety net for upcoming Rails upgrade work. Build on this
