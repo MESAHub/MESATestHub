@@ -41,10 +41,12 @@ that makes the change.
   from the original plan — Rack 3's `:unprocessable_entity` →
   `:unprocessable_content` rename, `show_exceptions` becoming an enum,
   and the gems that needed bumps or removal for the resolver to settle.
-- **The test suite is small but real.** 24 request specs cover auth,
-  submissions API, GitHub webhook, and high-traffic page renders. They are
-  the regression safety net for upcoming Rails upgrade work. Build on this
-  rather than starting fresh.
+- **The test suite is small but real.** 78 specs (request + model + job)
+  cover auth, submissions API, GitHub webhook (now async via
+  `BranchSyncJob`), branch deletion, the Octokit middleware wiring,
+  `TestInstance.query`, `Commit#computer_info`, and high-traffic page
+  renders. They are the regression safety net for upcoming work — build
+  on this rather than starting fresh.
 - **No Cucumber.** The old Cucumber suite is preserved at
   `features.deprecated/` and `spec/features.deprecated/`. RSpec request
   specs replace it. Do not add `.feature` files.

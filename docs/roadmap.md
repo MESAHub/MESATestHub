@@ -80,7 +80,7 @@ _Coffee-rails risk was eliminated by completing Phase 1.5 first._
 ## Phase 3 — Performance and bug fixes
 
 **Branch:** `perf-github-sync`
-**Status:** in progress
+**Status:** complete
 **Estimate:** 2–3 days
 
 Known issues to address:
@@ -93,8 +93,13 @@ Known issues to address:
   `Branch.api_update_branches`'s deletion path is now wrapped in a
   transaction and covered by seven regression specs; the
   cascading-delete hypothesis didn't reproduce in any scenario.
-- **General N+1 audit on the commit show page** — large commits with many
-  test cases / instances likely have hot query patterns worth addressing.
+- ~~**General N+1 audit on the commit show page**~~ Done. `Commit#computer_info`
+  was doing ~4 queries per unique spec on commits/show — rewritten to batch
+  the lookups, plus `compile_stati` is now memoized so the
+  `compilation_status` / `compile_success_count` / `compile_fail_count`
+  trio that the show action calls back-to-back hits the database once
+  instead of three times. Behavior + query-count regression specs at
+  [`spec/models/commit_computer_info_spec.rb`](spec/models/commit_computer_info_spec.rb).
 - ~~**Upgrade Octokit 4 → 10.**~~ Done. Drop-in bump — the
   middleware-contract concern in the original plan turned out to be
   unfounded; the current Octokit README still shows the exact
@@ -213,6 +218,14 @@ conversion. Captured here so they don't get lost.
 
 ## Done
 
+- **Performance and bug fixes** (Phase 3). Fifteen commits on the
+  `perf-github-sync` branch covering the four roadmap items plus four
+  queued bugs: the three Phase-1-spec-discovered bugs (test_candidate
+  recursion, jbuilder branchless crash, branch nearby_test_case_commits
+  nil position), the test_instances#search regression suite, the
+  branch-deletion regression specs, Octokit 4 → 10, the webhook → ActiveJob
+  cut-over, and the commits#show N+1 elimination. Suite grew from 24 to
+  78 specs.
 - **Rails 6.1 → 8.0 upgrade** (Phase 2). Eight commits on the
   `rails-upgrade` branch: Phase 0 (`update_attributes` → `update`),
   Phases 1–3 (flip `load_defaults` 5.1 → 5.2 → 6.0 → 6.1), Phase 4
