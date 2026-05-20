@@ -197,6 +197,59 @@ RSpec.describe Commit, 'test case population' do
       expect_any_instance_of(Commit).not_to receive(:api_update_test_cases)
       Commit.populate_payload_test_cases(payload, sha_to_id)
     end
+
+    it 'processes a chain of new commits in commit_time ASC so each ' \
+       'child can copy from its just-populated parent (single api fetch)' do
+      # Regression: previously this iterated via find_each (id ASC),
+      # which under backfill processes newest-first. Each commit's
+      # parent hadn't been populated yet, so every commit cascaded
+      # into api_update_test_cases — 3 API calls per commit instead
+      # of 1 for the whole chain.
+      tc = create(:test_case, name: 'evolve_zams', module: 'star')
+      seed = create(:commit, sha: sha40('seed'),
+                             short_sha: sha40('seed')[0, 7])
+      TestCaseCommit.create!(commit: seed, test_case: tc)
+      seed.save  # update_scalars → test_case_count = 1
+
+      # Build a chain: seed (has TCC) ← oldest ← middle ← newest
+      # All three children have higher IDs (more recently inserted)
+      # than their parents, but earlier commit_time means they should
+      # process first.
+      base_time = Time.zone.parse('2026-01-01T00:00:00Z')
+      oldest_sha = sha40('oldest')
+      middle_sha = sha40('middle')
+      newest_sha = sha40('newest')
+
+      # Insert in newest-first order to mimic backfill — newest gets
+      # lowest new ID. Then populate sees newest first if we don't
+      # fix the ordering.
+      payload = [
+        gh_commit(sha: newest_sha, parent_shas: [middle_sha]),
+        gh_commit(sha: middle_sha, parent_shas: [oldest_sha]),
+        gh_commit(sha: oldest_sha, parent_shas: [seed.sha])
+      ]
+      # Override commit_time so each is one hour apart, newest last
+      payload[0][:commit][:author][:date] = base_time + 3.hours
+      payload[1][:commit][:author][:date] = base_time + 2.hours
+      payload[2][:commit][:author][:date] = base_time + 1.hour
+
+      sha_to_id = Commit.ingest_payload_commits(payload)
+      Commit.ingest_payload_edges(payload, sha_to_id)
+
+      # Sanity check: newest has lower ID than oldest (the cascade trap)
+      expect(sha_to_id[newest_sha]).to be < sha_to_id[oldest_sha]
+
+      # No api fetch should fire — every commit in the chain copies
+      # from its parent (oldest copies from seed; middle copies from
+      # oldest; newest copies from middle).
+      expect_any_instance_of(Commit).not_to receive(:api_update_test_cases)
+
+      Commit.populate_payload_test_cases(payload, sha_to_id)
+
+      [oldest_sha, middle_sha, newest_sha].each do |sha|
+        expect(Commit.find_by(sha: sha).test_case_count).to eq(1)
+      end
+    end
   end
 
   describe Commit::TEST_SOURCE_PATTERN do
