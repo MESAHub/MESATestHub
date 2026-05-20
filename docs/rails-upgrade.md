@@ -1,22 +1,65 @@
 # Rails upgrade tracker
 
-This document captures the current state of the Rails dependency, the remaining
-Dependabot advisories that can only be resolved by a Rails major upgrade, and a
-proposed path forward — informed by an actual audit of the codebase rather than
-generic Rails-upgrade lore.
+This document captures the path the codebase took from Rails 6.1.7.10 to
+Rails 8.0.5, and the deviations from the original plan. The upgrade landed
+on the `rails-upgrade` branch.
 
 ## Current state
+
+- **Rails 8.0.5** (`gem 'rails', '~> 8.0.0'` in the Gemfile).
+- **`config.load_defaults 8.0`** in `config/application.rb`.
+- All 12 Rails-internal Dependabot advisories listed below are resolved by
+  the 8.0 upgrade.
+- The Phase 1 RSpec request specs (24 examples) stayed green through every
+  phase and now run on Rails 8.0 in CI.
+
+## What actually happened (notes from the upgrade)
+
+The original plan held up well. Three things broke that the plan did not
+predict:
+
+1. **Rack 3 renamed `:unprocessable_entity` to `:unprocessable_content`**
+   on the way from Rails 7.0 to 7.1. The old symbol was removed from
+   Rack 3.2's `SYMBOL_TO_STATUS_CODE` table, so `have_http_status` raised
+   `ArgumentError` instead of warning. Renamed in 13 controllers and
+   request specs.
+2. **`config.action_dispatch.show_exceptions = false`** silently became
+   `:rescuable` on Rails 7.2 (the legacy boolean was coerced into the new
+   enum). This swallowed the `AbstractController::ActionNotFound` that
+   the `github_webhook` gem uses to signal signature failures, breaking
+   two webhook specs. Set explicitly to `:none` in the test env.
+3. **Old gems pinned the resolver** on Rails 7.2/8.0:
+   - `database_cleaner 2.0.2` called `PostgreSQLAdapter#schema_migration`,
+     which 7.2 removed. Bumped to 2.1.0.
+   - `jbuilder 2.11.5` required `active_support/proxy_object`, which 8.0
+     removed. Bumped to 2.15.0.
+   - `cucumber-rails` 2.x had no Rails 8 support; the resolver downgraded
+     it to 1.4 to get 8.0 to install. Since the Cucumber suite was already
+     deprecated to `features.deprecated/` in Phase 1, the cleanest fix
+     was to drop `cucumber-rails`, `cucumber-rails-training-wheels`, and
+     the `capybara` pin from the Gemfile entirely.
+
+Things that did not require code changes:
+- `coffee-rails` was the predicted friction point for Rails 8; Phase 1.5
+  eliminated it.
+- `uglifier` still works on 8.0; no swap to `terser` needed.
+- `sassc-rails` still works; no swap to `dartsass-sprockets` needed.
+- Solid Queue / Solid Cache / Solid Cable were intentionally not adopted
+  — they're Phase 3 (perf) candidates, not part of the upgrade.
+
+## Historical state (pre-upgrade)
 
 - **Rails 6.1.7.10** — the final 6.1.x release.
 - Rails 6.1 reached **end of security support in October 2024**. No further CVE
   backports are coming.
 - All non-Rails gems with known advisories have been patched on master.
-- **`config.load_defaults 5.1`** in `config/application.rb` — the app runs on
-  Rails 6.1 code but uses Rails 5.1 default behaviors. See "Stale framework
+- **`config.load_defaults 5.1`** in `config/application.rb` — the app ran on
+  Rails 6.1 code but used Rails 5.1 default behaviors. See "Stale framework
   defaults" below.
-- **No meaningful test suite.** `spec/` directories exist but coverage is
-  effectively zero. This is the single biggest amplifier on upgrade effort:
-  every phase must be verified by hand against production behavior.
+- A small but real test suite (24 RSpec request specs covering auth, the
+  submissions API, the GitHub webhook, and the major show pages) had landed
+  in Phase 1, replacing the original "no meaningful test suite" assumption
+  of this document.
 
 ## Remaining Dependabot advisories
 

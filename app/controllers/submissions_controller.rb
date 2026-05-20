@@ -254,19 +254,19 @@ class SubmissionsController < ApplicationController
   def submission_fail_authenticate
     # what to do when authentication during a submit fails
     render json: { error: 'Invalid e-mail or password.' },
-           status: :unprocessable_entity
+           status: :unprocessable_content
   end
 
   def submission_fail_computer(user, computer)
     # what to do when authentication during a submit fails
     render json: {error: "User #{user} doesn't control computer #{computer}."},
-           status: :unprocessable_entity
+           status: :unprocessable_content
   end
 
   def submission_fail_commit(sha)
     # what to do when the commit doesn't exist
     render json: { error: %q{Could not find commit: #{sha} in database."} },
-           status: :unprocessable_entity
+           status: :unprocessable_content
   end
 
   def submission_fail_instances
@@ -275,7 +275,7 @@ class SubmissionsController < ApplicationController
     # still saved, though, even if some test cases
     errors = @failures.map { |ti| ti.errors }
     puts errors.to_json
-    render json: errors.to_json, status: :unprocessable_entity
+    render json: errors.to_json, status: :unprocessable_content
   end
 
   def submitter_params

@@ -56,7 +56,7 @@ gem-resolver risk path.
 ## Phase 2 — Rails 6.1 → 8.0 upgrade
 
 **Branch:** `rails-upgrade`
-**Status:** not started
+**Status:** complete
 **Estimate:** 2–4 days (with Phase 1 tests in place and Phase 1.5 done)
 
 See [`docs/rails-upgrade.md`](rails-upgrade.md) for the detailed phased plan,
@@ -94,6 +94,21 @@ Known issues to address:
   Commit relationships. Reproduce, fix, add a regression spec.
 - **General N+1 audit on the commit show page** — large commits with many
   test cases / instances likely have hot query patterns worth addressing.
+- **Upgrade Octokit 4 → 10.** The Gemfile is pinned at `octokit '~> 4.0'`;
+  the current major is 10.x. octokit 5 changed the Faraday middleware
+  contract that [`app/models/application_record.rb`](app/models/application_record.rb)
+  configures directly (`Faraday::RackBuilder.new { ... }` plus the
+  `Octokit::Response::RaiseError` middleware and the explicit
+  `Octokit.middleware = stack` assignment), so this is not a drop-in
+  bump. Worth doing here because (a) this phase already requires
+  touching the GitHub sync code, (b) the app leans hard on the GitHub
+  API for commits/branches/webhooks and being five majors behind on
+  the client library is a real maintenance and security concern, and
+  (c) any background-job refactor of the sync flow benefits from the
+  newer Faraday connection-pooling and retry semantics. Plan to test
+  the middleware stack and rate-limit/retry behavior carefully — the
+  webhook spec covers the controller wiring but nothing covers the
+  outbound API calls.
 
 Doing this after the upgrade gives access to Rails 7.1's async query loading
 and improved background-job tooling.
@@ -202,6 +217,16 @@ conversion. Captured here so they don't get lost.
 
 ## Done
 
+- **Rails 6.1 → 8.0 upgrade** (Phase 2). Eight commits on the
+  `rails-upgrade` branch: Phase 0 (`update_attributes` → `update`),
+  Phases 1–3 (flip `load_defaults` 5.1 → 5.2 → 6.0 → 6.1), Phase 4
+  (Rails 7.0 + `load_defaults` 7.0), Phase 5 (Rails 7.1 + Rack 3
+  `:unprocessable_entity` → `:unprocessable_content` rename), Phase 6
+  (Rails 7.2, drop `config/secrets.yml`, `show_exceptions = :none`,
+  bump `database_cleaner` for the `schema_migration` API change),
+  Phase 7 (Rails 8.0, bump `jbuilder` for the `ProxyObject` removal,
+  drop the Cucumber gems that were holding the resolver back). All
+  24 specs green throughout. Smoke-tested in dev on Rails 8.0.5.
 - Migrate from Heroku to Railway hosting
 - Set up Railway Postgres and restore Heroku snapshot
 - Strip Heroku-specific gems (`barnes`, `scout_apm`, `rails_12factor`)

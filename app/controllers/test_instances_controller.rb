@@ -122,7 +122,7 @@ class TestInstancesController < ApplicationController
       else
         format.html { render :new }
         format.json do
-          render json: @test_instance.errors, status: :unprocessable_entity
+          render json: @test_instance.errors, status: :unprocessable_content
         end
       end
     end
@@ -144,7 +144,7 @@ class TestInstancesController < ApplicationController
       else
         format.html { render :edit }
         format.json do
-          render json: @test_instance.errors, status: :unprocessable_entity
+          render json: @test_instance.errors, status: :unprocessable_content
         end
       end
     end
@@ -209,7 +209,7 @@ class TestInstancesController < ApplicationController
 
   def fail_authenticate_json
     render json: { error: 'Invalid e-mail or password.' },
-           status: :unprocessable_entity
+           status: :unprocessable_content
   end
 
   def submission_set_data
@@ -239,7 +239,7 @@ class TestInstancesController < ApplicationController
     format.html { render :new }
     format.json do
       render json: @test_instance.errors,
-             status: :unprocessable_entity
+             status: :unprocessable_content
     end
   end
 

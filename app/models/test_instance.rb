@@ -604,7 +604,7 @@ class TestInstance < ApplicationRecord
   # still useful to have direct access to mesa_version for sorting purposes
   def mesa_version
     return super if super
-    self.update_attributes(mesa_version: version.number)
+    self.update(mesa_version: version.number)
     super
   end  
 
