@@ -159,6 +159,13 @@ we'd add depth-limiting tricks, but that's not on the horizon.
 
 Each step is its own commit (or small set of commits) on `perf-sync-topology`.
 
+**All six steps shipped.** The descriptions below stay as historical
+record of the original plan. Two additional helpers that surfaced
+during implementation — `Branch.reconcile_with_github` (rake
+`branches:sync`) for catch-up and `rake test_cases:populate` for
+cleaning up commits ingested before Step 6 — are documented in the
+code comments rather than rewriting this plan retroactively.
+
 ### Step 1 — Add `commit_relations`
 
 Migration adding the table + indexes + FKs described above. No code

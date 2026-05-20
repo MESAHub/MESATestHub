@@ -114,25 +114,37 @@ and improved background-job tooling.
 
 ## Phase 3.5 — GitHub sync overhaul
 
-**Branch:** `perf-sync-topology` (not yet created)
-**Status:** planned
-**Estimate:** 4–6 days
+**Branch:** `perf-sync-topology`
+**Status:** complete
+**Estimate:** 4–6 days (actual: ~consistent with that)
 
 See [`docs/sync-overhaul.md`](sync-overhaul.md) for the full plan.
 
 The Phase 3 sync work moved the GitHub fan-out off the webhook request
-path but didn't reduce the underlying API-call count. This phase replaces
-the position-based ordering scheme with a stored commit topology
-(`commit_relations` join table) and rewrites the sync flow to consume the
-webhook payload + `compare(before, after)` directly. Outcomes:
+path but didn't reduce the underlying API-call count. This phase
+replaces the position-based ordering scheme with a stored commit
+topology (`commit_relations` join table) and rewrites the sync flow to
+consume the webhook payload + `compare(before, after)` directly.
+
+Outcomes delivered:
 
 - Commit ordering on each branch matches what
-  `github.com/MESAHub/mesa/commits/{branch}` shows.
-- Typical-push sync cost drops from "100+ commits fetched and
-  repositioned per branch + 4 content calls per new commit" to
-  "zero or one API call."
-- `branch_memberships.position` is retired; ordering comes from a
+  `github.com/MESAHub/mesa/commits/{branch}` shows, driven by a
   recursive CTE over `commit_time`.
+- Typical-push sync cost dropped from "100+ commits fetched and
+  repositioned per branch + 3 content calls per new commit" to
+  "one `api.compare` call per push, plus zero (copy-from-parent) or
+  three (api fetch) content calls per *source-touching* commit." The
+  vast majority of pushes don't touch source files at all.
+- `branch_memberships.position` and the orphaned `commits.parents_count`
+  / `commits.children_count` counter columns dropped from the schema.
+- `Branch.reconcile_with_github` (rake `branches:sync`) covers
+  missed-webhook recovery and deploy-day catch-up by dispatching
+  synthetic events through the same `BranchSyncJob` path.
+- `topology:backfill` and `test_cases:populate` rake tasks for the
+  one-time historical population.
+
+Suite grew from 78 to 158 specs over this phase.
 
 ## Phase 4 — Frontend modernization
 
@@ -240,6 +252,18 @@ conversion. Captured here so they don't get lost.
 
 ## Done
 
+- **GitHub sync overhaul** (Phase 3.5). Topology-driven sync built on
+  a new `commit_relations` join table. Webhook → `BranchSyncJob`
+  consumes the payload, calls `api.compare(before, after)` once,
+  bulk-ingests commits + parent edges + memberships, and uses the
+  webhook's per-commit file-change list to decide between copying
+  test cases from the parent (zero API calls) or re-fetching via
+  `api.content` (three calls). `Branch#ordered_commits` uses a
+  recursive CTE for the canonical reverse-chronological listing.
+  `branch_memberships.position` dropped; rake tasks for
+  `topology:backfill`, `branches:sync`, and `test_cases:populate`
+  cover backfill, missed-webhook recovery, and existing-state cleanup.
+  Suite grew from 78 to 158 specs.
 - **Performance and bug fixes** (Phase 3). Fifteen commits on the
   `perf-github-sync` branch covering the four roadmap items plus four
   queued bugs: the three Phase-1-spec-discovered bugs (test_candidate

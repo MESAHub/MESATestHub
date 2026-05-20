@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_05_20_144231) do
+ActiveRecord::Schema[8.0].define(version: 2026_05_20_182719) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -18,7 +18,6 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_20_144231) do
   create_table "branch_memberships", force: :cascade do |t|
     t.bigint "branch_id"
     t.bigint "commit_id"
-    t.integer "position"
     t.index ["branch_id"], name: "index_branch_memberships_on_branch_id"
     t.index ["commit_id", "branch_id"], name: "index_branch_memberships_on_commit_id_and_branch_id", unique: true
     t.index ["commit_id"], name: "index_branch_memberships_on_commit_id"
@@ -60,8 +59,6 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_20_144231) do
     t.integer "complete_computer_count", default: 0
     t.integer "computer_count", default: 0
     t.integer "status", default: 0
-    t.integer "children_count", default: 0
-    t.integer "parents_count", default: 0
     t.boolean "pull_request", default: false
     t.boolean "open"
     t.index ["sha"], name: "index_commits_on_sha", unique: true
