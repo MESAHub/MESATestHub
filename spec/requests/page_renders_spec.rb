@@ -31,6 +31,18 @@ RSpec.describe 'Page renders', type: :request do
 
       expect(response).to have_http_status(:ok)
     end
+
+    it 'does not crash when another recent branch has nil head_id' do
+      # The "Other Active Branches" dropdown renders branch.head.short_sha;
+      # a branch with no head (left in that state by an interrupted sync
+      # or an older creation path that didn't set head_id) used to crash
+      # the entire show page.
+      create(:branch, name: 'half-synced', head_id: nil)
+
+      get "/main/commits/#{commit.short_sha}"
+
+      expect(response).to have_http_status(:ok)
+    end
   end
 
   describe 'GET /:branch/commits' do

@@ -216,6 +216,28 @@ RSpec.describe BranchSyncJob, type: :job do
       branch = Branch.find_by(name: 'feature-y')
       expect(branch.head&.sha).to eq(new_head_sha)
     end
+
+    it 'leaves head_id nil only if the backfill genuinely could not find ' \
+       'the head commit (defense-in-depth — should not happen with the ' \
+       'real BranchBackfillJob, which upserts commit metadata)' do
+      # If the backfill no-ops (e.g., stubbed in a test, or api.commits
+      # returns nothing for a branch whose head is unreachable), we must
+      # not crash. head_id stays nil and the operator can investigate.
+      create_payload = payload(
+        'ref' => 'refs/heads/feature-z',
+        'before' => '0' * 40,
+        'after' => sha40('mystery'),
+        'created' => true
+      )
+
+      allow(BranchBackfillJob).to receive(:perform_now)  # no-op
+
+      expect {
+        described_class.new.perform(create_payload)
+      }.not_to raise_error
+
+      expect(Branch.find_by(name: 'feature-z').head_id).to be_nil
+    end
   end
 
   describe 'push to a branch we never saw created' do

@@ -50,57 +50,26 @@ class BranchBackfillJob < ApplicationJob
   private
 
   def ingest_page(commits_data, branch)
-    sha_to_id = Commit.where(sha: collect_shas(commits_data))
-                      .pluck(:sha, :id)
-                      .to_h
+    # Upsert the commits first so we have rows for every SHA in the
+    # page — including ones we've never seen, which is the common case
+    # when this job is invoked from BranchSyncJob#handle_creation for a
+    # brand-new branch with new commits. ingest_payload_commits returns
+    # the sha => id map we need for edges and memberships.
+    #
+    # For the topology:backfill rake task, commits typically already
+    # exist (the old sync code created them). Upserting them again is
+    # a quick idempotent op.
+    sha_to_id = Commit.ingest_payload_commits(commits_data)
 
-    [insert_edges(commits_data, sha_to_id),
-     insert_memberships(branch, commits_data, sha_to_id)]
+    [Commit.ingest_payload_edges(commits_data, sha_to_id),
+     insert_memberships(branch, sha_to_id.values)]
   end
 
-  def insert_edges(commits_data, sha_to_id)
-    edges = build_edges(commits_data, sha_to_id)
-    return 0 if edges.empty?
-
-    # insert_all's PostgreSQL RETURNING clause excludes ON CONFLICT
-    # skips, so .length is the count of edges that were actually new.
-    CommitRelation.insert_all(edges,
-                              unique_by: %i[child_id parent_id]).length
-  end
-
-  def insert_memberships(branch, commits_data, sha_to_id)
-    commit_ids = commits_data.map { |c| sha_to_id[c[:sha]] }.compact
+  def insert_memberships(branch, commit_ids)
     return 0 if commit_ids.empty?
 
     rows = commit_ids.map { |id| { branch_id: branch.id, commit_id: id } }
     BranchMembership.insert_all(rows,
                                 unique_by: %i[commit_id branch_id]).length
-  end
-
-  def collect_shas(commits_data)
-    shas = Set.new
-    commits_data.each do |commit_hash|
-      shas << commit_hash[:sha]
-      commit_hash[:parents].each { |parent| shas << parent[:sha] }
-    end
-    shas.to_a
-  end
-
-  def build_edges(commits_data, sha_to_id)
-    edges = []
-    commits_data.each do |commit_hash|
-      child_id = sha_to_id[commit_hash[:sha]]
-      next unless child_id
-
-      commit_hash[:parents].each_with_index do |parent, idx|
-        parent_id = sha_to_id[parent[:sha]]
-        next unless parent_id
-
-        edges << { parent_id: parent_id,
-                   child_id: child_id,
-                   parent_index: idx }
-      end
-    end
-    edges
   end
 end

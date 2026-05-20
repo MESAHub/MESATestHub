@@ -3,13 +3,19 @@ require 'rails_helper'
 RSpec.describe BranchBackfillJob, type: :job do
   include ActiveJob::TestHelper
 
-  # Shape the GitHub API response the same way Octokit does (the keys we
-  # read are :sha and :parents, each parent having a :sha). Plain
-  # symbol-keyed hashes are enough — the production Sawyer::Resource
-  # supports `[:foo]` lookup the same way.
+  # Shape the GitHub API response the same way Octokit's api.commits
+  # does. Plain symbol-keyed hashes work — Sawyer::Resource supports
+  # `[:foo]` lookup identically. Need the full nested shape because
+  # ingest_payload_commits passes it through hash_from_github.
   def fake_commit(sha:, parent_shas: [])
     {
       sha: sha,
+      commit: {
+        author: { name: 'Bot', email: 'bot@example.com',
+                  date: Time.zone.parse('2026-01-01T12:00:00Z') },
+        message: "msg #{sha[0, 7]}"
+      },
+      html_url: "https://github.com/MESAHub/mesa/commit/#{sha}",
       parents: parent_shas.map { |s| { sha: s } }
     }
   end
@@ -57,6 +63,19 @@ RSpec.describe BranchBackfillJob, type: :job do
     expect(edge.parent).to eq(parent_commit)
     expect(edge.child).to eq(child_commit)
     expect(edge.parent_index).to eq(0)
+  end
+
+  it 'ingests commits that are not yet in the local DB' do
+    # The branch-creation path through BranchSyncJob#handle_creation
+    # depends on this — the head commit needs to exist after the job
+    # runs so handle_creation can set branch.head_id from it.
+    new_sha = 'a' * 40
+    stub_pages([[fake_commit(sha: new_sha)]])
+
+    expect { described_class.new.perform(branch.id) }
+      .to change(Commit, :count).by(1)
+
+    expect(Commit.exists?(sha: new_sha)).to be true
   end
 
   it 'is idempotent when rerun on the same branch' do

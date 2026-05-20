@@ -25,8 +25,12 @@ class CommitsController < ApplicationController
 
     # branches that do not contain this commit. Want these for easy navigation,
     # but they will redirect to the head commits of their respective branches
+    # — so filter out any branches with no head_id (they'd crash the view
+    # when it asks for branch.head.short_sha).
     @branches_off_recent = Branch.recent.where.not(id: @branches.map(&:id))
-    @branches_off_older = Branch.older.where.not(id: @branches.map(&:id))
+                                        .where.not(head_id: nil)
+    @branches_off_older  = Branch.older.where.not(id: @branches.map(&:id))
+                                       .where.not(head_id: nil)
 
     # Get array of commits made in the same branch around the same time of this
     # commit. For now, get no more than five commits, ideally centered
