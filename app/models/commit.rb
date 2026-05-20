@@ -48,6 +48,12 @@ class Commit < ApplicationRecord
   # These helpers then upsert the commit rows and the
   # parent->child edges in two bulk operations.
 
+  # Path pattern for the test-source files we'd need to re-read from
+  # GitHub if they changed in a commit. Any modified/added path matching
+  # this is a signal that the commit's test case list might differ from
+  # its parent's.
+  TEST_SOURCE_PATTERN = %r{(?:\A|/)test_suite/do1_test_source\z}.freeze
+
   # Bulk-insert commits from a GitHub API response (commits or compare
   # endpoint, both use the same nested shape). Returns a hash mapping
   # sha => id for every commit ingested OR already present.
@@ -61,13 +67,13 @@ class Commit < ApplicationRecord
   # status is explicitly set to -1 ("untested") so newly-inserted
   # commits don't show as passing — the schema default of 0 means
   # "passing", which is wrong for a commit that has no test data yet.
-  # update_scalars will rewrite status once test cases and instances
-  # arrive.
+  # populate_test_cases_for then sets it correctly.
   #
   # Bypasses ActiveRecord validations and the `after_create
-  # :api_update_test_cases` callback — test-case ingestion is the
-  # caller's responsibility so it can batch and short-circuit per
-  # Step 6.
+  # :api_update_test_cases` callback. Test-case ingestion is a separate
+  # step (populate_payload_test_cases) that the caller must run AFTER
+  # ingest_payload_edges has wired up the parent edges — otherwise the
+  # copy-from-parent optimization can't find the parent.
   def self.ingest_payload_commits(commit_hashes)
     return {} if commit_hashes.empty?
 
@@ -85,6 +91,100 @@ class Commit < ApplicationRecord
     Commit.where(sha: commit_hashes.map { |gh| gh[:sha] })
           .pluck(:sha, :id)
           .to_h
+  end
+
+  # Populate TestCaseCommit rows for any commit in `commit_hashes` that
+  # currently has none (test_case_count == 0). MUST be called after
+  # ingest_payload_edges so the copy-from-parent step can resolve
+  # commit.parents.first.
+  #
+  # Optional `file_changes_by_sha:` is a `sha => Array<String>` map of
+  # added/modified file paths per commit (from the webhook payload's
+  # commits[] array). When a commit's paths don't touch any
+  # `*/test_suite/do1_test_source` file, we can copy from parent for
+  # free; when they do touch, we re-fetch via api.content. When the
+  # map isn't provided (backfill / reconcile path), populate falls back
+  # to copy-from-parent as the optimistic default — correct for MESA's
+  # workflow where source files rarely change.
+  def self.populate_payload_test_cases(commit_hashes, sha_to_id,
+                                       file_changes_by_sha: nil)
+    ids = commit_hashes.map { |gh| sha_to_id[gh[:sha]] }.compact
+    return if ids.empty?
+
+    Commit.where(id: ids, test_case_count: 0).find_each do |commit|
+      sources_touched = file_changes_by_sha&.dig(commit.sha)&.then do |paths|
+        paths.any? { |p| p.match?(TEST_SOURCE_PATTERN) }
+      end
+      populate_test_cases_for(commit, sources_touched: sources_touched)
+    end
+  end
+
+  # Populate TestCaseCommit rows for a freshly-ingested commit. Three
+  # paths in order of preference:
+  #
+  # 1. If we know sources are unchanged (sources_touched: false), copy
+  #    the parent's TCCs. Zero API calls.
+  # 2. If we don't know whether sources changed (sources_touched: nil)
+  #    but the parent has TCCs, copy them as the best-effort default.
+  #    Zero API calls. Correct for MESA's workflow where source files
+  #    rarely change; if they did change, the next test submission for
+  #    this commit will surface the discrepancy and the operator can
+  #    re-fetch via `rake test_cases:populate`.
+  # 3. Otherwise (sources_touched: true, or parent has no TCCs, or
+  #    parent isn't in DB): fall back to api_update_test_cases, which
+  #    reads do1_test_source for each module via the GitHub API.
+  #    Three API calls per commit.
+  #
+  # Returns :copied, :fetched, or :no_parent_no_fetch (the last means
+  # there's truly nothing to populate and the caller should know).
+  def self.populate_test_cases_for(commit, sources_touched: nil)
+    if sources_touched != true && copy_test_cases_from_parent(commit)
+      :copied
+    else
+      commit.api_update_test_cases
+      :fetched
+    end
+  end
+
+  # Returns true if TCCs were successfully copied from the parent commit;
+  # false if there's no parent or the parent has no TCCs to copy.
+  #
+  # Filters out test_case_ids the commit already has TCCs for, so this
+  # is idempotent in the partial-population case (some TCCs already
+  # present, others missing). There's no unique index on
+  # (commit_id, test_case_id) in the schema, so the filter is how we
+  # avoid duplicates rather than ON CONFLICT.
+  def self.copy_test_cases_from_parent(commit)
+    parent = commit.parents.first
+    return false unless parent
+
+    parent_tc_ids = parent.test_case_commits.pluck(:test_case_id)
+    return false if parent_tc_ids.empty?
+
+    existing_tc_ids = commit.test_case_commits.pluck(:test_case_id)
+    to_create = parent_tc_ids - existing_tc_ids
+
+    if to_create.any?
+      timestamp = Time.zone.now
+      rows = to_create.map do |tc_id|
+        {
+          commit_id: commit.id,
+          test_case_id: tc_id,
+          status: -1,
+          submission_count: 0,
+          computer_count: 0,
+          checksum_count: 0,
+          passed_count: 0,
+          failed_count: 0,
+          created_at: timestamp,
+          updated_at: timestamp
+        }
+      end
+      TestCaseCommit.insert_all(rows)
+    end
+
+    commit.save  # before_save :update_scalars refreshes commit-level scalars
+    true
   end
 
   # Insert parent->child edges into commit_relations for every commit

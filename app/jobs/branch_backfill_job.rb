@@ -50,19 +50,27 @@ class BranchBackfillJob < ApplicationJob
   private
 
   def ingest_page(commits_data, branch)
-    # Upsert the commits first so we have rows for every SHA in the
+    # Insert the commits first so we have rows for every SHA in the
     # page — including ones we've never seen, which is the common case
     # when this job is invoked from BranchSyncJob#handle_creation for a
     # brand-new branch with new commits. ingest_payload_commits returns
     # the sha => id map we need for edges and memberships.
     #
     # For the topology:backfill rake task, commits typically already
-    # exist (the old sync code created them). Upserting them again is
-    # a quick idempotent op.
+    # exist (the old sync code created them). Inserting them again is
+    # a quick idempotent op (insert_all skips on conflict).
     sha_to_id = Commit.ingest_payload_commits(commits_data)
 
-    [Commit.ingest_payload_edges(commits_data, sha_to_id),
-     insert_memberships(branch, sha_to_id.values)]
+    edges_inserted = Commit.ingest_payload_edges(commits_data, sha_to_id)
+    memberships_inserted = insert_memberships(branch, sha_to_id.values)
+
+    # Populate test cases for any freshly-inserted commits. Backfill
+    # has no per-commit file-change info, so the populator defaults
+    # to copy-from-parent (which finds parents via the edges we just
+    # inserted) and falls back to api.content for orphans.
+    Commit.populate_payload_test_cases(commits_data, sha_to_id)
+
+    [edges_inserted, memberships_inserted]
   end
 
   def insert_memberships(branch, commit_ids)

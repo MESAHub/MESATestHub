@@ -77,6 +77,18 @@ class BranchSyncJob < ApplicationJob
     sha_to_id = Commit.ingest_payload_commits(commits)
     Commit.ingest_payload_edges(commits, sha_to_id)
 
+    # populate_payload_test_cases runs AFTER edges so the
+    # copy-from-parent optimization can find each new commit's parent
+    # via commit_relations. The webhook payload's commits[] array
+    # carries per-commit file change lists (added/modified) that let
+    # the populator know when sources actually changed — for those
+    # commits we re-fetch via api.content; for the rest we copy from
+    # parent (zero API calls). Webhook commits[] truncates at 20, so
+    # commits past that cap fall back to the copy-from-parent default.
+    file_changes_by_sha = build_file_changes_map(payload[:commits])
+    Commit.populate_payload_test_cases(commits, sha_to_id,
+                                       file_changes_by_sha: file_changes_by_sha)
+
     if (head_id = sha_to_id[after])
       branch.update!(head_id: head_id)
     end
@@ -84,6 +96,23 @@ class BranchSyncJob < ApplicationJob
     branch.absorb_commits(sha_to_id.values)
 
     absorb_merge_ancestors(branch, commits)
+  end
+
+  # Convert the webhook payload's commits[] array into a
+  # `sha => Array<file_path>` map. Combines added + modified (we don't
+  # care about removed for the test-case check). Returns nil when the
+  # webhook didn't supply commits[] (which shouldn't happen for normal
+  # pushes but does for synthetic events from reconcile).
+  def build_file_changes_map(webhook_commits)
+    return nil if webhook_commits.blank?
+
+    webhook_commits.each_with_object({}) do |c, map|
+      c = c.deep_symbolize_keys if c.respond_to?(:deep_symbolize_keys)
+      sha = c[:id] || c[:sha]
+      next unless sha
+
+      map[sha] = Array(c[:added]) + Array(c[:modified])
+    end
   end
 
   # For each merge commit in the push, walk back via the foreign
