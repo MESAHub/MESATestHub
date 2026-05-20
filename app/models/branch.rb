@@ -8,6 +8,70 @@ class Branch < ApplicationRecord
   scope :merged, -> { where(merged: true) }
   scope :unmerged, -> { where(merged: false) }
 
+  #####################################
+  # PHASE 3.5 MEMBERSHIP MAINTENANCE  #
+  #####################################
+  #
+  # These are the membership-side entry points BranchSyncJob calls
+  # after Commit.ingest_payload_{commits,edges} have populated the
+  # commit + topology rows. Two cases:
+  #
+  #   - `absorb_commits` for the simple linear push: just add
+  #     (branch, commit) memberships for each new commit in the push.
+  #   - `absorb_merge` for merge commits, which implicitly bring every
+  #     commit reachable from the foreign parent(s) onto this branch.
+  #     The walk uses a recursive CTE so the round-trip to the DB is one
+  #     query regardless of how deep the foreign branch was.
+
+  def absorb_commits(commit_ids)
+    return if commit_ids.empty?
+
+    rows = commit_ids.map { |id| { branch_id: self.id, commit_id: id } }
+    BranchMembership.insert_all(rows, unique_by: %i[commit_id branch_id])
+  end
+
+  # Add memberships for every commit reachable from any of `foreign_parent_ids`
+  # via commit_relations, stopping at commits already in this branch (their
+  # ancestors are already members too, by induction). Used when a merge
+  # commit brings a side branch's history into this branch.
+  #
+  # The "stop" flag inside the CTE prevents the recursive term from walking
+  # past commits already in the branch — important when the side branch
+  # is old enough that its merge-base is thousands of commits back.
+  def absorb_merge(foreign_parent_ids)
+    return if foreign_parent_ids.empty?
+
+    # All integers; cast through to_i defensively even though the IDs
+    # come from internal lookups, not user input.
+    branch_id = id.to_i
+    anchors_values = foreign_parent_ids.map { |i| "(#{i.to_i})" }.join(', ')
+
+    sql = <<~SQL
+      WITH RECURSIVE walk(id, stop) AS (
+        SELECT v.id::bigint, EXISTS(
+          SELECT 1 FROM branch_memberships bm
+            WHERE bm.commit_id = v.id AND bm.branch_id = #{branch_id}
+        )
+        FROM (VALUES #{anchors_values}) AS v(id)
+        UNION
+        SELECT cr.parent_id, EXISTS(
+          SELECT 1 FROM branch_memberships bm
+            WHERE bm.commit_id = cr.parent_id AND bm.branch_id = #{branch_id}
+        )
+        FROM commit_relations cr
+        JOIN walk ON cr.child_id = walk.id
+        WHERE NOT walk.stop
+      )
+      SELECT id FROM walk WHERE NOT stop
+    SQL
+
+    reachable_ids = ActiveRecord::Base.connection
+                                      .select_values(sql)
+                                      .map(&:to_i)
+
+    absorb_commits(reachable_ids)
+  end
+
   # use github api to create an array of hashes that contain data about all
   # known branches
   def self.api_branches(**params)
