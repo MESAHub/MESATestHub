@@ -1,0 +1,2 @@
+--require spec_helper
+--exclude-pattern "spec/features.deprecated/**/*_spec.rb"

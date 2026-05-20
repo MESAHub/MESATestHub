@@ -103,16 +103,13 @@ class SubmissionsController < ApplicationController
   end 
   
   def request_commit
-    puts '#' * 20
-    puts '# IN REQUESTION_COMMIT #'
-    puts '#' * 20
-    return unless submission_authenticated?
+    submission_fail_authenticate and return nil unless submission_authenticated?
 
     # make sure submission is from valid computer
     @computer = @user.computers.includes(:user).find_by(
       name: submitter_params[:computer])
     if @computer.nil?
-      submission_fail_computer(user, submitter_params[:computer])
+      submission_fail_computer(@user, submitter_params[:computer])
       return nil
     end
 
@@ -121,7 +118,7 @@ class SubmissionsController < ApplicationController
       branch = Branch.named(commit_params[:branch])
     end
 
-    max_age = request_commit_params[:max_age]
+    max_age = request_commit_params[:max_age].to_i
     allow_skip = request_commit_params[:allow_skip]
     allow_optional = request_commit_params[:allow_optional]
     allow_fpe = request_commit_params[:allow_fpe]
@@ -222,7 +219,7 @@ class SubmissionsController < ApplicationController
     @computer = @user.computers.includes(:user).find_by(
       name: submitter_params[:computer])
     if @computer.nil?
-      submission_fail_computer(user, submitter_params[:computer])
+      submission_fail_computer(@user, submitter_params[:computer])
       return nil
     end
 

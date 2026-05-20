@@ -1,6 +1,6 @@
 FactoryBot.define do
   factory :branch do
-    name { "MyString" }
-    merged { "" }
+    sequence(:name) { |n| "branch-#{n}" }
+    merged { false }
   end
 end
