@@ -28,6 +28,10 @@ Before doing non-trivial work, read the appropriate doc:
   Rails 6.1 → 8.0 upgrade (now complete on the `rails-upgrade` branch),
   including the deviations from the original phased plan that actually
   needed code changes.
+- **[`docs/sync-overhaul.md`](docs/sync-overhaul.md)** — plan for the
+  Phase 3.5 GitHub sync rewrite (topology-driven ordering, webhook
+  payload-driven sync). Spans multiple sessions on the
+  `perf-sync-topology` branch (not yet created).
 
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.

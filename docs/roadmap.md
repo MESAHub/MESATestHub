@@ -112,6 +112,28 @@ Known issues to address:
 Doing this after the upgrade gives access to Rails 7.1's async query loading
 and improved background-job tooling.
 
+## Phase 3.5 — GitHub sync overhaul
+
+**Branch:** `perf-sync-topology` (not yet created)
+**Status:** planned
+**Estimate:** 4–6 days
+
+See [`docs/sync-overhaul.md`](sync-overhaul.md) for the full plan.
+
+The Phase 3 sync work moved the GitHub fan-out off the webhook request
+path but didn't reduce the underlying API-call count. This phase replaces
+the position-based ordering scheme with a stored commit topology
+(`commit_relations` join table) and rewrites the sync flow to consume the
+webhook payload + `compare(before, after)` directly. Outcomes:
+
+- Commit ordering on each branch matches what
+  `github.com/MESAHub/mesa/commits/{branch}` shows.
+- Typical-push sync cost drops from "100+ commits fetched and
+  repositioned per branch + 4 content calls per new commit" to
+  "zero or one API call."
+- `branch_memberships.position` is retired; ordering comes from a
+  recursive CTE over `commit_time`.
+
 ## Phase 4 — Frontend modernization
 
 **Branch:** `frontend-tailwind`
