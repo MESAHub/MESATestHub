@@ -80,38 +80,59 @@ _Coffee-rails risk was eliminated by completing Phase 1.5 first._
 ## Phase 3 — Performance and bug fixes
 
 **Branch:** `perf-github-sync`
-**Status:** not started
+**Status:** complete
 **Estimate:** 2–3 days
 
 Known issues to address:
 
-- **GitHub sync after every webhook push is slow.** The current
-  `GithubWebhooksController` flow synchronizes commit/branch state inline.
-  Move to background jobs (ActiveJob), batch where possible, and skip
-  redundant fetches.
-- **Deleting branches from GitHub causes errors.** Likely a cascading-delete
-  or missing-`dependent`-option issue on the Branch ↔ BranchMembership ↔
-  Commit relationships. Reproduce, fix, add a regression spec.
-- **General N+1 audit on the commit show page** — large commits with many
-  test cases / instances likely have hot query patterns worth addressing.
-- **Upgrade Octokit 4 → 10.** The Gemfile is pinned at `octokit '~> 4.0'`;
-  the current major is 10.x. octokit 5 changed the Faraday middleware
-  contract that [`app/models/application_record.rb`](app/models/application_record.rb)
-  configures directly (`Faraday::RackBuilder.new { ... }` plus the
-  `Octokit::Response::RaiseError` middleware and the explicit
-  `Octokit.middleware = stack` assignment), so this is not a drop-in
-  bump. Worth doing here because (a) this phase already requires
-  touching the GitHub sync code, (b) the app leans hard on the GitHub
-  API for commits/branches/webhooks and being five majors behind on
-  the client library is a real maintenance and security concern, and
-  (c) any background-job refactor of the sync flow benefits from the
-  newer Faraday connection-pooling and retry semantics. Plan to test
-  the middleware stack and rate-limit/retry behavior carefully — the
-  webhook spec covers the controller wiring but nothing covers the
-  outbound API calls.
+- ~~**GitHub sync after every webhook push is slow.**~~ Done. The webhook
+  now enqueues a `BranchSyncJob` and returns immediately. ActiveJob's
+  default `:async` adapter is fine for this scale; swap in Solid Queue
+  later if the queue needs durability.
+- ~~**Deleting branches from GitHub causes errors.**~~ Done.
+  `Branch.api_update_branches`'s deletion path is now wrapped in a
+  transaction and covered by seven regression specs; the
+  cascading-delete hypothesis didn't reproduce in any scenario.
+- ~~**General N+1 audit on the commit show page**~~ Done. `Commit#computer_info`
+  was doing ~4 queries per unique spec on commits/show — rewritten to batch
+  the lookups, plus `compile_stati` is now memoized so the
+  `compilation_status` / `compile_success_count` / `compile_fail_count`
+  trio that the show action calls back-to-back hits the database once
+  instead of three times. Behavior + query-count regression specs at
+  [`spec/models/commit_computer_info_spec.rb`](spec/models/commit_computer_info_spec.rb).
+- ~~**Upgrade Octokit 4 → 10.**~~ Done. Drop-in bump — the
+  middleware-contract concern in the original plan turned out to be
+  unfounded; the current Octokit README still shows the exact
+  `Octokit.middleware = stack` pattern that
+  [`app/models/application_record.rb`](app/models/application_record.rb)
+  uses, and none of the breaking changes in 5/6/7/8/9/10 touch the
+  endpoints this app calls. Backed by a new wiring spec at
+  [`spec/models/github_api_wiring_spec.rb`](spec/models/github_api_wiring_spec.rb).
 
 Doing this after the upgrade gives access to Rails 7.1's async query loading
 and improved background-job tooling.
+
+## Phase 3.5 — GitHub sync overhaul
+
+**Branch:** `perf-sync-topology` (not yet created)
+**Status:** planned
+**Estimate:** 4–6 days
+
+See [`docs/sync-overhaul.md`](sync-overhaul.md) for the full plan.
+
+The Phase 3 sync work moved the GitHub fan-out off the webhook request
+path but didn't reduce the underlying API-call count. This phase replaces
+the position-based ordering scheme with a stored commit topology
+(`commit_relations` join table) and rewrites the sync flow to consume the
+webhook payload + `compare(before, after)` directly. Outcomes:
+
+- Commit ordering on each branch matches what
+  `github.com/MESAHub/mesa/commits/{branch}` shows.
+- Typical-push sync cost drops from "100+ commits fetched and
+  repositioned per branch + 4 content calls per new commit" to
+  "zero or one API call."
+- `branch_memberships.position` is retired; ordering comes from a
+  recursive CTE over `commit_time`.
 
 ## Phase 4 — Frontend modernization
 
@@ -174,29 +195,31 @@ Add items here as they come up so they don't get lost.
 
 - _(none yet — placeholder for future work)_
 
-## Bugs surfaced by Phase 1 specs (queued for Phase 3)
+## Bugs surfaced by Phase 1 specs (fixed in Phase 3)
 
-- `Commit.test_candidate` infinite-recurses when `Branch.main` returns nil
-  (`app/models/commit.rb:432`). The spec currently stubs it; the real fix
-  is to guard the recursive call.
-- `app/views/commits/_commit.json.jbuilder:5` calls
-  `commit_url(commit.branches[0], ...)` — if a commit has no branches yet,
-  this raises a route-generation error. The submissions API hits this on
-  empty submissions for newly-ingested commits.
-- `BranchMembership.position` can be nil, but `Branch#nearby_test_case_commits`
-  ([`app/models/branch.rb:451`](app/models/branch.rb:451)) calls `position + 1`
-  without a nil check, breaking the `test_case_commits#show` page for those
-  memberships.
+All three landed at the head of the `perf-github-sync` branch, each with a
+regression spec:
+
+- `Commit.test_candidate` no longer infinite-recurses when `Branch.main` is
+  nil. Drive-by: removed three stale debug `puts`, one of which referenced
+  an undefined `Submissions` constant and crashed the fallback path.
+- `_commit.json.jbuilder` now skips the `url` field when a commit has no
+  branch memberships yet, instead of raising on `commit_url(nil, ...)`.
+- `Branch#nearby_test_case_commits` returns just the seed TCC when the
+  membership has a `nil` position, instead of raising on `position + 1`.
 
 ## Bugs/UX issues surfaced during Phase 1.5 smoke testing
 
 All preexisting (present on Heroku too); not regressions from the JS
 conversion. Captured here so they don't get lost.
 
-- **`test_instances#search` is broken.** Owner reports the feature itself
-  doesn't work, independent of JS. Phase 3 candidate; needs investigation
-  to figure out whether the controller logic, the search form, or the
-  results rendering is at fault.
+- ~~**`test_instances#search` is broken.**~~ Fixed in Phase 3. Four bugs
+  in `TestInstance.query`: empty input raised `NoMethodError`, the
+  `runtime` option pointed at a non-existent column, and bad date /
+  datetime values crashed instead of going on the failures list. The
+  documented `version` option is still commented out in the model
+  (no `mesa_version` column exists any more) — the help text should
+  drop that bullet during Phase 4.
 - **Column visibility on `test_case_commits#show` does not persist across
   reloads.** The JS writes a cookie when a column is toggled, but on next
   load the columns reset to the default set. Either the cookie name doesn't
@@ -217,6 +240,14 @@ conversion. Captured here so they don't get lost.
 
 ## Done
 
+- **Performance and bug fixes** (Phase 3). Fifteen commits on the
+  `perf-github-sync` branch covering the four roadmap items plus four
+  queued bugs: the three Phase-1-spec-discovered bugs (test_candidate
+  recursion, jbuilder branchless crash, branch nearby_test_case_commits
+  nil position), the test_instances#search regression suite, the
+  branch-deletion regression specs, Octokit 4 → 10, the webhook → ActiveJob
+  cut-over, and the commits#show N+1 elimination. Suite grew from 24 to
+  78 specs.
 - **Rails 6.1 → 8.0 upgrade** (Phase 2). Eight commits on the
   `rails-upgrade` branch: Phase 0 (`update_attributes` → `update`),
   Phases 1–3 (flip `load_defaults` 5.1 → 5.2 → 6.0 → 6.1), Phase 4

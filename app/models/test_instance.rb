@@ -373,6 +373,8 @@ class TestInstance < ApplicationRecord
     # split on colons, but note that the divider separates keys from values,
     # and not key-value pairs from each other. So we will have an array that
     # looks like [key1, val1 key2, val2 key3, ... valn-1 keyn, valn]
+    return {} if query_text.nil? || query_text.strip.empty?
+
     split_up = query_text.split(':')
 
     # first key is trivial
@@ -424,9 +426,13 @@ class TestInstance < ApplicationRecord
       SearchOption.new('re_RAM', self, :mem_re, true) do |mem_GB|
         mem_GB.to_f * (1024**2)
       end,
-      # runtimes now in minutes. Meaning less clear as this is reported by
-      # test cases themselves
-      SearchOption.new('runtime', self, :total_runtime_minutes, true),
+      # `total_runtime_seconds` is the column; users enter minutes (or
+      # natural phrasings like "1 hr 30 min") and parse_runtime converts
+      # to seconds. There is no total_runtime_minutes column — relying on
+      # the like-named instance method would break inside a where clause.
+      SearchOption.new('runtime', self, :total_runtime_seconds, true) do |runtime_str|
+        TestInstance.parse_runtime(runtime_str)
+      end,
       SearchOption.new('date', self, :created_at, true) do |datestring|
         Date.parse(datestring)
       end,
@@ -475,23 +481,22 @@ class TestInstance < ApplicationRecord
     # obliterate ill-formed search keys
     failed_requirements.each {|key| query_hash.delete(key) }
 
-    puts '#########################'
-    puts 'query:'
-    puts query_hash
-    puts '#########################'
-    
     # now have key-value pairs, values may be ranges. Reach out to each
     # SearchOption to actually get query, and shove each into a where call.
     # ActiveRecord is lazy and will compress these all into a single search
     # when it is needed.
     query_hash.each_pair do |key, value|
-      res = res.where(options_hash[key].query_piece(value))
-      puts "adding to query:"
-      puts options_hash[key].query_piece(value)
+      begin
+        res = res.where(options_hash[key].query_piece(value))
+      rescue Date::Error, ArgumentError, TypeError
+        # The user typed something the preprocessor can't parse (most
+        # commonly a malformed date/datetime). Treat it like an unknown
+        # key — drop it from the query and report it back to the view.
+        failed_requirements << "#{key} (#{value.inspect})"
+      end
     end
 
     res = res.where.not(commit_id: nil)
-    # res
     return [res.includes(:test_case, :test_case_commit, :commit, computer: :user).
       order('commits.commit_time DESC, test_instances.created_at DESC'), failed_requirements]
   end

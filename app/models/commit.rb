@@ -428,11 +428,15 @@ class Commit < ApplicationRecord
       end
       return nil
     else
-      # first check main, since it should have highest priority
-      main_candidate = self.test_candidate(computer: computer,
-        allow_optional: allow_optional, allow_fpe: allow_fpe,
-        allow_skip: allow_skip, max_age: max_age, branch: Branch.main)
-      return main_candidate if main_candidate
+      # first check main, since it should have highest priority. Skip if
+      # there's no main branch yet (without this guard, recursing with
+      # branch: nil would re-enter the else branch and spin forever).
+      if Branch.main
+        main_candidate = self.test_candidate(computer: computer,
+          allow_optional: allow_optional, allow_fpe: allow_fpe,
+          allow_skip: allow_skip, max_age: max_age, branch: Branch.main)
+        return main_candidate if main_candidate
+      end
 
       # no matching candidates in main? Check elsewhere. Same as
       # search on specific branch, but we search on all commits (definite
@@ -455,9 +459,6 @@ class Commit < ApplicationRecord
         # make sure commit still lives in a branch
         next if commit.branches.count.zero?
         if Submission.where(commit: commit, computer: computer).count.zero?
-          puts "Found the candidate in other branches."
-          puts "Total submissions:"
-          puts Submissions.where(commit: commit, computer: computer).count
           return commit
         end
       end
@@ -542,40 +543,57 @@ class Commit < ApplicationRecord
   end
 
   def computer_info
-    # special call that collects a version's test instances and groups them
-    # by unique combinations of computer and computer specificaiton, and
-    # ONLY gathers that information
-    subs = submissions.select('computer_id, platform_version, sdk_version, '\
-      'math_backend, compiler, compiler_version').group(
-      'computer_id, platform_version, sdk_version, math_backend, compiler, '\
-      'compiler_version')
-    specs = []
-    subs.each do |sub|
-      new_entry = {}
-      new_entry[:computer] = Computer.includes(:user).find(sub.computer_id)
-      new_entry[:spec] = sub.computer_specification
-      new_entry[:numerator] = test_instances.where(
-        computer_id: sub.computer_id,
-        computer_specification: sub.computer_specification
-      ).pluck(:test_case_id).uniq.count
-      new_entry[:denominator] = test_cases.count
-      new_entry[:frac] = new_entry[:numerator].to_f /
-                         new_entry[:denominator].to_f
-      compilation_stati = submissions.where(
-        computer: new_entry[:computer]
-      ).pluck(:compiled).uniq.reject(&:nil?)
-      new_entry[:compilation] = case compilation_stati.count
-                                when 0
-                                  :unknown
-                                when 1
-                                  compilation_stati[0] ? :success : :failure
-                                else
-                                  :mixed
-                                end
-      specs << new_entry
+    # One row per unique combination of (computer_id, platform_version,
+    # sdk_version, math_backend, compiler, compiler_version). The view at
+    # commits/show.html.haml iterates these and reads :computer (+ .user),
+    # :spec, :numerator, :denominator, :frac, :compilation — keep all of
+    # those keys populated.
+    all_subs = submissions.includes(computer: :user).to_a
+    return [] if all_subs.empty?
 
+    grouped = all_subs.group_by do |sub|
+      [sub.computer_id, sub.platform_version, sub.sdk_version,
+       sub.math_backend, sub.compiler, sub.compiler_version]
     end
-    specs
+
+    # Per-(computer, spec) distinct test_case_id counts in one query.
+    ti_counts = test_instances
+                .group(:computer_id, :computer_specification)
+                .distinct
+                .count(:test_case_id)
+
+    # Compilation status is rolled up per computer (not per spec): if any
+    # of this computer's submissions disagree on `compiled`, every spec
+    # entry for that computer reports :mixed.
+    compile_stati_by_computer = all_subs.group_by(&:computer_id)
+                                        .transform_values do |subs|
+      subs.map(&:compiled).uniq.reject(&:nil?)
+    end
+
+    denominator = test_cases.count
+
+    grouped.map do |_key, subs|
+      sub = subs.first
+      computer = sub.computer
+      spec = sub.computer_specification
+      numerator = ti_counts[[sub.computer_id, spec]] || 0
+      stati = compile_stati_by_computer[sub.computer_id] || []
+
+      compilation = case stati.count
+                    when 0 then :unknown
+                    when 1 then stati[0] ? :success : :failure
+                    else :mixed
+                    end
+
+      {
+        computer: computer,
+        spec: spec,
+        numerator: numerator,
+        denominator: denominator,
+        frac: denominator.zero? ? 0.0 : numerator.to_f / denominator.to_f,
+        compilation: compilation
+      }
+    end
   end
 
   # note: future optimization would be to make these three "questions" be
@@ -662,7 +680,14 @@ class Commit < ApplicationRecord
                   end
   end
 
-  # 
+  # commits/show calls compilation_status, compile_success_count, and
+  # compile_fail_count back-to-back; cache the single query they all share
+  # so the page does one SELECT instead of three.
+  def compile_stati
+    @compile_stati ||= submissions.pluck(:compiled)
+  end
+
+  #
   # Guide: nil = untested (or unreported)
   #          -1 = no compilation status provided
   #          0  = compiles on all systems so far
@@ -671,31 +696,18 @@ class Commit < ApplicationRecord
   # this method just keeps this scheme logically consistent when a new report
   # rolls in, but it DOES NOT save the result to the database.
   def compilation_status
-    compile_stati = submissions.pluck(:compiled).reject(&:nil?)
-    if compile_stati.empty?
-      # no submissions
-      return -1
-    else
-      if compile_stati.uniq.count > 1
-        # multiple values; mixed results
-        return 2
-      else
-        if compile_stati[0]
-          # first one (and thus all) is true, all passing!
-          return 0
-        else
-          return 1
-        end
-      end
-    end
+    stati = compile_stati.reject(&:nil?)
+    return -1 if stati.empty?
+    return 2  if stati.uniq.count > 1
+    stati.first ? 0 : 1
   end
 
   def compile_success_count
-    submissions.pluck(:compiled).count(true)
+    compile_stati.count(true)
   end
 
   def compile_fail_count
-    submissions.pluck(:compiled).count(false)
+    compile_stati.count(false)
   end
 
   # branches that this commit is NOT in, in two categories:

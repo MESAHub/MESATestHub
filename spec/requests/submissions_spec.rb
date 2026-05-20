@@ -33,6 +33,26 @@ RSpec.describe 'Submissions API', type: :request do
       expect(Submission.last.empty).to be true
     end
 
+    it 'renders successfully when the commit has no branch memberships yet' do
+      # Regression: _commit.json.jbuilder used to call commit_url with
+      # commit.branches[0], which raised on commits not yet attached to a
+      # branch — exactly the state of a freshly-ingested commit when the
+      # submissions API runs.
+      orphan_commit = create(:commit)
+
+      post '/submissions/create.json',
+           params: {
+             submitter: valid_submitter,
+             commit: valid_commit.merge(sha: orphan_commit.sha)
+           },
+           as: :json
+
+      expect(response).to have_http_status(:created)
+      body = JSON.parse(response.body)
+      expect(body['commit']['sha']).to eq(orphan_commit.sha)
+      expect(body['commit']).not_to have_key('url')
+    end
+
     it 'rejects submissions with an invalid password' do
       post '/submissions/create.json',
            params: {
@@ -95,10 +115,6 @@ RSpec.describe 'Submissions API', type: :request do
     let(:computer) { create(:computer, user: user) }
 
     it 'returns "no untested commits" when there are none' do
-      # Bypass Commit.test_candidate — it has a separate recursion bug when
-      # no Branch.main exists, which is a Phase 3 cleanup target.
-      allow(Commit).to receive(:test_candidate).and_return(nil)
-
       get '/submissions/request_commit.json', params: {
         submitter: { email: user.email, password: 'pw-12345678',
                      computer: computer.name },

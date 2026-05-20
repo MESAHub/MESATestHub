@@ -28,7 +28,7 @@ gem 'rails-html-sanitizer', '~> 1.6.2'
 gem 'font-awesome-rails'
 
 # Git stuff
-gem 'octokit', "~> 4.0"
+gem 'octokit', '~> 10.0'
 gem 'faraday-http-cache'
 gem 'faraday-retry'
 gem 'github_webhook', '~> 1.4'

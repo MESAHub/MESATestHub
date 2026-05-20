@@ -109,65 +109,16 @@ class Branch < ApplicationRecord
     ########################################
     ### STEP 3: DELETE ORPHANED BRANCHES ###
     ########################################
+    # Drop memberships before the branches so the unguarded branch_id FK
+    # column doesn't end up pointing at non-existent branches. Orphaned
+    # commits are picked up by the db:cleanup_orphaned_commits rake task.
     to_delete = Branch.where(name: existing_branch_names - github_branch_names)
+    return if to_delete.empty?
 
-    # Simplified approach: just delete branch memberships and then branches
-    # We'll handle orphaned commits in a separate weekly task
-    unless to_delete.empty?
-      # First delete all branch memberships for these branches
+    Branch.transaction do
       BranchMembership.where(branch_id: to_delete.pluck(:id)).delete_all
-      
-      # Then delete the branches themselves
       to_delete.delete_all
     end
-    return nil
-
-    # ### BEGIN ORIGINAL CODE
-    # # TODO: SOMETHING BAD IS HAPPENING HERE. LOTS OF MEMORY GETS USED UP WHEN
-    # # DELETING MERGED BRANCHES.
-    # # identify branches to be destroyed (exist in db, but not on GitHub)
-    # to_delete = Branch.includes(:head).
-    #   where(name: existing_branch_names - github_branch_names).to_a
-
-    # # IS THE STEP BELOW NEEDED? I SUSPECT THIS IS WHERE THE MEMORY LEAK HAPPENS
-    # # this looks at branches that are not to be deleted that also contain this
-    # # [doomed] branch's head commit. The thinking is that if those branches
-    # # contain this branch's head commit then it should have all of this branch's
-    # # commits
-
-    # # final check on head commits of orphaned branches. To make sure none of
-    # # their commits got abandoned too far in the past. Hopefully the head
-    # # commits of abandoned branches made it into their new homes, and then we
-    # # can make sure that subsequent commits did as well.
-    # to_delete.each do |branch|
-    #   branch.head.branches.reject { |b| to_delete.include? b }.each do |other_branch|
-    #     in_both = other_branch.commits.where(id: branch.commits.pluck(:id))
-
-    #     # nuclear option. If we're missing commits in the new branches, it's
-    #     # not clear where they should be. Just look up ALL commits in the
-    #     # branch and reorder them. The commits must already exist in the
-    #     # database; we just need to order them. This is bad since it makes
-    #     # tons of api calls, especially as the repo grows.
-    #     other_branch.api_reorder_all_commits if in_both.count < branch.commits.count
-    #   end
-    # end
-
-    # # all orphaned commits should now be properly situated in new branches. Now
-    # # we kill off the defunct memberships, and finally, the defunct branches.
-    # # Using destroy_all would be simpler, but much more time-consuming, as
-    # # it would need to issue a delete statement for each affected branch
-    # # membership. Instead, we delete the branch memberships first, and then
-    # # kill the branches themselves with delete_all, which is closer to the
-    # # database, and requires more babysitting (branch memberships are dependent
-    # # on branches, so they should die when the branch dies)
-    # unless to_delete.empty?
-    #   to_delete.each do |branch|
-    #     branch.branch_memberships.delete_all
-    #     branch.destroy
-    #   end
-    # end
-
-    # nil
   end
 
   # brings commits in a branch and their order up to date by syncing order
@@ -427,6 +378,10 @@ class Branch < ApplicationRecord
     return tccs unless this_membership
 
     position = this_membership.position
+    # Memberships ingested before positions were back-filled have nil here;
+    # without this guard `position + 1` and `0...position` raise and the
+    # test_case_commits#show page breaks.
+    return tccs if position.nil?
 
     # find "older" commits in the branch, and count how many we can expect to
     # have this test case represented in them (don't want to search forever

@@ -4,11 +4,11 @@ class GithubWebhooksController < ApplicationController
 
   include GithubWebhook::Processor
 
-  # Handle push event
+  # Handle push event by kicking off a background sync. Returning quickly
+  # matters: GitHub considers a webhook delivery failed after 10 seconds,
+  # and the inline sync can take much longer than that on a large push.
   def github_push(payload)
-    # Create new entry in database for each new commit in push
-    # Commit.push_update(payload)
-    Branch.api_update_branches
+    BranchSyncJob.perform_later
   end
 
   private
