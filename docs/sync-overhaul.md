@@ -230,9 +230,9 @@ we want a quicker partial win.
 
 ## Open questions for when work begins
 
-- Do we want `parent_index` on `commit_relations` from day one (lets us
-  reconstruct first-parent walks for any future "branch's official
-  history" view), or add it later if/when that view is wanted?
+- ~~Do we want `parent_index` on `commit_relations` from day one?~~
+  **Resolved in Step 1**: yes, included from day one. Costs nothing on
+  single-parent commits and saves a future migration.
 - Does the backfill job throttle itself, or do we just let it run as
   fast as the rate limit allows? `faraday-http-cache` is already wired
   in, so a lot of repeated calls will be 304s, but 304s still count
@@ -245,6 +245,34 @@ we want a quicker partial win.
   `TestCaseCommit` rows pointing at the new commit, but with reset
   per-commit counters (status, submission_count, computer_count). Spec
   this carefully before implementing.
+
+## Follow-ups surfaced during Step 1
+
+These showed up while wiring `commit_relations` back in. They aren't
+blocking, but they're worth resolving before Phase 3.5 closes — they're
+listed here so the decisions get made deliberately rather than missed.
+
+- **Dead callers of `Commit#parents`.** `Commit.root` and
+  `Branch#recursive_assign_root` both call `.parents`. Before Step 1
+  they would have raised on an undefined association; now they'll run.
+  Neither is reachable from any controller, mailer, or job we can find;
+  they're 2020-era leftovers from the original (later-dropped)
+  `commit_relations` design. Step 5 is the obvious place to delete them
+  along with `api_update_tree`, but they could also go in Step 3 if
+  the new sync code makes the intent clearer.
+- **Orphan counter columns on `commits`.** The 2020 migration added
+  `commits.parents_count` and `commits.children_count` as counter
+  caches; the 2021 `drop_commit_relations` migration left them in place.
+  They default to 0 and nothing reads them. Two options when we touch
+  the model again:
+    1. Wire them up as `counter_cache: true` on `CommitRelation` — cheap,
+       and `Branch#root` currently uses `find_by(parents_count: 0)` to
+       locate the repo root, so live counters would actually be useful.
+    2. Drop the columns in the Step 5 cleanup migration.
+  Option 1 is the better call if Step 5 ends up keeping any code that
+  relies on "is this commit a root"; option 2 if Step 5 deletes that
+  code along with the rest of the dead paths. Decide when Step 5 is in
+  hand.
 
 ## Out of scope
 
