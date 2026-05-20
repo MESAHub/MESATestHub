@@ -427,6 +427,10 @@ class Branch < ApplicationRecord
     return tccs unless this_membership
 
     position = this_membership.position
+    # Memberships ingested before positions were back-filled have nil here;
+    # without this guard `position + 1` and `0...position` raise and the
+    # test_case_commits#show page breaks.
+    return tccs if position.nil?
 
     # find "older" commits in the branch, and count how many we can expect to
     # have this test case represented in them (don't want to search forever
