@@ -17,7 +17,6 @@ gem 'bootsnap',  '~> 1.7'
 gem 'msgpack', '~>1.2'
 # gem 'sass-rails', '~> 5.0'
 gem 'uglifier', '>= 1.3.0'
-gem 'coffee-rails', '~> 4.2'
 gem 'turbolinks', '~> 5'
 gem 'jbuilder', '~> 2.5'
 gem 'pg'
@@ -34,7 +33,6 @@ gem 'rails-html-sanitizer', '~> 1.6.2'
 # gem 'libv8', '~> 8.3'
 # gem 'mini_racer', '~>0.3.1 ' #, :require => nil
 gem 'rubyzip', '~>1.3.0'
-gem 'barista'
 gem 'font-awesome-rails'
 # Git stuff
 gem 'octokit', "~> 4.0"
