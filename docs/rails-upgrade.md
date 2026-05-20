@@ -128,6 +128,8 @@ mostly mechanical from a code standpoint.
 - **`barista`** (Gemfile only, no code references). CoffeeScript pre-processor,
   redundant with Sprockets + coffee-rails. Last release 2017. Delete it as part
   of the upgrade prep.
+- **`coffee-rails`** pinned at `~> 4.2`. Latest is 5.0.0 (barely maintained).
+  See Phase 7 below for the risk and the fallback path.
 - **`uglifier`**. JS minifier, works on Rails 7 but deprecated. Modern Rails
   uses `terser`. Not blocking; address if/when convenient.
 - **`sassc-rails`** (transitively). Works on Rails 7 but underlying `sassc` is
@@ -183,21 +185,49 @@ running app.
 - `gem 'rails', '~> 7.2'`.
 - `bin/rails app:update`.
 - Smoke test, deploy.
-- All remaining Dependabot advisories close.
+- All remaining Dependabot CVEs close at this point. Phase 7 is about
+  reaching the actively-developed line, not closing advisories.
+
+### Phase 7 — bump Rails to 8.0
+- `gem 'rails', '~> 8.0'`.
+- `bin/rails app:update`.
+- **Likely friction points:**
+  - `coffee-rails` is currently pinned at `~> 4.2`; latest is 5.0.0 and the
+    gem is barely maintained. If `bundle update rails` fails the dependency
+    resolver, the options in order of effort are: (1) bump to
+    `coffee-rails ~> 5.0`, (2) precompile the 13 CoffeeScript files to
+    plain JS as a one-off and remove the gem, (3) bail to Phase 4
+    (frontend modernization) of the roadmap and revisit Rails 8 after.
+    Land Rails 7.2 as its own commit *before* attempting 8.0 so the
+    partial upgrade is shippable in case 8.0 needs to wait.
+  - `uglifier` is deprecated in favor of `terser`. May still work; if not,
+    one-line Gemfile swap to `terser`.
+  - `sassc-rails` is deprecated; `sass-rails` v6+ or `dartsass-sprockets`
+    are alternatives. Try the existing gem first.
+- Solid Queue / Solid Cache / Solid Cable are new Rails 8 defaults but
+  **opt-in for upgrades**. Skip during the upgrade — they're useful for
+  Phase 3 of the roadmap (perf) but introducing them mid-Rails-bump
+  compounds risk.
+- The new `rails generate authentication` is appealing for replacing the
+  homegrown bcrypt/sessions code but is out of scope here.
+- Smoke test, deploy. Phase 2 of the roadmap closes.
 
 ### Estimated effort
 
-| Phase | With a real test suite | Without (current state) |
+| Phase | With Phase 1 test foundation | Notes |
 |---|---|---|
-| 0   | 2–4 hrs   | 4–6 hrs (longer baseline smoke list) |
-| 1–3 | 6–12 hrs  | 12–20 hrs (manual verification at each flip) |
-| 4   | 4–8 hrs   | 8–12 hrs |
-| 5   | 2–4 hrs   | 4–6 hrs |
-| 6   | 2–4 hrs   | 4–6 hrs |
-| **Total** | **~20–30 hrs** | **~35–50 hrs / ~5–7 days** |
+| 0   | 2–4 hrs   | Drop `barista`, fix `update_attributes`, baseline smoke list |
+| 1–3 | 4–8 hrs   | Three `load_defaults` flips, mostly verification |
+| 4   | 4–8 hrs   | The Rails 7.0 jump itself |
+| 5   | 2–4 hrs   | 7.0 → 7.1 |
+| 6   | 2–4 hrs   | 7.1 → 7.2 (all Dependabot CVEs close) |
+| 7   | 2–8 hrs   | 7.2 → 8.0 (low end if gems cooperate, high end if coffee-rails forces fallback) |
+| **Total** | **~16–36 hrs / 2–5 days** | Half the original 5–7 day estimate because Phase 1 shipped real tests |
 
-The absence of a test suite roughly doubles the effort because manual
-verification has to substitute for automated regression detection.
+The Phase 1 test foundation (`tests/api-foundation` branch) brings the
+estimate down significantly versus the original "no tests" projection in
+the roadmap — CI catches breakage immediately at each flip instead of
+requiring manual verification.
 
 ## Optional safety-net work before starting
 

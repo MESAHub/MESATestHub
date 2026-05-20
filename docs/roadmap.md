@@ -36,21 +36,33 @@ Existing Cucumber suite under `features/` and `spec/features/` has been
 moved to `features.deprecated/` and `spec/features.deprecated/`. RSpec
 request specs replace it.
 
-## Phase 2 — Rails 6.1 → 7.2 upgrade
+## Phase 2 — Rails 6.1 → 8.0 upgrade
 
 **Branch:** `rails-upgrade`
 **Status:** not started
-**Estimate:** 3–5 days (with Phase 1 tests in place)
+**Estimate:** 4–6 days (with Phase 1 tests in place)
 
 See [`docs/rails-upgrade.md`](rails-upgrade.md) for the detailed phased plan,
 including the `load_defaults` 5.1 catch-up that has to happen before the Rails
 7 jump, the two mandatory `update_attributes` → `update` fixes, and the
 gem-by-gem compatibility table.
 
-Each sub-phase (5.1→5.2 defaults, 5.2→6.0, 6.0→6.1, 6.1→7.0, 7.0→7.1, 7.1→7.2)
-lands as its own commit. CI gating prevents regressions.
+Target end state is **Rails 8.0** rather than 7.2 — the marginal cost of one
+extra version bump is small once the deprecation churn for 6.1→7.x is done,
+and 7.2 is in maintenance support while 8.x is the actively-developed line.
+Solid Queue (Rails 8 default) is also the natural fit for the Phase 3 GitHub
+sync background-job rewrite.
+
+Each sub-phase (5.1→5.2 defaults, 5.2→6.0, 6.0→6.1, 6.1→7.0, 7.0→7.1,
+7.1→7.2, 7.2→8.0) lands as its own commit. CI gating prevents regressions.
 
 When this phase closes, the 12 remaining Dependabot advisories close with it.
+
+**Coffee-rails risk:** the 7.2 → 8.0 jump is the first place where
+`coffee-rails` (latest 5.0.0, but barely maintained) might balk. If so, that
+becomes the signal to do Phase 4 (frontend modernization, which drops
+CoffeeScript) before completing the 8.0 step. Land the Rails 7.2 commit
+first so the partial upgrade is shippable in that scenario.
 
 ## Phase 3 — Performance and bug fixes
 

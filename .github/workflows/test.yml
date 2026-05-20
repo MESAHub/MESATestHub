@@ -37,6 +37,13 @@ jobs:
           ruby-version: 3.2.2
           bundler-cache: true
 
+      # package.json pins "node": "18.x" and yarn's --frozen-lockfile enforces it.
+      # Bump this alongside engines when modernizing the frontend stack.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: yarn
+
       - name: Install JS deps
         run: yarn install --frozen-lockfile
 
