@@ -9,7 +9,7 @@ Bundler.require(*Rails.groups)
 module MESATestHub
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
-    config.load_defaults 7.1
+    config.load_defaults 7.2
     config.cache_store = :memory_store, { size: 64.megabytes }
 
     # Enable rack-attack middleware (configured in initializers/rack_attack.rb)
