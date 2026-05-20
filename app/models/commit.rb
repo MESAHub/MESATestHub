@@ -428,11 +428,15 @@ class Commit < ApplicationRecord
       end
       return nil
     else
-      # first check main, since it should have highest priority
-      main_candidate = self.test_candidate(computer: computer,
-        allow_optional: allow_optional, allow_fpe: allow_fpe,
-        allow_skip: allow_skip, max_age: max_age, branch: Branch.main)
-      return main_candidate if main_candidate
+      # first check main, since it should have highest priority. Skip if
+      # there's no main branch yet (without this guard, recursing with
+      # branch: nil would re-enter the else branch and spin forever).
+      if Branch.main
+        main_candidate = self.test_candidate(computer: computer,
+          allow_optional: allow_optional, allow_fpe: allow_fpe,
+          allow_skip: allow_skip, max_age: max_age, branch: Branch.main)
+        return main_candidate if main_candidate
+      end
 
       # no matching candidates in main? Check elsewhere. Same as
       # search on specific branch, but we search on all commits (definite
@@ -455,9 +459,6 @@ class Commit < ApplicationRecord
         # make sure commit still lives in a branch
         next if commit.branches.count.zero?
         if Submission.where(commit: commit, computer: computer).count.zero?
-          puts "Found the candidate in other branches."
-          puts "Total submissions:"
-          puts Submissions.where(commit: commit, computer: computer).count
           return commit
         end
       end

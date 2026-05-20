@@ -95,10 +95,6 @@ RSpec.describe 'Submissions API', type: :request do
     let(:computer) { create(:computer, user: user) }
 
     it 'returns "no untested commits" when there are none' do
-      # Bypass Commit.test_candidate — it has a separate recursion bug when
-      # no Branch.main exists, which is a Phase 3 cleanup target.
-      allow(Commit).to receive(:test_candidate).and_return(nil)
-
       get '/submissions/request_commit.json', params: {
         submitter: { email: user.email, password: 'pw-12345678',
                      computer: computer.name },
