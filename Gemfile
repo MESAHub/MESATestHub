@@ -10,7 +10,7 @@ gem 'concurrent-ruby', '1.3.4'
 gem "webrick", ">= 1.8.2"
 gem 'rack', '>= 2.2.14'
 gem 'rack-attack'
-gem 'rails', '~> 7.2.0'
+gem 'rails', '~> 8.0.0'
 gem 'puma', '>= 6.4.2'
 gem 'puma_worker_killer'
 gem 'bootsnap',  '~> 1.7'
@@ -43,13 +43,7 @@ gem 'rack-cors', '>=2.0.2', require: 'rack/cors'
 
 group :development, :test do
   gem 'byebug', platforms: [:mri, :mingw, :x64_mingw]
-  # gem 'guard-bundler'
-  # gem 'guard-rails'
-  # gem 'guard-rspec'
-  # gem 'guard-cucumber'
-  gem 'cucumber-rails', require: false
-  gem 'cucumber-rails-training-wheels'
-  gem 'capybara', '~> 2.13'
+  gem 'capybara'
   gem 'selenium-webdriver'
   gem 'derailed'
 end
