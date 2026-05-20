@@ -1,35 +1,62 @@
 class BranchBackfillJob < ApplicationJob
   queue_as :default
 
+  PER_PAGE = 100
+
   # One-shot topology catch-up for a single branch. Walks the branch on
-  # GitHub via paginated `api.commits(sha: branch.name)` and writes
-  # parent->child edges into commit_relations for every commit pair where
-  # both ends are already in the local DB.
+  # GitHub one page at a time, writing parent->child edges into
+  # commit_relations for every commit pair where both ends are already in
+  # the local DB.
   #
-  # The GitHub API includes every commit's parent SHAs in the same
-  # response that the old sync code was already making — we just weren't
-  # recording them. So this job's API budget is the same paginated walk
-  # the old code did, no new request types.
+  # The walk short-circuits once a page produces zero new edges: that
+  # means every commit on the page already has its parent edges recorded,
+  # so every older page would too. Without this, backfilling a side
+  # branch that shares almost all of its history with `main` would cost
+  # ~100 API calls; with it, it's typically 1–5.
   #
-  # Idempotent: the unique index on (child_id, parent_id) plus insert_all's
-  # `unique_by:` makes reruns a no-op for edges already present.
+  # Idempotent — the unique index on (child_id, parent_id) plus
+  # insert_all's `unique_by:` makes reruns a no-op for edges already
+  # present, even if the short-circuit happens to miss them on one pass.
   def perform(branch_id)
     branch = Branch.find(branch_id)
+    client = Commit.api(auto_paginate: false)
 
-    commits_data = Commit.api_commits(sha: branch.name)
-    return if commits_data.blank?
+    page_num = 1
+    loop do
+      page = client.commits(Commit.repo_path,
+                            sha: branch.name,
+                            per_page: PER_PAGE,
+                            page: page_num)
+      break if page.blank?
 
+      inserted = ingest_page(page)
+
+      # Walked into history we've already edged. Every subsequent page
+      # would cost an API call to learn the same thing.
+      break if inserted.zero?
+
+      # GitHub returns a short final page when we've hit the root.
+      break if page.length < PER_PAGE
+
+      page_num += 1
+    end
+  end
+
+  private
+
+  def ingest_page(commits_data)
     sha_to_id = Commit.where(sha: collect_shas(commits_data))
                       .pluck(:sha, :id)
                       .to_h
 
     edges = build_edges(commits_data, sha_to_id)
-    return if edges.empty?
+    return 0 if edges.empty?
 
-    CommitRelation.insert_all(edges, unique_by: %i[child_id parent_id])
+    # insert_all's PostgreSQL RETURNING clause excludes ON CONFLICT
+    # skips, so .length is the count of edges that were actually new.
+    CommitRelation.insert_all(edges,
+                              unique_by: %i[child_id parent_id]).length
   end
-
-  private
 
   def collect_shas(commits_data)
     shas = Set.new

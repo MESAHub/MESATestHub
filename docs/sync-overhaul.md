@@ -159,13 +159,21 @@ work builds on.
 ### Step 2 — Backfill via paginated `api.commits`
 
 A `BranchBackfillJob` per branch. Paginates `api.commits(sha: branch_name)`
-(the endpoint already returns parent SHAs in every response — the current
-code throws them away). Upserts edges from the parent SHAs into
+manually (one page at a time via `page:`, not `auto_paginate: true`) so
+it can short-circuit once a page produces zero new edges — every older
+page would be fully-edged too. Upserts edges from the parent SHAs into
 `commit_relations`. Idempotent so it can be rerun.
 
-Cost: low hundreds of API calls total across all of MESA's branches.
-Probably 10–30 minutes wall-clock with light throttling. Well under the
-5000 req/hour authenticated limit.
+Cost without the short-circuit would have been borderline at MESA's
+scale: ~100 API calls per branch × ~30 branches ≈ 3000 calls, close
+enough to the 5000/hour limit to risk crashing partway. With the
+short-circuit, the second-onwards branch typically costs 1–5 calls
+because almost all of its history is shared with `main` and is already
+edged. Realistic total: a few hundred calls, well under the limit.
+
+Run via `bundle exec rake topology:backfill`, which performs each
+branch's job inline (sequentially) so API calls don't fan out across
+the `:async` adapter's thread pool.
 
 After this lands, the topology is populated and we can verify it makes
 sense against a real branch (does the recursive CTE return the same
@@ -233,10 +241,11 @@ we want a quicker partial win.
 - ~~Do we want `parent_index` on `commit_relations` from day one?~~
   **Resolved in Step 1**: yes, included from day one. Costs nothing on
   single-parent commits and saves a future migration.
-- Does the backfill job throttle itself, or do we just let it run as
-  fast as the rate limit allows? `faraday-http-cache` is already wired
-  in, so a lot of repeated calls will be 304s, but 304s still count
-  against the limit.
+- ~~Does the backfill job throttle itself?~~ **Resolved in Step 2**: it
+  short-circuits once a page produces zero new edges, which drops the
+  total cost from ~3000 calls to a few hundred. The rake task runs
+  branches serially via `perform_now`, so no thread-pool fan-out either.
+  Explicit throttling isn't needed.
 - Inside step 3, should the new sync code live on `BranchSyncJob`
   directly, or do we factor out a `Sync::CommitGraph` service object?
   Lean toward keeping it on the job until we see what shape the code
