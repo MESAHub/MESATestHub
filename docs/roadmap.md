@@ -85,13 +85,14 @@ _Coffee-rails risk was eliminated by completing Phase 1.5 first._
 
 Known issues to address:
 
-- **GitHub sync after every webhook push is slow.** The current
-  `GithubWebhooksController` flow synchronizes commit/branch state inline.
-  Move to background jobs (ActiveJob), batch where possible, and skip
-  redundant fetches.
-- **Deleting branches from GitHub causes errors.** Likely a cascading-delete
-  or missing-`dependent`-option issue on the Branch ↔ BranchMembership ↔
-  Commit relationships. Reproduce, fix, add a regression spec.
+- ~~**GitHub sync after every webhook push is slow.**~~ Done. The webhook
+  now enqueues a `BranchSyncJob` and returns immediately. ActiveJob's
+  default `:async` adapter is fine for this scale; swap in Solid Queue
+  later if the queue needs durability.
+- ~~**Deleting branches from GitHub causes errors.**~~ Done.
+  `Branch.api_update_branches`'s deletion path is now wrapped in a
+  transaction and covered by seven regression specs; the
+  cascading-delete hypothesis didn't reproduce in any scenario.
 - **General N+1 audit on the commit show page** — large commits with many
   test cases / instances likely have hot query patterns worth addressing.
 - ~~**Upgrade Octokit 4 → 10.**~~ Done. Drop-in bump — the
