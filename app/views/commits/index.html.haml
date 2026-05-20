@@ -52,7 +52,7 @@
 
 .row.mb-3
   .col
-    = paginate @memberships
+    = paginate @commits
     %ul.list-group
       - @commits.each do |commit|
         - cache commit do

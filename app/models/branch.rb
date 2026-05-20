@@ -10,6 +10,65 @@ class Branch < ApplicationRecord
 
   ZERO_SHA = '0' * 40
 
+  ###################################
+  # PHASE 3.5 ORDERING (RECURSIVE)  #
+  ###################################
+  #
+  # Ordering comes from a recursive CTE walking commit_relations
+  # back from this branch's head. UNION (not UNION ALL) dedupes,
+  # short-circuiting once multiple merge paths converge on a shared
+  # ancestor. Results are then sorted by commit_time DESC, matching
+  # what github.com/.../commits/<branch> shows.
+  #
+  # branch_memberships is still around as a cache for the dual
+  # question ("which branches contain commit X?"), but its `position`
+  # column is no longer read — Step 5 drops it.
+
+  # Relation of every commit reachable from this branch's head,
+  # ordered newest-first by commit_time. Supports normal Rails
+  # chaining and Kaminari .page(n).per(n).
+  def ordered_commits
+    Commit.from("(#{reachable_commits_sql}) AS commits")
+          .order('commits.commit_time DESC')
+  end
+
+  # Count of commits reachable from this branch's head.
+  def reachable_commit_count
+    return 0 unless head_id
+
+    ActiveRecord::Base.connection.select_value(<<~SQL).to_i
+      WITH RECURSIVE reachable(id) AS (
+        SELECT #{head_id.to_i}::bigint
+        UNION
+        SELECT cr.parent_id
+          FROM commit_relations cr
+          JOIN reachable ON cr.child_id = reachable.id
+      )
+      SELECT COUNT(*) FROM reachable
+    SQL
+  end
+
+  private
+
+  def reachable_commits_sql
+    return 'SELECT * FROM commits WHERE 1 = 0' unless head_id
+
+    <<~SQL
+      WITH RECURSIVE reachable(id) AS (
+        SELECT #{head_id.to_i}::bigint
+        UNION
+        SELECT cr.parent_id
+          FROM commit_relations cr
+          JOIN reachable ON cr.child_id = reachable.id
+      )
+      SELECT commits.*
+        FROM commits
+        JOIN reachable ON commits.id = reachable.id
+    SQL
+  end
+
+  public
+
   ###############################################
   # PHASE 3.5 RECONCILE-WITH-GITHUB ENTRY POINT #
   ###############################################
@@ -427,14 +486,25 @@ class Branch < ApplicationRecord
     Commit.includes(includes).find(head_id)
   end
 
+  # Return up to `window` commits on either side of `commit` in this
+  # branch, plus `commit` itself, sorted newest-first by commit_time.
+  # Up to 2*window + 1 commits total. Uses branch_memberships as the
+  # "is this commit in the branch?" cache (still maintained by the
+  # sync flow); ordering is by commit_time so it agrees with
+  # ordered_commits.
   def nearby_commits(commit, window = 2)
-    membership = branch_memberships.find_by(commit_id: commit.id)
-    return [commit] unless membership
-    position = membership.position
-    memberships = branch_memberships.includes(:commit).
-      where(position: (position - window)..(position + window)).
-      order(position: :desc)
-    memberships.map(&:commit)
+    return [commit] unless branch_memberships.exists?(commit_id: commit.id)
+
+    older = commits.where('commit_time < ?', commit.commit_time)
+                   .order(commit_time: :desc)
+                   .limit(window)
+                   .to_a
+    newer = commits.where('commit_time > ?', commit.commit_time)
+                   .order(commit_time: :asc)
+                   .limit(window)
+                   .to_a
+
+    (newer.reverse + [commit] + older)
   end
 
   # get branches that have been updated in the last +weeks+ weeks
@@ -495,60 +565,59 @@ class Branch < ApplicationRecord
   #   end
   # end
 
+  # Return test_case_commits for the same test case on commits near
+  # `test_case_commit.commit` in this branch's commit_time ordering.
+  # Up to 2*window + 1 entries, sorted newest-first by commit_time.
+  # Searches up to 50 commits on either side for ones that have a
+  # TestCaseCommit for this test case (test cases may not be present
+  # on every commit, especially newly-added ones).
   def nearby_test_case_commits(test_case_commit, window = 2)
-    commit = test_case_commit.commit
+    commit    = test_case_commit.commit
     test_case = test_case_commit.test_case
-    this_membership = branch_memberships.find_by(
-      commit_id: test_case_commit.commit.id)
-    tccs = [test_case_commit]
-    return tccs unless this_membership
 
-    position = this_membership.position
-    # Memberships ingested before positions were back-filled have nil here;
-    # without this guard `position + 1` and `0...position` raise and the
-    # test_case_commits#show page breaks.
-    return tccs if position.nil?
+    return [test_case_commit] unless branch_memberships
+                                       .exists?(commit_id: commit.id)
 
-    # find "older" commits in the branch, and count how many we can expect to
-    # have this test case represented in them (don't want to search forever
-    # if the test case is new)
-    older_memberships = branch_memberships.where(position: 0...position).
-      order(position: :desc).limit(50)
-    num_to_find = TestCaseCommit.where(commit_id: older_memberships.pluck(:commit_id),
-      test_case: test_case).count
-    num_to_find = [num_to_find, window].min
-    older_memberships.each do |membership|
-      # stop once we have enough test case commits
-      break if tccs.length >= num_to_find + 1
-      tcc = TestCaseCommit.find_by(commit_id: membership.commit_id,
-                                   test_case: test_case)
-      # place at end of array (we keep going earlier and earlier, but want
-      # newest test case commits at top)
-      tccs << tcc
-    end
+    older_tccs = nearby_tccs_in_direction(
+      test_case, commit.commit_time, direction: :older, limit: window
+    )
+    newer_tccs = nearby_tccs_in_direction(
+      test_case, commit.commit_time, direction: :newer, limit: window
+    )
 
-    # now do something similar for newer test case commits, but this time
-    # flip the order so that they get newer as we go on
-    newer_memberships = branch_memberships.where(position: (position + 1)..).
-      order(position: :asc).limit(50)
-
-    num_to_find = TestCaseCommit.where(commit_id: newer_memberships.pluck(:commit_id),
-      test_case_id: test_case.id).count
-
-    num_to_find = [num_to_find, window].min
-    current_num = tccs.length
-
-    newer_memberships.each do |membership|
-      if tccs.length >= num_to_find + current_num + 1
-        break
-      end
-      tcc = TestCaseCommit.find_by(commit_id: membership.commit_id,
-                                   test_case: test_case)
-      tccs.unshift(tcc) if tcc
-    end
-
-    tccs
+    newer_tccs + [test_case_commit] + older_tccs
   end
+
+  private
+
+  # Walk up to 50 commits in `direction` from `anchor_time`, returning
+  # at most `limit` TestCaseCommits for `test_case`. `direction: :older`
+  # returns them newest-first (so they come right after the anchor in
+  # display order); `:newer` returns them in oldest-first order (so the
+  # caller can prepend without re-sorting).
+  def nearby_tccs_in_direction(test_case, anchor_time, direction:, limit:)
+    op, order_dir = case direction
+                    when :older then ['<', :desc]
+                    when :newer then ['>', :asc]
+                    end
+
+    commit_ids = commits.where("commit_time #{op} ?", anchor_time)
+                        .order(commit_time: order_dir)
+                        .limit(50)
+                        .pluck(:id)
+    return [] if commit_ids.empty?
+
+    found = TestCaseCommit.where(commit_id: commit_ids, test_case: test_case)
+                          .includes(:commit)
+                          .to_a
+
+    # Re-sort by the commit_time order we walked in, then take up to limit
+    sorted = found.sort_by { |tcc| tcc.commit.commit_time }
+    sorted.reverse! if direction == :older
+    sorted.first(limit)
+  end
+
+  public
 
 
 

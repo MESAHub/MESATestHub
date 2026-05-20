@@ -9,9 +9,10 @@ RSpec.describe 'Page renders', type: :request do
   let(:branch) { create(:branch, name: 'main') }
   let(:commit) do
     c = create(:commit)
-    # position must be non-nil; branch.nearby_test_case_commits derives a
-    # window from it.
-    BranchMembership.create!(branch: branch, commit: c, position: 1)
+    # Memberships supply the "is this commit in this branch?" cache used
+    # by nearby_commits/nearby_test_case_commits; head_id drives the
+    # CTE for ordered_commits. Both are needed for the smoke pages.
+    BranchMembership.create!(branch: branch, commit: c)
     branch.update!(head: c)
     c
   end
