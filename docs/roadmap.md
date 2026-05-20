@@ -94,21 +94,14 @@ Known issues to address:
   Commit relationships. Reproduce, fix, add a regression spec.
 - **General N+1 audit on the commit show page** — large commits with many
   test cases / instances likely have hot query patterns worth addressing.
-- **Upgrade Octokit 4 → 10.** The Gemfile is pinned at `octokit '~> 4.0'`;
-  the current major is 10.x. octokit 5 changed the Faraday middleware
-  contract that [`app/models/application_record.rb`](app/models/application_record.rb)
-  configures directly (`Faraday::RackBuilder.new { ... }` plus the
-  `Octokit::Response::RaiseError` middleware and the explicit
-  `Octokit.middleware = stack` assignment), so this is not a drop-in
-  bump. Worth doing here because (a) this phase already requires
-  touching the GitHub sync code, (b) the app leans hard on the GitHub
-  API for commits/branches/webhooks and being five majors behind on
-  the client library is a real maintenance and security concern, and
-  (c) any background-job refactor of the sync flow benefits from the
-  newer Faraday connection-pooling and retry semantics. Plan to test
-  the middleware stack and rate-limit/retry behavior carefully — the
-  webhook spec covers the controller wiring but nothing covers the
-  outbound API calls.
+- ~~**Upgrade Octokit 4 → 10.**~~ Done. Drop-in bump — the
+  middleware-contract concern in the original plan turned out to be
+  unfounded; the current Octokit README still shows the exact
+  `Octokit.middleware = stack` pattern that
+  [`app/models/application_record.rb`](app/models/application_record.rb)
+  uses, and none of the breaking changes in 5/6/7/8/9/10 touch the
+  endpoints this app calls. Backed by a new wiring spec at
+  [`spec/models/github_api_wiring_spec.rb`](spec/models/github_api_wiring_spec.rb).
 
 Doing this after the upgrade gives access to Rails 7.1's async query loading
 and improved background-job tooling.
