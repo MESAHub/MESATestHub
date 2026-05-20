@@ -368,7 +368,7 @@ class TestCase < ApplicationRecord
     return if version_id
     return unless version_added
     new_version = Version.find_or_create_by(number: version_added)
-    update_attributes(version_id: new_version.id)
+    update(version_id: new_version.id)
     new_version.number
   end
 
