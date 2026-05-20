@@ -185,10 +185,13 @@ regression spec:
 All preexisting (present on Heroku too); not regressions from the JS
 conversion. Captured here so they don't get lost.
 
-- **`test_instances#search` is broken.** Owner reports the feature itself
-  doesn't work, independent of JS. Phase 3 candidate; needs investigation
-  to figure out whether the controller logic, the search form, or the
-  results rendering is at fault.
+- ~~**`test_instances#search` is broken.**~~ Fixed in Phase 3. Four bugs
+  in `TestInstance.query`: empty input raised `NoMethodError`, the
+  `runtime` option pointed at a non-existent column, and bad date /
+  datetime values crashed instead of going on the failures list. The
+  documented `version` option is still commented out in the model
+  (no `mesa_version` column exists any more) — the help text should
+  drop that bullet during Phase 4.
 - **Column visibility on `test_case_commits#show` does not persist across
   reloads.** The JS writes a cookie when a column is toggled, but on next
   load the columns reset to the default set. Either the cookie name doesn't
