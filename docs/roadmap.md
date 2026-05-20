@@ -155,6 +155,33 @@ Add items here as they come up so they don't get lost.
   without a nil check, breaking the `test_case_commits#show` page for those
   memberships.
 
+## Bugs/UX issues surfaced during Phase 1.5 smoke testing
+
+All preexisting (present on Heroku too); not regressions from the JS
+conversion. Captured here so they don't get lost.
+
+- **`test_instances#search` is broken.** Owner reports the feature itself
+  doesn't work, independent of JS. Phase 3 candidate; needs investigation
+  to figure out whether the controller logic, the search form, or the
+  results rendering is at fault.
+- **Column visibility on `test_case_commits#show` does not persist across
+  reloads.** The JS writes a cookie when a column is toggled, but on next
+  load the columns reset to the default set. Either the cookie name doesn't
+  match what the server reads, or the server never reads it. Phase 3 or
+  Phase 4 candidate. Fixing this is also a good opportunity to migrate the
+  state from cookies to URL params or localStorage.
+- **`#passing` / `#missing` collapse animation feels clunky.** Expansion is
+  instantaneous, followed by a smooth scroll — disorienting. Bootstrap 4's
+  `.collapse` plugin should do a smooth transition; needs investigating
+  whether a CSS rule is overriding the transition, or whether the
+  scroll-on-`shown.bs.collapse` is firing before the collapse animation
+  starts. Phase 4 candidate — likely fixes itself with the Bootstrap →
+  Tailwind migration.
+- **`commits.js`'s `BuildLog` and `test_case_commits.js`'s `TestLogs`
+  HEAD probes are CORS-blocked on Railway.** Will resolve when
+  `testhub.mesastar.org` (already on the Flatiron CORS allowlist) is
+  repointed at Railway. No code change required from this end.
+
 ## Done
 
 - Migrate from Heroku to Railway hosting
