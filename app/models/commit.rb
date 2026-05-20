@@ -4,6 +4,20 @@ class Commit < ApplicationRecord
   has_many :branch_memberships, dependent: :destroy
   has_many :branches, through: :branch_memberships
 
+  # Parent/child edges from the git DAG. Stored as rows in commit_relations
+  # so that merge commits (which have multiple parents) and octopus merges
+  # are representable without losing any edges, and so that ancestor /
+  # descendant walks can stay in the database.
+  has_many :parent_relations, class_name: 'CommitRelation',
+                              foreign_key: :child_id,
+                              dependent: :destroy
+  has_many :parents, through: :parent_relations, source: :parent
+
+  has_many :child_relations,  class_name: 'CommitRelation',
+                              foreign_key: :parent_id,
+                              dependent: :destroy
+  has_many :children, through: :child_relations, source: :child
+
   # from parsing do1_test_source in tested modules
   has_many :test_case_commits, dependent: :destroy
 
