@@ -4,6 +4,20 @@ class Commit < ApplicationRecord
   has_many :branch_memberships, dependent: :destroy
   has_many :branches, through: :branch_memberships
 
+  # Parent/child edges from the git DAG. Stored as rows in commit_relations
+  # so that merge commits (which have multiple parents) and octopus merges
+  # are representable without losing any edges, and so that ancestor /
+  # descendant walks can stay in the database.
+  has_many :parent_relations, class_name: 'CommitRelation',
+                              foreign_key: :child_id,
+                              dependent: :destroy
+  has_many :parents, through: :parent_relations, source: :parent
+
+  has_many :child_relations,  class_name: 'CommitRelation',
+                              foreign_key: :parent_id,
+                              dependent: :destroy
+  has_many :children, through: :child_relations, source: :child
+
   # from parsing do1_test_source in tested modules
   has_many :test_case_commits, dependent: :destroy
 
@@ -22,6 +36,202 @@ class Commit < ApplicationRecord
 
   paginates_per 50
 
+
+  #################################
+  # GITHUB COMPARE-PAYLOAD INGEST #
+  #################################
+  #
+  # Entry points for the Phase 3.5 sync flow. The webhook handler kicks
+  # off a BranchSyncJob, which calls `api.compare(before, after)` once
+  # to get the canonical ordered list of commits in the push (with
+  # parent SHAs — the webhook payload itself doesn't include those).
+  # These helpers then upsert the commit rows and the
+  # parent->child edges in two bulk operations.
+
+  # Path pattern for the test-source files we'd need to re-read from
+  # GitHub if they changed in a commit. Any modified/added path matching
+  # this is a signal that the commit's test case list might differ from
+  # its parent's.
+  TEST_SOURCE_PATTERN = %r{(?:\A|/)test_suite/do1_test_source\z}.freeze
+
+  # Bulk-insert commits from a GitHub API response (commits or compare
+  # endpoint, both use the same nested shape). Returns a hash mapping
+  # sha => id for every commit ingested OR already present.
+  #
+  # Uses insert_all (DO NOTHING on conflict), not upsert_all: real
+  # GitHub commits are immutable, and overwriting them via upsert risks
+  # clobbering test-case scalars (test_case_count, passed_count, status,
+  # etc.) that were maintained by the original update_scalars callback
+  # for commits ingested before Phase 3.5.
+  #
+  # status is explicitly set to -1 ("untested") so newly-inserted
+  # commits don't show as passing — the schema default of 0 means
+  # "passing", which is wrong for a commit that has no test data yet.
+  # populate_test_cases_for then sets it correctly.
+  #
+  # Bypasses ActiveRecord validations and the `after_create
+  # :api_update_test_cases` callback. Test-case ingestion is a separate
+  # step (populate_payload_test_cases) that the caller must run AFTER
+  # ingest_payload_edges has wired up the parent edges — otherwise the
+  # copy-from-parent optimization can't find the parent.
+  def self.ingest_payload_commits(commit_hashes)
+    return {} if commit_hashes.empty?
+
+    timestamp = Time.zone.now
+    rows = commit_hashes.map do |gh|
+      hash_from_github(gh).merge(
+        created_at: timestamp,
+        updated_at: timestamp,
+        status: -1
+      )
+    end
+
+    Commit.insert_all(rows, unique_by: :sha)
+
+    Commit.where(sha: commit_hashes.map { |gh| gh[:sha] })
+          .pluck(:sha, :id)
+          .to_h
+  end
+
+  # Populate TestCaseCommit rows for any commit in `commit_hashes` that
+  # currently has none (test_case_count == 0). MUST be called after
+  # ingest_payload_edges so the copy-from-parent step can resolve
+  # commit.parents.first.
+  #
+  # Optional `file_changes_by_sha:` is a `sha => Array<String>` map of
+  # added/modified file paths per commit (from the webhook payload's
+  # commits[] array). When a commit's paths don't touch any
+  # `*/test_suite/do1_test_source` file, we can copy from parent for
+  # free; when they do touch, we re-fetch via api.content. When the
+  # map isn't provided (backfill / reconcile path), populate falls back
+  # to copy-from-parent as the optimistic default — correct for MESA's
+  # workflow where source files rarely change.
+  def self.populate_payload_test_cases(commit_hashes, sha_to_id,
+                                       file_changes_by_sha: nil)
+    ids = commit_hashes.map { |gh| sha_to_id[gh[:sha]] }.compact
+    return if ids.empty?
+
+    Commit.where(id: ids, test_case_count: 0).find_each do |commit|
+      sources_touched = file_changes_by_sha&.dig(commit.sha)&.then do |paths|
+        paths.any? { |p| p.match?(TEST_SOURCE_PATTERN) }
+      end
+      populate_test_cases_for(commit, sources_touched: sources_touched)
+    end
+  end
+
+  # Populate TestCaseCommit rows for a freshly-ingested commit. Three
+  # paths in order of preference:
+  #
+  # 1. If we know sources are unchanged (sources_touched: false), copy
+  #    the parent's TCCs. Zero API calls.
+  # 2. If we don't know whether sources changed (sources_touched: nil)
+  #    but the parent has TCCs, copy them as the best-effort default.
+  #    Zero API calls. Correct for MESA's workflow where source files
+  #    rarely change; if they did change, the next test submission for
+  #    this commit will surface the discrepancy and the operator can
+  #    re-fetch via `rake test_cases:populate`.
+  # 3. Otherwise (sources_touched: true, or parent has no TCCs, or
+  #    parent isn't in DB): fall back to api_update_test_cases, which
+  #    reads do1_test_source for each module via the GitHub API.
+  #    Three API calls per commit.
+  #
+  # Returns :copied, :fetched, or :no_parent_no_fetch (the last means
+  # there's truly nothing to populate and the caller should know).
+  def self.populate_test_cases_for(commit, sources_touched: nil)
+    if sources_touched != true && copy_test_cases_from_parent(commit)
+      :copied
+    else
+      commit.api_update_test_cases
+      :fetched
+    end
+  end
+
+  # Returns true if TCCs were successfully copied from the parent commit;
+  # false if there's no parent or the parent has no TCCs to copy.
+  #
+  # Filters out test_case_ids the commit already has TCCs for, so this
+  # is idempotent in the partial-population case (some TCCs already
+  # present, others missing). There's no unique index on
+  # (commit_id, test_case_id) in the schema, so the filter is how we
+  # avoid duplicates rather than ON CONFLICT.
+  def self.copy_test_cases_from_parent(commit)
+    parent = commit.parents.first
+    return false unless parent
+
+    parent_tc_ids = parent.test_case_commits.pluck(:test_case_id)
+    return false if parent_tc_ids.empty?
+
+    existing_tc_ids = commit.test_case_commits.pluck(:test_case_id)
+    to_create = parent_tc_ids - existing_tc_ids
+
+    if to_create.any?
+      timestamp = Time.zone.now
+      rows = to_create.map do |tc_id|
+        {
+          commit_id: commit.id,
+          test_case_id: tc_id,
+          status: -1,
+          submission_count: 0,
+          computer_count: 0,
+          checksum_count: 0,
+          passed_count: 0,
+          failed_count: 0,
+          created_at: timestamp,
+          updated_at: timestamp
+        }
+      end
+      TestCaseCommit.insert_all(rows)
+    end
+
+    commit.save  # before_save :update_scalars refreshes commit-level scalars
+    true
+  end
+
+  # Insert parent->child edges into commit_relations for every commit
+  # in `commit_hashes` whose parents are resolvable in the local DB.
+  # `sha_to_id` is the mapping returned by ingest_payload_commits;
+  # parents that aren't in it (e.g., the parent of the oldest commit
+  # in the compare set, which sits on the branch's previous head) are
+  # looked up in the DB in one extra query.
+  #
+  # Orphan parents (parent SHA we've never seen) are skipped, same as
+  # backfill. The unique index on (child_id, parent_id) makes reruns
+  # no-ops.
+  #
+  # Returns the count of newly-inserted edges.
+  def self.ingest_payload_edges(commit_hashes, sha_to_id)
+    return 0 if commit_hashes.empty?
+
+    unknown_parent_shas = commit_hashes.flat_map { |gh|
+      gh[:parents].map { |p| p[:sha] }
+    }.uniq - sha_to_id.keys
+
+    if unknown_parent_shas.any?
+      sha_to_id = sha_to_id.merge(
+        Commit.where(sha: unknown_parent_shas).pluck(:sha, :id).to_h
+      )
+    end
+
+    edges = []
+    commit_hashes.each do |gh|
+      child_id = sha_to_id[gh[:sha]]
+      next unless child_id
+
+      gh[:parents].each_with_index do |parent, idx|
+        parent_id = sha_to_id[parent[:sha]]
+        next unless parent_id
+
+        edges << { parent_id: parent_id,
+                   child_id: child_id,
+                   parent_index: idx }
+      end
+    end
+
+    return 0 if edges.empty?
+
+    CommitRelation.insert_all(edges,
+                              unique_by: %i[child_id parent_id]).length
+  end
 
   ####################
   # GITHUB API STUFF #
@@ -73,195 +283,11 @@ class Commit < ApplicationRecord
     commit
   end
 
-  ### NOTE: I don't think the function below is ever used anymore. At some
-  # point, we should confirm it's not needed and delete it. This functionality
-  # is now accounted for in the Branch model. Most notably, the inserted
-  # branch memberships don't know their positions.
-
-  # gather all commits from GitHub and update database to include and/or
-  # update them. Does the following:
-  # - Get all commits to some time before the most recent commit (or to the
-  #   beginning of time)
-  # - Figure out which are missing from database and create them
-  # - Set relations for all newly inserted commits
-  # - Update branch membership for any newly merged branches
-  # Params
-  # +branch+ branch to update. +nil+ will update branches and then do them all
-  # +force+ if true, gather all commits from api and create them all or update
-  #   them if they already exist. Otherwise only gather commits from api from
-  #   30 days before the most recent commit, and only create missing commits
-  def self.api_update_tree(branch: nil, force: false, days_before: 2)
-    if branch.nil?
-      # make sure we know about every branch
-      Branch.api_update_branch_names
-
-      # do main method for each branch
-      Branch.all.each do |this_branch|
-        api_update_tree(branch: this_branch, force: force,
-                        days_before: days_before)
-      end
-
-      # Somewhat redundant, as it re-establishes branch names, but also
-      # updates head commits and determines whether each branch is merged or
-      # not. Crucially, this makes sure that older commits in newly-merged
-      # branches have their branch memberships updated
-      Branch.api_update_branches
-
-    else
-      earliest ||= days_before.days.before(branch.commits.maximum(:commit_time) || Date.today)
-      # Avoid asking api for commits since the beginning of time unless we 
-      # REALLY want it.
-      github_data = if force || branch.commits.count.zero?
-                      api_commits(sha: branch.name)
-                    else
-                      api_commits(sha: branch.name, since: earliest)
-                    end
-
-      # Prevent abusive calls to database to the beginning of time by only
-      # looking at new commits in this branch. Note, this allows commits
-      # through that already exist in other branches. This is correct, because
-      # even if the commit exists, we need to set up a branch membership.
-      unless force
-        github_shas = github_data.pluck(:sha)
-        db_shas = branch.commits.pluck(:sha)
-
-        # adaptively look further back in time if we haven't found any commits
-        # that already exist for a branch we already did have commits from
-        # (second condition to prevent infinite loop for new branch).
-        # Arbitrarily cap lookback time to 250 days so we escape an infinite if
-        # all hell breaks loose
-        existing_shas = db_shas - github_shas
-        if existing_shas.empty? & !db_shas.empty? & (days_before < 250)
-          puts("didn't find existing commits; searching back #{days_before * 5} days now")
-          return api_update_tree(branch: branch, force: force,
-                                 days_before: 5 * days_before)
-        end
-        to_add = github_shas - db_shas
-        github_data.select! { |github_hash| to_add.include? github_hash[:sha] }
-      end
-
-      return if github_data.empty?
-
-      # initialize and/or update commits with basic data and branch
-      # memberships, but don't do parent/child relationships yet (relations
-      # might not exist, and we get to recursive api hell in a handbasket)
-      commit_hashes_to_insert = github_data.map do |github_hash|
-        hash_from_github(github_hash)
-      end
-
-      # use upsert because records may already exist, but may just lack branch
-      # memberships
-      ids = Commit.upsert_all(commit_hashes_to_insert,
-                              returning: [:id], unique_by: :sha)
-
-      ids = ids.map { |commit_hash| commit_hash['id'] }
-
-      # add branch memberships. Just use insert_all since we know they
-      # shouldn't exist yet. Create a generic timestamp for the various
-      # insertion statements we'll be using
-      
-      # used to try to include timestamps, but they aren't even attributes anymore
-      # timestamp = Time.zone.now
-      membership_hashes_to_insert = ids.map do |commit_id|
-        {
-          branch_id: branch.id,
-          commit_id: commit_id
-        }
-      end
-
-      BranchMembership.insert_all(membership_hashes_to_insert)
-
-      # Populate test case commits for each new commit that doesn't have any
-      # Note: this accounts for ALL commits, but this probably shouldn't
-      # matter since it's hard to add commits to a branch without already
-      # executing this very method already.
-      commits_to_populate = Commit.where(id: ids, test_case_count: 0)
-      # this will translate from a module and test case name to a database id
-      tc_name_to_id = {}
-      # this will have hashes that will be inserted directly into the database
-      tccs_to_insert = []
-      TestCase.modules.each do |mod|
-        tc_name_to_id[mod] = {}
-      end
-
-      TestCase.select(:id, :name, :module).each do |tc|
-        tc_name_to_id[tc.module][tc.name] = tc.id
-      end
-
-      commits_to_populate.each do |commit|
-        test_case_count = 0
-        # grab test cases present in proper do1_test_source file from github
-        commit.api_test_cases.each do |mod, test_cases|
-          test_case_count += test_cases.count
-          test_cases.each do |tc_name|
-            # create the test case if it doesn't exist and add to the
-            # id translator hash INVOLVES A DATABASE CALL, but really not much
-            # of an issue since test cases are so rarely created
-            unless tc_name_to_id[mod].keys.include? tc_name
-              tc = TestCase.create(name: tc_name, module: mod)
-              tc_name_to_id[mod][tc.name] = tc.id
-            end
-
-            tccs_to_insert << { commit_id: commit.id,
-                                test_case_id: tc_name_to_id[mod][tc_name],
-                                created_at: timestamp,
-                                updated_at: timestamp
-                              }
-          end
-        end
-        # set relevant scalars. Other default values should be sufficient to
-        # stand in instead of full blown update_scalars. Nothing saved until
-        # the upsert below.
-        commit.test_case_count = test_case_count
-        commit.untested_count = test_case_count
-        commit.status = -1
-      end
-
-      # use upsert so that the update_scalars callback doesn't fire (it will
-      # register 0 cases )
-      unless commits_to_populate.empty?
-        Commit.upsert_all(commits_to_populate.map(&:attributes))
-        # all hashes now exist in tccs_to_insert, so do batch insert
-        TestCaseCommit.insert_all(tccs_to_insert)
-      end
-    end
-    nil
-  end
-
-  # Update memberships for a branch or all branches. Pairs nicely with update
-  # tree, since we can reuse the api payload (which may have been quite
-  # expensive) for the commits of a given branch.
-  # Params:
-  # +branch+: branch to update, +nil+ indicates to update branches and do each
-  # +api_payload+: hash containing data from previous api call to comments. If
-  #   left +nil+, does the call on its own.
-  def self.api_update_memberships(branch: nil, api_payload: nil)
-    if branch.nil?
-      Branch.api_update_branch_names
-      Branch.all.each do |this_branch|
-        api_update_memberships(branch: this_branch, api_payload: api_payload)
-      end
-      Branch.api_update_branches
-    else
-      api_payload ||= api_commits(sha: branch.name)
-      return unless api_payload
-      # database ids for all commits in the branch that are in the database
-      # Note: does not account for whether all commits are actually present in
-      # database
-      all_commit_ids = branch.commits.where(sha: api_payload.pluck(:sha)).pluck(:id)
-
-      # database ids for all commits that have a membership in the branch
-      existing_commit_ids = BranchMembership.where(branch: branch).pluck(:id)
-
-      # get ids for all commits that don't have the appropriate membership,
-      # then batch create the memberships
-      needing_membership = all_commit_ids - existing_commit_ids
-      BranchMembership.create(
-        needing_membership.map do |commit_id|
-          {commit_id: commit_id, branch_id: branch.id}
-        end)
-    end
-  end
+  # NOTE: Commit.api_update_tree and Commit.api_update_memberships
+  # lived here before Phase 3.5. They were the bulk re-sync paths that
+  # the new Branch.reconcile_with_github + BranchSyncJob +
+  # BranchBackfillJob + Commit.populate_payload_test_cases stack
+  # replaces. Deleted in Step 5 along with the position column.
 
   def self.hash_from_github(github_hash)
     # convert hash from a github api_request representing a commit to 
@@ -277,68 +303,6 @@ class Commit < ApplicationRecord
       message: github_hash[:commit][:message],
       github_url: github_hash[:html_url]
     }
-  end
-
-  # use github api to query do1_test_source for all modules if it exists
-  # and update the test_case_commits for that commit. Only do this for commits
-  # with zero test_case_commits
-  def self.api_update_test_cases
-    Commit.where(test_case_count: 0).each do |commit|
-      commit.api_update_test_cases
-    end
-  end
-
-
-  ################################################
-  # TRANSLATING BETWEEN RAILS AND GITHUB WEBHOOK #
-  ################################################
-
-  # DEPRECATED WITH SIMPLER GITHUB WEBHOOK SOLUTION
-  # def self.hash_from_github(github_hash)
-  #   # convert hash from a github webhook payload representing a commit to 
-  #   # a hash ready to be inserted into the database
-  #   # +github_hash+ a hash for one commit resulting from a github webhook
-  #   # push payload
-
-  #   {
-  #     sha: github_hash[:sha] || github_hash[:id],
-  #     short_sha: (github_hash[:sha] || github_hash[:id])[(0...7)],
-  #     author: github_hash[:author][:name],
-  #     author_email: github_hash[:author][:email],
-  #     commit_time: github_hash[:timestamp],
-  #     message: github_hash[:message],
-  #     github_url: github_hash[:url]
-  #   }
-  # end
-
-  # def self.create_many_from_github_push(payload)
-  #   # take payload from githubs push webhook, extract commits to
-  #   # hashes, and then insert them into the database.
-  #   # 
-  #   # note that the hash structure from webhook is different than api. Should
-  #   # probably name these two silly functions that transform the github hashes
-  #   # into rails-friendly ones...
-  #   create(payload[:commits].map { |commit| hash_from_github(commit) })
-
-  #   # upon creation, our after_create hook fires and updates test cases and
-  #   # test_case_commits; no need to worry about it here
-    
-  #   # update branch memberships for ALL commits, as a merge may have happened
-  #   api_update_memberships
-     
-  #   # We do need parent/child relations established. Now all commits exist,
-  #   # do that. We'll also get branches updated for "free" with this expensive
-  #   # API call and database assault. It's not _that_ expensive now, since
-  #   # it will only work on commits made in the last month or so.
-  #   Commit.api_update_tree
-  # end
-
-  def self.push_update(payload)
-    earliest = 1.hour.before(payload[:commits].pluck(:timestamp).map do |str|
-      DateTime.parse(str)
-    end.sort.first)
-    days_before = [Date.today - earliest.to_date, 2].max
-    api_update_tree(days_before: days_before)
   end
 
   #####################################
@@ -362,17 +326,6 @@ class Commit < ApplicationRecord
 
       Commit.includes(includes).find_by(sha: sha)
     end
-  end
-
-  # the very first commit. Should have no parents, but in case we've screwed
-  # this up, also check for parents (there should be none), and iteratively
-  # go through them until there are no more parents
-  def self.root
-    res = Commit.includes(:parents).order(:commit_time).first
-    until res.parents.count.zero?
-      res = res.parents.includes(:parents).first
-    end
-    res
   end
 
   # get the [Rails] head commit of a particular branch
@@ -599,21 +552,32 @@ class Commit < ApplicationRecord
   # note: future optimization would be to make these three "questions" be
   # scalars that are updated at save time. They are all summoned every time we
   # load an index view, meaning we have a 3n+1 situation
+  #
+  # Each predicate has an early "no test cases yet" guard: without it, the
+  # `pluck(...).uniq.count == test_cases.count` form returns `0 == 0` → true
+  # for any commit ingested before its test cases land (e.g., commits
+  # ingested by the new webhook flow before Step 6 wires up test-case
+  # copying). That made every recent commit on the index page light up
+  # with all three icons.
+
   # determine if each test case has been run with all optional inlists
   def run_optional?
+    return false if test_cases.empty?
     test_instances.
       where(run_optional: true).
       pluck(:test_case_id).uniq.count == test_cases.count
   end
 
-  # determine if each test case has been run with all optional inlists
+  # determine if each test case has been run with FPE checks enabled
   def fpe_checks?
+    return false if test_cases.empty?
     test_instances.
       where(fpe_checks: true).
       pluck(:test_case_id).uniq.count == test_cases.count
   end
 
   def fine_resolution?
+    return false if test_cases.empty?
     test_instances.
       where(resolution_factor: 0..0.99).
       pluck(:test_case_id).uniq.count == test_cases.count

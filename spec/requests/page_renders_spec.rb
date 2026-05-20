@@ -9,9 +9,10 @@ RSpec.describe 'Page renders', type: :request do
   let(:branch) { create(:branch, name: 'main') }
   let(:commit) do
     c = create(:commit)
-    # position must be non-nil; branch.nearby_test_case_commits derives a
-    # window from it.
-    BranchMembership.create!(branch: branch, commit: c, position: 1)
+    # Memberships supply the "is this commit in this branch?" cache used
+    # by nearby_commits/nearby_test_case_commits; head_id drives the
+    # CTE for ordered_commits. Both are needed for the smoke pages.
+    BranchMembership.create!(branch: branch, commit: c)
     branch.update!(head: c)
     c
   end
@@ -26,6 +27,18 @@ RSpec.describe 'Page renders', type: :request do
 
   describe 'GET /:branch/commits/:sha' do
     it 'renders successfully' do
+      get "/main/commits/#{commit.short_sha}"
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    it 'does not crash when another recent branch has nil head_id' do
+      # The "Other Active Branches" dropdown renders branch.head.short_sha;
+      # a branch with no head (left in that state by an interrupted sync
+      # or an older creation path that didn't set head_id) used to crash
+      # the entire show page.
+      create(:branch, name: 'half-synced', head_id: nil)
+
       get "/main/commits/#{commit.short_sha}"
 
       expect(response).to have_http_status(:ok)

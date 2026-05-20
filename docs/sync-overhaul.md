@@ -93,15 +93,22 @@ would be expensive. The `position` column on it goes away.
 
 For each push webhook:
 
-1. **Identify what's new.** Read the payload's `commits[]` (which
-   includes parent SHAs per commit). If the payload truncates (GitHub
-   caps it at 20 commits per push), call
-   `compare(before_sha, after_sha)` once for the explicit ordered list.
-2. **Insert new edges.** For each new commit:
+1. **Identify what's new.** Call `api.compare(before, after)` once.
+   The GitHub push webhook payload's `commits[]` array does NOT
+   include parent SHAs — only `id`, `tree_id`, `message`, `timestamp`,
+   `author`, `committer`, and the `added`/`removed`/`modified` file
+   lists. So we need one API call per push to get the canonical
+   ordered list with parent metadata. (The `commits[]` array is still
+   useful — Step 6 uses the `added`/`modified` paths to decide whether
+   to skip `api_update_test_cases`. The webhook gives us file changes
+   per commit; the compare gives us parents per commit.)
+2. **Insert new edges.** For each commit in the compare set:
    - Upsert the `commits` row.
-   - For each parent SHA: ensure a `commits` row exists (insert a stub
-     if not), then insert into `commit_relations`. Already-present edges
-     are no-ops (the unique index makes this idempotent).
+   - For each parent SHA: if the parent is in the local DB, insert
+     into `commit_relations`. Already-present edges are no-ops (the
+     unique index makes this idempotent). Orphan parents (parent SHA
+     not in DB) are skipped, same as backfill; if the missed edge ever
+     matters, re-running `topology:backfill` patches it.
 3. **Move the branch pointer.** `branches.head_id = after_sha`'s commit
    id.
 4. **Update `branch_memberships`.** Add `(branch, commit)` rows for
@@ -114,10 +121,12 @@ For each push webhook:
    orthogonal to the topology work but ships in the same phase since it
    shares the "use the webhook payload" theme.
 
-Typical-push cost in the new flow: **zero API calls** (everything's in
-the payload) or one (`compare`, when the payload truncates). Compared to
-the current "fetch 100+ commits per branch + 4 content calls per new
-commit."
+Typical-push cost in the new flow: **one API call** (`compare`),
+versus the current "fetch 100+ commits per branch + 4 content calls
+per new commit." For pushes that touch source files, Step 6 adds the
+existing content calls back in for those commits only; for the vast
+majority of pushes (which don't touch `do1_test_source`), the total
+stays at one call.
 
 ## The new ordering query
 
@@ -150,6 +159,13 @@ we'd add depth-limiting tricks, but that's not on the horizon.
 
 Each step is its own commit (or small set of commits) on `perf-sync-topology`.
 
+**All six steps shipped.** The descriptions below stay as historical
+record of the original plan. Two additional helpers that surfaced
+during implementation — `Branch.reconcile_with_github` (rake
+`branches:sync`) for catch-up and `rake test_cases:populate` for
+cleaning up commits ingested before Step 6 — are documented in the
+code comments rather than rewriting this plan retroactively.
+
 ### Step 1 — Add `commit_relations`
 
 Migration adding the table + indexes + FKs described above. No code
@@ -159,13 +175,21 @@ work builds on.
 ### Step 2 — Backfill via paginated `api.commits`
 
 A `BranchBackfillJob` per branch. Paginates `api.commits(sha: branch_name)`
-(the endpoint already returns parent SHAs in every response — the current
-code throws them away). Upserts edges from the parent SHAs into
+manually (one page at a time via `page:`, not `auto_paginate: true`) so
+it can short-circuit once a page produces zero new edges — every older
+page would be fully-edged too. Upserts edges from the parent SHAs into
 `commit_relations`. Idempotent so it can be rerun.
 
-Cost: low hundreds of API calls total across all of MESA's branches.
-Probably 10–30 minutes wall-clock with light throttling. Well under the
-5000 req/hour authenticated limit.
+Cost without the short-circuit would have been borderline at MESA's
+scale: ~100 API calls per branch × ~30 branches ≈ 3000 calls, close
+enough to the 5000/hour limit to risk crashing partway. With the
+short-circuit, the second-onwards branch typically costs 1–5 calls
+because almost all of its history is shared with `main` and is already
+edged. Realistic total: a few hundred calls, well under the limit.
+
+Run via `bundle exec rake topology:backfill`, which performs each
+branch's job inline (sequentially) so API calls don't fan out across
+the `:async` adapter's thread pool.
 
 After this lands, the topology is populated and we can verify it makes
 sense against a real branch (does the recursive CTE return the same
@@ -230,13 +254,14 @@ we want a quicker partial win.
 
 ## Open questions for when work begins
 
-- Do we want `parent_index` on `commit_relations` from day one (lets us
-  reconstruct first-parent walks for any future "branch's official
-  history" view), or add it later if/when that view is wanted?
-- Does the backfill job throttle itself, or do we just let it run as
-  fast as the rate limit allows? `faraday-http-cache` is already wired
-  in, so a lot of repeated calls will be 304s, but 304s still count
-  against the limit.
+- ~~Do we want `parent_index` on `commit_relations` from day one?~~
+  **Resolved in Step 1**: yes, included from day one. Costs nothing on
+  single-parent commits and saves a future migration.
+- ~~Does the backfill job throttle itself?~~ **Resolved in Step 2**: it
+  short-circuits once a page produces zero new edges, which drops the
+  total cost from ~3000 calls to a few hundred. The rake task runs
+  branches serially via `perform_now`, so no thread-pool fan-out either.
+  Explicit throttling isn't needed.
 - Inside step 3, should the new sync code live on `BranchSyncJob`
   directly, or do we factor out a `Sync::CommitGraph` service object?
   Lean toward keeping it on the job until we see what shape the code
@@ -245,6 +270,34 @@ we want a quicker partial win.
   `TestCaseCommit` rows pointing at the new commit, but with reset
   per-commit counters (status, submission_count, computer_count). Spec
   this carefully before implementing.
+
+## Follow-ups surfaced during Step 1
+
+These showed up while wiring `commit_relations` back in. They aren't
+blocking, but they're worth resolving before Phase 3.5 closes — they're
+listed here so the decisions get made deliberately rather than missed.
+
+- **Dead callers of `Commit#parents`.** `Commit.root` and
+  `Branch#recursive_assign_root` both call `.parents`. Before Step 1
+  they would have raised on an undefined association; now they'll run.
+  Neither is reachable from any controller, mailer, or job we can find;
+  they're 2020-era leftovers from the original (later-dropped)
+  `commit_relations` design. Step 5 is the obvious place to delete them
+  along with `api_update_tree`, but they could also go in Step 3 if
+  the new sync code makes the intent clearer.
+- **Orphan counter columns on `commits`.** The 2020 migration added
+  `commits.parents_count` and `commits.children_count` as counter
+  caches; the 2021 `drop_commit_relations` migration left them in place.
+  They default to 0 and nothing reads them. Two options when we touch
+  the model again:
+    1. Wire them up as `counter_cache: true` on `CommitRelation` — cheap,
+       and `Branch#root` currently uses `find_by(parents_count: 0)` to
+       locate the repo root, so live counters would actually be useful.
+    2. Drop the columns in the Step 5 cleanup migration.
+  Option 1 is the better call if Step 5 ends up keeping any code that
+  relies on "is this commit a root"; option 2 if Step 5 deletes that
+  code along with the rest of the dead paths. Decide when Step 5 is in
+  hand.
 
 ## Out of scope
 
