@@ -3,13 +3,20 @@ namespace :test_cases do
        "Copies from parent commit when possible, falls back to fetching " \
        "do1_test_source from GitHub. Idempotent."
   task populate: :environment do
-    bad = Commit.where(test_case_count: 0)
+    # Order by commit_time ASC so each commit's parent is processed
+    # before the commit itself — copy-from-parent then works for the
+    # whole chain after at most one api fetch for the chain's root.
+    # Without this, find_each's primary-key ordering processes
+    # newer commits first (for backfill-ingested batches, where newer
+    # commits have lower IDs) and every commit's copy-from-parent
+    # fails, cascading into api fetches.
+    bad = Commit.where(test_case_count: 0).order(commit_time: :asc)
     total = bad.count
     puts "Found #{total} commits without test cases. Populating..."
 
     copied, fetched, skipped = 0, 0, 0
 
-    bad.find_each.with_index(1) do |commit, i|
+    bad.each.with_index(1) do |commit, i|
       result = Commit.populate_test_cases_for(commit)
       commit.reload
       case result

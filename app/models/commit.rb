@@ -106,12 +106,24 @@ class Commit < ApplicationRecord
   # map isn't provided (backfill / reconcile path), populate falls back
   # to copy-from-parent as the optimistic default — correct for MESA's
   # workflow where source files rarely change.
+  #
+  # Iteration order matters: commits must be processed in commit_time
+  # ASC order so a commit's parent is populated before the commit
+  # itself. Otherwise a chain of newly-ingested commits with no TCCs
+  # cascades — each commit's copy-from-parent fails (parent not
+  # populated yet) and falls back to an api.content call. Under
+  # backfill that's 300 API calls + per-commit DB writes per page of
+  # 100, vs. ~3 API calls + 99 fast copies with the right order. We
+  # load into memory rather than use find_each so the order isn't
+  # overridden by find_each's primary-key batching.
   def self.populate_payload_test_cases(commit_hashes, sha_to_id,
                                        file_changes_by_sha: nil)
     ids = commit_hashes.map { |gh| sha_to_id[gh[:sha]] }.compact
     return if ids.empty?
 
-    Commit.where(id: ids, test_case_count: 0).find_each do |commit|
+    Commit.where(id: ids, test_case_count: 0)
+          .order(commit_time: :asc)
+          .each do |commit|
       sources_touched = file_changes_by_sha&.dig(commit.sha)&.then do |paths|
         paths.any? { |p| p.match?(TEST_SOURCE_PATTERN) }
       end
