@@ -93,15 +93,22 @@ would be expensive. The `position` column on it goes away.
 
 For each push webhook:
 
-1. **Identify what's new.** Read the payload's `commits[]` (which
-   includes parent SHAs per commit). If the payload truncates (GitHub
-   caps it at 20 commits per push), call
-   `compare(before_sha, after_sha)` once for the explicit ordered list.
-2. **Insert new edges.** For each new commit:
+1. **Identify what's new.** Call `api.compare(before, after)` once.
+   The GitHub push webhook payload's `commits[]` array does NOT
+   include parent SHAs — only `id`, `tree_id`, `message`, `timestamp`,
+   `author`, `committer`, and the `added`/`removed`/`modified` file
+   lists. So we need one API call per push to get the canonical
+   ordered list with parent metadata. (The `commits[]` array is still
+   useful — Step 6 uses the `added`/`modified` paths to decide whether
+   to skip `api_update_test_cases`. The webhook gives us file changes
+   per commit; the compare gives us parents per commit.)
+2. **Insert new edges.** For each commit in the compare set:
    - Upsert the `commits` row.
-   - For each parent SHA: ensure a `commits` row exists (insert a stub
-     if not), then insert into `commit_relations`. Already-present edges
-     are no-ops (the unique index makes this idempotent).
+   - For each parent SHA: if the parent is in the local DB, insert
+     into `commit_relations`. Already-present edges are no-ops (the
+     unique index makes this idempotent). Orphan parents (parent SHA
+     not in DB) are skipped, same as backfill; if the missed edge ever
+     matters, re-running `topology:backfill` patches it.
 3. **Move the branch pointer.** `branches.head_id = after_sha`'s commit
    id.
 4. **Update `branch_memberships`.** Add `(branch, commit)` rows for
@@ -114,10 +121,12 @@ For each push webhook:
    orthogonal to the topology work but ships in the same phase since it
    shares the "use the webhook payload" theme.
 
-Typical-push cost in the new flow: **zero API calls** (everything's in
-the payload) or one (`compare`, when the payload truncates). Compared to
-the current "fetch 100+ commits per branch + 4 content calls per new
-commit."
+Typical-push cost in the new flow: **one API call** (`compare`),
+versus the current "fetch 100+ commits per branch + 4 content calls
+per new commit." For pushes that touch source files, Step 6 adds the
+existing content calls back in for those commits only; for the vast
+majority of pushes (which don't touch `do1_test_source`), the total
+stays at one call.
 
 ## The new ordering query
 

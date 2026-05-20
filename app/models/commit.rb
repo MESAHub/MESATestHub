@@ -37,6 +37,87 @@ class Commit < ApplicationRecord
   paginates_per 50
 
 
+  #################################
+  # GITHUB COMPARE-PAYLOAD INGEST #
+  #################################
+  #
+  # Entry points for the Phase 3.5 sync flow. The webhook handler kicks
+  # off a BranchSyncJob, which calls `api.compare(before, after)` once
+  # to get the canonical ordered list of commits in the push (with
+  # parent SHAs — the webhook payload itself doesn't include those).
+  # These helpers then upsert the commit rows and the
+  # parent->child edges in two bulk operations.
+
+  # Bulk-upsert commits from a GitHub API response (commits or compare
+  # endpoint, both use the same nested shape). Returns a hash mapping
+  # sha => id for every commit ingested.
+  #
+  # Bypasses ActiveRecord validations and the `after_create
+  # :api_update_test_cases` callback — test-case ingestion is the
+  # caller's responsibility so it can batch and short-circuit per
+  # Step 6.
+  def self.ingest_payload_commits(commit_hashes)
+    return {} if commit_hashes.empty?
+
+    timestamp = Time.zone.now
+    rows = commit_hashes.map do |gh|
+      hash_from_github(gh).merge(created_at: timestamp,
+                                 updated_at: timestamp)
+    end
+
+    Commit.upsert_all(rows, unique_by: :sha)
+
+    Commit.where(sha: commit_hashes.map { |gh| gh[:sha] })
+          .pluck(:sha, :id)
+          .to_h
+  end
+
+  # Insert parent->child edges into commit_relations for every commit
+  # in `commit_hashes` whose parents are resolvable in the local DB.
+  # `sha_to_id` is the mapping returned by ingest_payload_commits;
+  # parents that aren't in it (e.g., the parent of the oldest commit
+  # in the compare set, which sits on the branch's previous head) are
+  # looked up in the DB in one extra query.
+  #
+  # Orphan parents (parent SHA we've never seen) are skipped, same as
+  # backfill. The unique index on (child_id, parent_id) makes reruns
+  # no-ops.
+  #
+  # Returns the count of newly-inserted edges.
+  def self.ingest_payload_edges(commit_hashes, sha_to_id)
+    return 0 if commit_hashes.empty?
+
+    unknown_parent_shas = commit_hashes.flat_map { |gh|
+      gh[:parents].map { |p| p[:sha] }
+    }.uniq - sha_to_id.keys
+
+    if unknown_parent_shas.any?
+      sha_to_id = sha_to_id.merge(
+        Commit.where(sha: unknown_parent_shas).pluck(:sha, :id).to_h
+      )
+    end
+
+    edges = []
+    commit_hashes.each do |gh|
+      child_id = sha_to_id[gh[:sha]]
+      next unless child_id
+
+      gh[:parents].each_with_index do |parent, idx|
+        parent_id = sha_to_id[parent[:sha]]
+        next unless parent_id
+
+        edges << { parent_id: parent_id,
+                   child_id: child_id,
+                   parent_index: idx }
+      end
+    end
+
+    return 0 if edges.empty?
+
+    CommitRelation.insert_all(edges,
+                              unique_by: %i[child_id parent_id]).length
+  end
+
   ####################
   # GITHUB API STUFF #
   ####################
