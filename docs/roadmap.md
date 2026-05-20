@@ -36,11 +36,28 @@ Existing Cucumber suite under `features/` and `spec/features/` has been
 moved to `features.deprecated/` and `spec/features.deprecated/`. RSpec
 request specs replace it.
 
+## Phase 1.5 — Drop CoffeeScript
+
+**Branch:** `frontend/drop-coffeescript`
+**Status:** in progress
+**Estimate:** 0.5–1 day
+
+Pulled forward from Phase 4 (frontend modernization) to de-risk the Rails 8
+jump. The real CoffeeScript footprint is 4 files / ~326 lines of
+jQuery-style DOM manipulation, plus 7 empty placeholder files. Convert the
+4 real files to ES2015+ JavaScript, delete the empty ones, drop the
+`coffee-rails` and `barista` gems. The page-render specs from Phase 1
+catch the most obvious regressions; manual click-through in dev covers
+the rest.
+
+When this phase closes, the Rails 8 step in Phase 2 stops having a
+gem-resolver risk path.
+
 ## Phase 2 — Rails 6.1 → 8.0 upgrade
 
 **Branch:** `rails-upgrade`
 **Status:** not started
-**Estimate:** 4–6 days (with Phase 1 tests in place)
+**Estimate:** 2–4 days (with Phase 1 tests in place and Phase 1.5 done)
 
 See [`docs/rails-upgrade.md`](rails-upgrade.md) for the detailed phased plan,
 including the `load_defaults` 5.1 catch-up that has to happen before the Rails
@@ -58,11 +75,7 @@ Each sub-phase (5.1→5.2 defaults, 5.2→6.0, 6.0→6.1, 6.1→7.0, 7.0→7.1,
 
 When this phase closes, the 12 remaining Dependabot advisories close with it.
 
-**Coffee-rails risk:** the 7.2 → 8.0 jump is the first place where
-`coffee-rails` (latest 5.0.0, but barely maintained) might balk. If so, that
-becomes the signal to do Phase 4 (frontend modernization, which drops
-CoffeeScript) before completing the 8.0 step. Land the Rails 7.2 commit
-first so the partial upgrade is shippable in that scenario.
+_Coffee-rails risk was eliminated by completing Phase 1.5 first._
 
 ## Phase 3 — Performance and bug fixes
 
@@ -89,17 +102,16 @@ and improved background-job tooling.
 
 **Branch:** `frontend-tailwind`
 **Status:** not started
-**Estimate:** 5–10 days (incremental, page by page)
+**Estimate:** 4–8 days (incremental, page by page; less now that
+CoffeeScript was pulled forward to Phase 1.5)
 
-Goal: drop the legacy frontend stack in favor of a modern one.
+Goal: drop the rest of the legacy frontend stack in favor of a modern one.
 
 **Out:**
 - Bootstrap 4 → Tailwind CSS
-- CoffeeScript (13 files) → plain ES modules
 - Turbolinks → Turbo
 - Sprockets-driven JS bundling → importmap-rails or jsbundling-rails
-- `coffee-rails`, `barista`, `uglifier`, `sassc-rails`, `jquery-rails`,
-  `bootstrap`, `bootstrap_form`
+- `uglifier`, `sassc-rails`, `jquery-rails`, `bootstrap`, `bootstrap_form`
 
 **In:**
 - Tailwind via `tailwindcss-rails` or standalone CLI
@@ -142,6 +154,33 @@ Add items here as they come up so they don't get lost.
   ([`app/models/branch.rb:451`](app/models/branch.rb:451)) calls `position + 1`
   without a nil check, breaking the `test_case_commits#show` page for those
   memberships.
+
+## Bugs/UX issues surfaced during Phase 1.5 smoke testing
+
+All preexisting (present on Heroku too); not regressions from the JS
+conversion. Captured here so they don't get lost.
+
+- **`test_instances#search` is broken.** Owner reports the feature itself
+  doesn't work, independent of JS. Phase 3 candidate; needs investigation
+  to figure out whether the controller logic, the search form, or the
+  results rendering is at fault.
+- **Column visibility on `test_case_commits#show` does not persist across
+  reloads.** The JS writes a cookie when a column is toggled, but on next
+  load the columns reset to the default set. Either the cookie name doesn't
+  match what the server reads, or the server never reads it. Phase 3 or
+  Phase 4 candidate. Fixing this is also a good opportunity to migrate the
+  state from cookies to URL params or localStorage.
+- **`#passing` / `#missing` collapse animation feels clunky.** Expansion is
+  instantaneous, followed by a smooth scroll — disorienting. Bootstrap 4's
+  `.collapse` plugin should do a smooth transition; needs investigating
+  whether a CSS rule is overriding the transition, or whether the
+  scroll-on-`shown.bs.collapse` is firing before the collapse animation
+  starts. Phase 4 candidate — likely fixes itself with the Bootstrap →
+  Tailwind migration.
+- **`commits.js`'s `BuildLog` and `test_case_commits.js`'s `TestLogs`
+  HEAD probes are CORS-blocked on Railway.** Will resolve when
+  `testhub.mesastar.org` (already on the Flatiron CORS allowlist) is
+  repointed at Railway. No code change required from this end.
 
 ## Done
 

@@ -37,20 +37,27 @@ that makes the change.
   The app runs on Rails 6.1 code but with Rails 5.1 default behaviors. Both
   `new_framework_defaults_5_2.rb` and `new_framework_defaults_6_0.rb` exist
   with every option commented out. This will be flipped phase-by-phase
-  during the Rails upgrade.
-- **There is effectively no test suite.** Most files under `spec/` are
-  generator stubs (`pending "add some examples..."`). Only
-  `spec/models/test_case_spec.rb` has real content. The active branch
-  `tests/api-foundation` is building the first real coverage.
-- **No Cucumber.** The old Cucumber suite has been moved to
+  during the Rails upgrade (Phase 2 in `docs/roadmap.md`).
+- **The test suite is small but real.** 24 request specs cover auth,
+  submissions API, GitHub webhook, and high-traffic page renders. They are
+  the regression safety net for upcoming Rails upgrade work. Build on this
+  rather than starting fresh.
+- **No Cucumber.** The old Cucumber suite is preserved at
   `features.deprecated/` and `spec/features.deprecated/`. RSpec request
-  specs replace it for new work. Do not add `.feature` files.
+  specs replace it. Do not add `.feature` files.
+- **No CoffeeScript.** All `.coffee` files were converted to plain ES2015+
+  JavaScript in the `frontend/drop-coffeescript` branch. `coffee-rails` and
+  `barista` are gone from the Gemfile. The remaining frontend stack
+  (Bootstrap 4, jQuery, Sprockets, Turbolinks) gets replaced in Phase 4.
 - **No user-facing Active Storage**. The default `:local` service is
   scaffolding only. The high-severity Active Storage CVEs are unreachable
   in this codebase.
 - **The Sprockets asset pipeline does not have committed compiled assets**
   any more. `public/assets/` is gitignored. Sprockets compiles fresh on
   every Railway deploy.
+- **Bootsnap caches load paths** in `tmp/cache/bootsnap`. If you remove or
+  rename a gem and immediately see `cannot load such file`, clear the cache
+  with `rm -rf tmp/cache/bootsnap`.
 
 ## Development commands
 
@@ -146,8 +153,6 @@ Production (Railway service):
   by accident if invoked through `bin/rails` without `DISABLE_SPRING`.
 - The mailer config uses Mailgun SMTP env vars but the underlying provider
   is incidental. Switching email providers is a 4-env-var change, no code.
-- `barista` gem is listed in Gemfile but unused — leave it alone for now
-  (slated for removal during frontend modernization phase).
 - `app/mailers/morning_mailer.rb` has several hardcoded
   `https://testhub.mesastar.org/...` URLs that build email body links. They
   need updating before the custom domain shifts or those emails will point
