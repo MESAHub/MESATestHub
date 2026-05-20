@@ -41,7 +41,7 @@ RSpec.describe 'Submissions API', type: :request do
            },
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(JSON.parse(response.body)).to include('error')
       expect(Submission.count).to eq(0)
     end
@@ -57,7 +57,7 @@ RSpec.describe 'Submissions API', type: :request do
            },
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(Submission.count).to eq(0)
     end
 
@@ -69,7 +69,7 @@ RSpec.describe 'Submissions API', type: :request do
            },
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(Submission.count).to eq(0)
     end
 
@@ -85,7 +85,7 @@ RSpec.describe 'Submissions API', type: :request do
            },
            as: :json
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(Submission.count).to eq(0)
     end
   end
@@ -120,7 +120,7 @@ RSpec.describe 'Submissions API', type: :request do
         max_age: 1
       }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
   end
 end

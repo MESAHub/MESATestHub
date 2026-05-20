@@ -10,7 +10,7 @@ gem 'concurrent-ruby', '1.3.4'
 gem "webrick", ">= 1.8.2"
 gem 'rack', '>= 2.2.14'
 gem 'rack-attack'
-gem 'rails', '~> 7.0.0'
+gem 'rails', '~> 7.1.0'
 gem 'puma', '>= 6.4.2'
 gem 'puma_worker_killer'
 gem 'bootsnap',  '~> 1.7'

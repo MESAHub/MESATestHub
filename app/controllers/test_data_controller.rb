@@ -40,7 +40,7 @@ class TestDataController < ApplicationController
         format.json { render :show, status: :created, location: @test_datum }
       else
         format.html { render :new }
-        format.json { render json: @test_datum.errors, status: :unprocessable_entity }
+        format.json { render json: @test_datum.errors, status: :unprocessable_content }
       end
     end
   end
@@ -54,7 +54,7 @@ class TestDataController < ApplicationController
         format.json { render :show, status: :ok, location: @test_datum }
       else
         format.html { render :edit }
-        format.json { render json: @test_datum.errors, status: :unprocessable_entity }
+        format.json { render json: @test_datum.errors, status: :unprocessable_content }
       end
     end
   end

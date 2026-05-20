@@ -92,7 +92,7 @@ class ComputersController < ApplicationController
         else
           format.html { render :new }
           format.json do
-            render json: @computer.errors, status: :unprocessable_entity
+            render json: @computer.errors, status: :unprocessable_content
           end
         end
       end
@@ -122,7 +122,7 @@ class ComputersController < ApplicationController
       else
         format.html { render :edit }
         format.json do
-          render json: @computer.errors, status: :unprocessable_entity
+          render json: @computer.errors, status: :unprocessable_content
         end
       end
     end
