@@ -109,9 +109,27 @@ Goal: drop the rest of the legacy frontend stack in favor of a modern one.
 
 **Out:**
 - Bootstrap 4 → Tailwind CSS
+- jQuery → vanilla JS (and/or Stimulus, see below)
 - Turbolinks → Turbo
 - Sprockets-driven JS bundling → importmap-rails or jsbundling-rails
 - `uglifier`, `sassc-rails`, `jquery-rails`, `bootstrap`, `bootstrap_form`
+
+**On jQuery specifically:** the only reason it's still here is that
+Bootstrap 4 requires it (`.collapse('show')`, `.tooltip()`). Once Bootstrap
+leaves, the converted JS in `app/assets/javascripts/*.js` uses jQuery only
+for trivial DOM/event/AJAX patterns that map 1:1 to modern native APIs
+(`querySelectorAll`, `addEventListener`, `classList`, `fetch`,
+`dataset`, etc.). No jQuery-specific plugins (Select2, DataTables, etc.)
+are in use, so the cutover is mechanical.
+
+**Recommended JS approach for this phase:** since Rails 8 is the Phase 2
+target and Hotwire is the Rails 8 default, lean on **Stimulus + Turbo**
+rather than ad-hoc vanilla JS. Stimulus organizes per-page behavior
+declaratively (`data-controller="commits"`,
+`data-action="click->commits#togglePassing"`) which maps cleanly onto
+the existing module structure (`TogglePassing`, `NearbyCommits`, etc. in
+`commits.js`). Pure vanilla is also fine if Stimulus feels like
+overkill; for this codebase's complexity either works.
 
 **In:**
 - Tailwind via `tailwindcss-rails` or standalone CLI
