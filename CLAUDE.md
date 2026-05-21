@@ -35,7 +35,19 @@ Before doing non-trivial work, read the appropriate doc:
   — plan for the Phase 4 frontend rewrite (Bootstrap+jQuery →
   Tailwind+Turbo+Stimulus, plus port of the design in
   `docs/design_handoff_mesa_testhub/`). Spans multiple sessions on
-  the `frontend-tailwind` branch (not yet created).
+  the `frontend-tailwind` branch. **Steps 0–2, 4, and 5 have
+  landed** — Tailwind + Turbo + Stimulus + importmap are installed
+  alongside the legacy stack; the 404 page, login, and the commits
+  index (`/:branch/commits`) all render through the modern layout;
+  `Commit#commit_state` / `#test_computer_matrix` /
+  `Branch#sparkline_data` / `TestCaseCommit#instances_for_display`
+  aggregation helpers live in
+  [`app/models/concerns/commit_state.rb`](app/models/concerns/commit_state.rb).
+  Step 5 departed from the original handoff in a few ways — see
+  the doc for the details (subway map instead of sparkline, no
+  stat tiles, cursor pagination via a `before=` URL param instead
+  of Kaminari, inline date-picker chip). Step 6 (commit detail)
+  is next.
 
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.
@@ -49,7 +61,7 @@ that makes the change.
   from the original plan — Rack 3's `:unprocessable_entity` →
   `:unprocessable_content` rename, `show_exceptions` becoming an enum,
   and the gems that needed bumps or removal for the resolver to settle.
-- **The test suite is small but real.** 158 specs (request + model + job)
+- **The test suite is small but real.** 180 specs (request + model + job)
   cover auth, submissions API, GitHub webhook (now async via
   `BranchSyncJob`, payload-driven), branch deletion, the Octokit
   middleware wiring, `TestInstance.query`, `Commit#computer_info`, the
@@ -62,7 +74,63 @@ that makes the change.
 - **No CoffeeScript.** All `.coffee` files were converted to plain ES2015+
   JavaScript in the `frontend/drop-coffeescript` branch. `coffee-rails` and
   `barista` are gone from the Gemfile. The remaining frontend stack
-  (Bootstrap 4, jQuery, Sprockets, Turbolinks) gets replaced in Phase 4.
+  (Bootstrap 4, jQuery, Sprockets, Turbolinks) is being replaced in Phase 4.
+- **Two frontend stacks coexist during Phase 4.** Pages still using
+  Bootstrap render through `layouts/application.html.haml`, which links
+  Sprockets-built `application.css` (Bootstrap + custom SCSS) and
+  `legacy.js` (jQuery + Bootstrap + Turbolinks + custom JS). Pages
+  migrated to the new design render through
+  `layouts/modern.html.haml`, which links the Tailwind v4 build at
+  `app/assets/builds/tailwind.css` and loads Turbo + Stimulus via
+  `importmap-rails`. Controllers opt in per-action with
+  `render layout: "modern"`. The Sprockets entry point was renamed from
+  `application.js` to `legacy.js` so it doesn't collide with the
+  importmap entry at `app/javascript/application.js`.
+- **sassc-rails's :sass CSS compressor must stay disabled.** SassC can't
+  parse Tailwind v4's modern color syntax (`rgb(from red r g b)`, etc.).
+  Both `config/environments/test.rb` and `config/environments/production.rb`
+  explicitly set `config.assets.css_compressor = nil`. Removing or
+  flipping that breaks asset compilation everywhere the modern layout
+  loads.
+- **Dev preview surface for Phase 4.** `/dev/preview/...` routes mount
+  only in development + test (see [`config/routes.rb`](config/routes.rb)
+  and [`DevPreviewController`](app/controllers/dev_preview_controller.rb)).
+  Each action renders a migrated view inside `layouts/modern.html.haml`
+  with canned data and bypasses the auth filter so the design can be
+  reviewed in a browser without logging in. Add a new action per page
+  as it migrates.
+- **Tailwind rebuild after class changes.** Tailwind v4's standalone
+  CLI scans view files at build time and only emits utilities it
+  actually saw. After adding new utility classes to a view, run
+  `DISABLE_SPRING=1 bin/rails tailwindcss:build`. The Rails dev
+  server *will not* pick up new class names on its own — Sprockets
+  serves the existing `tailwind.css` build until it's rewritten.
+- **HAML class shorthand can't hold Tailwind brackets.** `.text-[10px]`
+  in HAML's dotted-shorthand fails to parse (HAML thinks the `[` opens
+  an attribute). Any utility with brackets (`text-[10px]`,
+  `grid-cols-[12px_minmax(0,2.4fr)]`, etc.) must live in the explicit
+  `{ class: "…" }` hash. Same goes for empty tags — write `%span &nbsp;`
+  or give the tag content; bare `%span` followed by sibling tags
+  trips an "illegal nesting" error.
+- **Dev preview routes must mount BEFORE catch-all `/:branch/commits`.**
+  The `branch: /.*/` constraint will happily consume `dev/preview` as
+  a branch name. The `dev/preview/...` block lives near the top of
+  `config/routes.rb`, just below the submissions routes.
+- **Cursor pagination on the commits index, two URL params.**
+  `commits#index` accepts two mutually-exclusive cursors:
+  `?before=X` (default mental model — show commits with
+  `commit_time < X`, newest first, subway map initializes at
+  its newest end) and `?after=Y` (show commits with
+  `commit_time > Y`, then reversed, map initializes at its
+  oldest end). The `?after=` param exists so navigating from
+  page N to N-1 (newer) lands the user on the older slice of
+  N-1's commits — the bridge between the two pages — instead
+  of skipping forward by `page_size - 12` commits. Calendar
+  date picks always emit `?before=`. Parsing helpers:
+  `parse_before_param` (end-of-day default) and
+  `parse_after_param` (beginning-of-day) in
+  [`commits_controller.rb`](app/controllers/commits_controller.rb).
+  No Kaminari for this index; no `?page=` param.
 - **No user-facing Active Storage**. The default `:local` service is
   scaffolding only. The high-severity Active Storage CVEs are unreachable
   in this codebase.

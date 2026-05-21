@@ -148,8 +148,8 @@ Suite grew from 78 to 158 specs over this phase.
 
 ## Phase 4 — Frontend modernization
 
-**Branch:** `frontend-tailwind` (not yet created)
-**Status:** planned, plan doc captured
+**Branch:** `frontend-tailwind` (active)
+**Status:** in progress — Steps 0–2 landed (foundation + aggregation helpers)
 **Estimate:** 4–8 days (incremental, page by page; less now that
 CoffeeScript was pulled forward to Phase 1.5)
 

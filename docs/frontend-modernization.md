@@ -139,6 +139,83 @@ Before any code lands:
 Output: a short checklist comment in this doc enumerating the
 classification.
 
+#### Step 0 output (recorded 2026-05-20)
+
+**Stack decisions**
+
+- **JS loading**: `importmap-rails`. No bundler, no Node toolchain at
+  runtime. Stimulus + Turbo ship as importmap pins; Tailwind compiles
+  via the `tailwindcss-rails` standalone CLI which doesn't need Node
+  either. The legacy `app/assets/javascripts/*.js` files keep loading
+  through Sprockets in the meantime, so the two stacks are completely
+  decoupled.
+- **CSS**: `tailwindcss-rails` gem (standalone CLI). One generated
+  bundle at `app/assets/builds/tailwind.css`, served by Sprockets the
+  same way `application.css` already is. Bootstrap's compiled CSS
+  stays in `application.css` until every view migrates.
+- **Templating**: HAML for new partials too, matching the existing
+  codebase. Tailwind classes work fine in HAML attribute hashes;
+  long class lists go on the next line.
+- **Coexistence strategy**: the existing
+  `layouts/application.html.haml` keeps rendering legacy views via
+  Bootstrap. A new `layouts/modern.html.haml` (Tailwind + Turbo +
+  Stimulus + design tokens) gets opted into per-controller as we
+  port pages. Once every controller flips, the legacy layout and its
+  Bootstrap/jQuery/Turbolinks asset chain get deleted in Step 9.
+
+**View classification**
+
+Counted 88 view files under `app/views/`; the user-facing surface is
+63 templates (excluding `.jbuilder`, mailer views, and Kaminari
+partials). Classification below — anything not listed is implicitly
+"wing it" since the design only covers three pages in detail.
+
+*Designed (Steps 5–7, port to handoff)*
+
+- `commits/index.html.haml` + its `_index_*` partials (commits list)
+- `commits/show.html.haml` + its hero/banner/matrix/tab partials
+  (commit detail; new partials replace `_badges`, `_checksums`,
+  `_failures`, `_complete`, `_none_tested`, the fraction partials)
+- `test_case_commits/show.html.haml` (test-on-commit, with column
+  picker via Stimulus replacing the broken cookie-based version)
+
+*Wing it (Step 4 + Step 8, derive from tokens + components)*
+
+- Step 4 (low risk, end-to-end smoke):
+  - `errors/not_found.html.haml`
+  - `sessions/new.html.haml` (login)
+  - `layouts/application.html.haml` shell + `_navigation*` partials
+    (new modern layout; nav drops top-bar branch dropdown in favor of
+    the inline branch chip pattern)
+- Step 8, in priority order:
+  - `test_cases/show.html.haml` (test-across-commits)
+  - `computers/index.html.haml`, `computers/show.html.haml`
+  - `computers/test_instances_index.html.haml`
+  - `users/index.html.haml`, `users/show.html.haml`,
+    `users/admin.html.haml`, `users/computers_index.html.haml`
+  - `users/new.html.haml`, `users/edit.html.haml` (signup / edit)
+  - `computers/new.html.haml`, `computers/edit.html.haml`,
+    `computers/_form.html.haml`
+  - `test_instances/index.html.haml`, `test_instances/search.html.haml`,
+    `test_instances/show.html.haml`, and `_table`/`_search_table`
+    partials
+  - `submissions/show.html.haml`
+  - `visitors/index.html.haml`
+  - `pages/about.html.erb`
+  - `kaminari/*` paginator partials (replace Bootstrap markup with
+    Tailwind utility classes)
+
+*Defer (stays on the legacy layout for now)*
+
+- `test_cases/new.html.haml`, `test_cases/edit.html.haml`,
+  `test_cases/index.html.haml`, `test_cases/_form.html.haml`,
+  `test_data/*` — admin-y CRUD that may not even be reachable in
+  prod (the `test_cases` resource is commented out in
+  `config/routes.rb`). Touch only if needed.
+- `layouts/mailer.*` — outbound email; out of scope for this phase.
+- `morning_mailer/*.erb` — same. Hardcoded URLs noted in
+  `CLAUDE.md` "Quick gotchas" get fixed separately.
+
 ### Step 1 — Foundation
 
 - Add gems: `tailwindcss-rails`, `turbo-rails`, `stimulus-rails`,
@@ -233,17 +310,124 @@ established in Step 1.
 The first "designed" page. Reference:
 `screenshots/01-prototype.png` (light) and `02-prototype.png` (dark).
 
-- Layout: headline with branch chip → 4 stat tiles → sparkline panel
-  → search/filter toolbar → grouped commit table.
-- Replace the existing top-nav branch dropdown with the inline
-  branch chip pattern.
-- Use `Branch#sparkline_data` for the panel.
-- Age grouping via the `ageBucket` logic from `data.js` — port to
-  a Ruby helper.
-- Status filter chips backed by the new `commit_state` model.
+**Status: complete (2026-05-21)**, with these design departures from
+the original handoff after several review passes with the maintainer:
+
+- **Stat tiles dropped.** Page-scope counts (Clean / Failing /
+  Mixed / Build issues) didn't earn their pixel budget — a user
+  scanning 25 commits already has the answer from the rows
+  themselves. Removed; the reclaimed real estate now belongs to
+  the subway map.
+- **Sparkline replaced by an inline "subway map."** Newest-on-left
+  horizontal row of one station per commit (up to 25 per page,
+  13 visible at a time). Inner core dot = build status, outer
+  ring = worst-of test status, transparent gap between them so
+  the ring reads as a true annulus. Connecting line with a right-
+  pointing arrowhead. Hovering a station reveals an HTML popover
+  with message, author, age, build/tests pills; the popover
+  positions itself with a percentage-based `translateX` so it
+  never overflows the panel edge.
+- **Two-state animated pan with auto-paginate at the edges.** A
+  Stimulus controller (`pan_map_controller.js`) toggles the inner
+  track between two resting positions — newest 13 (`shift = 0`)
+  and oldest 13 (`shift = -(track_w - window_w)`) — using a CSS
+  `transition` with `cubic-bezier(0.65, 0, 0.35, 1)` for symmetric
+  ease-in-out. When the user clicks a pan button while already at
+  that side's resting position, the click falls through to the
+  older/newer page URL instead. Buttons reveal a "Newer" / "Older"
+  text label only in this paginate-fall-through mode — chevron
+  alone when they would pan, label + chevron when they would
+  navigate.
+- **Kaminari dropped for this index.** Replaced with cursor
+  pagination keyed off `commit_time`, driven by two symmetric URL
+  parameters:
+    - `?before=X` — show the newest 25 commits with `commit_time
+      < X`, map initializes at the newest view.
+    - `?after=Y` — show the oldest 25 commits with `commit_time
+      > Y` (then reversed for newest-first display), map
+      initializes at the **oldest** view — i.e., the bridge
+      between this page and the older one the user came from.
+  Calendar date picks always emit `?before=`. The "Newer" pan
+  button when paginating emits `?after=<newest visible>` so the
+  user lands on the page-just-newer initialized at its oldest
+  view, with the bridge commits visible — fixes the "skip 12
+  commits between pages" UX bug. The headline + date chip uniformly
+  show "on or before `<newest visible commit time>`" regardless
+  of which URL param produced the page, so `?after=` is a
+  navigation detail, not a different mental model.
+- **Date picker chip in the headline.** Matches the branch-picker
+  pattern: monospaced pill that opens a calendar dropdown. Picking
+  a date sets `?before=YYYY-MM-DD`; the controller parses bare
+  dates as end-of-day in the request's time zone (and bare-date
+  `?after=` as beginning-of-day) so picked days are inclusive at
+  both ends. The headline reads "Commits on `<branch>` on or
+  before `<date>` _<time>_" where the muted time component
+  reflects the precise cursor.
+- **Cursor-relative time everywhere.** `short_relative_time` (in
+  `commits_helper.rb`) returns `−6d` / `−2w` / `−3mo` (with U+2212
+  minus sign) instead of "X ago," which would mislead when the
+  cursor is in the past.
+- **Age bucket headers re-worded to read cursor-relative.** "Today"
+  → "Same day", "Yesterday" → "Day before", "Last week" → "Week
+  before", etc., so the table reads coherently with the cursor
+  pointing at an arbitrary date.
+- **Blue/gray semantics inverted.** Blue is now "Incomplete"
+  (`:pending_partial` — some passed, some untested); gray is
+  "Untested" (both `:pending` and `:not_run`). The "Running"
+  label is gone — the codebase doesn't actually model a "promised
+  but not submitted" state.
+- **Tokens brightened.** `--color-success`, `--color-warning`,
+  `--color-buildfail`, `--color-danger`, `--color-info` all moved
+  up the saturation scale from the GitHub Primer-style defaults.
+  Soft variants stayed accessible-on-white for pill backgrounds.
+- **Upper pagination + search row removed.** The pan buttons fully
+  cover page navigation now; the bottom Newer/Older link pair
+  remains as an anchor after scrolling. The search input is hidden
+  (clearly commented) until it's wired to client-side filtering.
+- **Filter chips deferred.** All / Failing / Mixed / Build issue /
+  Running / Clean did not land — without the stat tiles to anchor
+  them they read as noise. A Stimulus-over-table client-side
+  filter could come back in a follow-up.
+
+Components / Stimulus controllers added across Step 5's substeps:
+- `app/views/commits/_branch_picker.html.haml`
+- `app/views/commits/_date_picker.html.haml`
+- `app/views/commits/_subway_map.html.haml` and
+  `_subway_legend_swatch.html.haml`
+- `app/javascript/controllers/dropdown_controller.js`
+- `app/javascript/controllers/calendar_controller.js`
+- `app/javascript/controllers/subway_map_controller.js` (hover popovers)
+- `app/javascript/controllers/pan_map_controller.js`
+- `app/helpers/commits_helper.rb` (icons, status pills, dot,
+  avatar, age bucketing, cursor-relative time)
 
 Verification: all nine demo scenarios from the handoff render
-correctly; pagination + filtering work; dark mode toggle persists.
+correctly against real production data restored from the prod
+snapshot. Date picker + Older/Newer round-trip with the bridge-
+commit semantics. Dark mode toggle persists across navigations.
+
+#### Step 5 known followups (not blocking)
+
+- **"Continuous pan" virtual scrolling.** The two-state pan is a
+  good compromise, but the user noted that truly-continuous
+  navigation (pan smoothly through the loaded commits, eagerly
+  load adjacent batches via Turbo Stream / JSON, animate the
+  table alongside the map) would be the ideal. Deferred — likely
+  a Phase 4.5 effort once the rest of the pages are migrated.
+  When that happens, the `?before=` / `?after=` URL semantics
+  become an implementation detail of the page's "anchor point"
+  and the in-page navigation can override it without changing
+  the URL on every pan.
+- **Subway map reuse on the commit detail page.** The same
+  `_subway_map` partial gets one extra local — `focused_sha:` —
+  in Step 6, with the focused station getting the brand-color
+  outline ring (per `Sparkline`'s `current` handling at
+  `components.jsx:165-168`) and a slightly larger radius. Init
+  view becomes `:focused` (center the focused commit) alongside
+  `:newest` / `:oldest`. Replaces the existing "nearby commits"
+  dropdown.
+- **Restore search bar.** Comment-marked placeholder in
+  `index.html.haml` shows where to drop it back in.
 
 ### Step 6 — Commit detail (`/:branch/commits/:sha`)
 
