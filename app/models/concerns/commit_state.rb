@@ -109,29 +109,34 @@ module CommitState
       pendings = row.count { |_id, cell| cell[:status] == :pending }
       passes = row.count   { |_id, cell| cell[:status] == :pass }
       fails  = row.count   { |_id, cell| cell[:status] == :fail }
-      ran = passes + fails
-      # "Never run" — no built-computer cell has reported any result.
-      # Treat the same as pending so the hero's stat row + the Tests
-      # tab reflect that the test is *missing* a result, not passing.
-      # Happens when no computer compiled (so the matrix filter to
-      # built_ids leaves the row empty) or when a built computer
-      # hasn't gotten around to submitting test data yet.
-      not_run = (pendings + passes + fails).zero?
+      no_data = (pendings + passes + fails).zero?
 
-      pending_tests += 1 if pendings.positive? || not_run
-
+      # Classification rule: "passing" = at least one computer ran and
+      # passed AND nothing failed. Pending neighbors don't downgrade
+      # the test; if some computers haven't submitted yet but every
+      # one that did reported a pass, treat the test as passing. The
+      # matrix view (which surfaces individual pending cells) is the
+      # place to investigate "but did everyone really run it?"
       if fails.positive? && passes.positive?
         mixed_tests += 1
         row.each do |computer_id, cell|
           mixed_cells << { test_id: test_id, computer_id: computer_id } if cell[:status] == :fail
         end
-      elsif fails.positive? && fails == ran
+      elsif fails.positive?
+        # Any computer's fail makes the test failing — even when other
+        # computers are still pending.
         uniform_failing_tests += 1
         row.each do |computer_id, cell|
           failing_cells << { test_id: test_id, computer_id: computer_id } if cell[:status] == :fail
         end
-      elsif passes.positive? && passes == ran && pendings.zero?
+      elsif passes.positive?
+        # Pass with no failures — the test is passing regardless of
+        # pending neighbors.
         passing_tests += 1
+      elsif pendings.positive? || no_data
+        # Truly unresolved: nothing passing, nothing failing, just
+        # pending submissions (or no data at all).
+        pending_tests += 1
       end
     end
 
@@ -265,20 +270,27 @@ module CommitState
         counts[cell[:status]] += 1 if counts.key?(cell[:status])
         cell[:flags].each { |kind, on| counts[kind] += 1 if on }
       end
-      ran = counts[:pass] + counts[:fail]
 
-      # A built-computer row that has no pass/fail/pending counts at
-      # all means the test was never run on any computer that
-      # compiled — render as :not_run so the Tests tab shows a gray
-      # dot instead of misleading green.
+      # Mirrors the commit_state classification: any computer's pass
+      # counts as the test passing as long as nothing failed and
+      # nothing reported a checksum mismatch. Pending neighbors don't
+      # downgrade; truly-unresolved tests (no pass anywhere) land in
+      # :pending, and no-built-cell rows land in :not_run.
       overall =
         if built_cells.empty? || (counts[:pass] + counts[:fail] + counts[:pending]).zero?
           :not_run
-        elsif counts[:fail].positive? && counts[:pass].positive? then :mixed
-        elsif counts[:fail].positive? && counts[:fail] == ran then :fail
-        elsif counts[:pending].positive? then :pending
-        elsif (counts[:fpe] + counts[:checksum]).positive? then :flagged
-        else :pass
+        elsif counts[:fail].positive? && counts[:pass].positive?
+          :mixed
+        elsif counts[:fail].positive?
+          :fail
+        elsif counts[:pass].positive? && (counts[:fpe] + counts[:checksum]).positive?
+          :flagged
+        elsif counts[:pass].positive?
+          :pass
+        elsif counts[:pending].positive?
+          :pending
+        else
+          :not_run
         end
 
       tcc = tccs_by_test[test_id]

@@ -341,6 +341,23 @@ RSpec.describe 'commit state aggregation' do
       expect(row[:overall]).to eq(:flagged)
     end
 
+    it 'classifies a test that passed on some computers and has pending neighbors as :pass' do
+      # The user's rule: any passing submission + no failures or
+      # checksum mismatches → test is passing, regardless of
+      # whether other computers have reported yet. The matrix view
+      # is where the user investigates which computers haven't
+      # submitted yet.
+      Submission.where(commit: commit).delete_all
+      submit(computer: rusty)   # compiled
+      submit(computer: popeye)  # compiled but won't run test_case_a
+      instance(test_case: test_case_a, computer: rusty, passed: true)
+      # popeye doesn't submit a test_instance — its cell will be
+      # :pending in the matrix.
+
+      row = commit.reload.per_test_summary.find { |r| r[:test_case] == test_case_a }
+      expect(row[:overall]).to eq(:pass)
+    end
+
     it 'classifies a test with no built-computer results as :not_run' do
       # Override the `before` block: every submission failed to
       # compile, so the matrix's filter-to-built leaves the row

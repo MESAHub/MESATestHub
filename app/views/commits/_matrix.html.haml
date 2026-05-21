@@ -13,16 +13,34 @@
 -#   branch:       Branch the commit lives on (for cell links).
 -#   sha:          Short SHA of the commit (for cell links).
 
-- interesting = per_test.reject { |row| %i[pass not_run].include?(row[:overall]) }
+- # Cell-aware filter: a row is "interesting" if any of its
+- # built-computer cells is not a clean pass (anything failing,
+- # pending, or carrying an fpe/checksum/inlists_full flag).
+- # Driving off the matrix instead of `row[:overall]` matters now
+- # that pass-with-pending-neighbors classifies as :pass — we
+- # still want to surface those rows so the user can see *which*
+- # cells didn't report.
+- built_computer_ids = per_computer.select { |r| r[:built] }.map { |r| r[:computer_id] }
+- interesting = []
+- clean_count = 0
+- not_run_count = 0
+- per_test.each do |row|
+-   built_cells = (row[:cells_by_computer] || {}).select { |cid, _| built_computer_ids.include?(cid) }
+-   if built_cells.empty?
+-     not_run_count += 1
+-   elsif built_cells.values.all? { |c| c[:status] == :pass && c[:flags].none? { |_, v| v } }
+-     clean_count += 1
+-   else
+-     interesting << row
+-   end
+- end
 - computers = per_computer.map { |r| r[:computer] }.compact
-- passing_count = per_test.count { |row| row[:overall] == :pass }
-- not_run_count = per_test.count { |row| row[:overall] == :not_run }
 
 %h3.font-semibold.text-fg.flex.items-center.gap-2 Test × Computer matrix
 %p.text-fg-muted.text-sm.mt-1.mb-3
-  Tests with failures, mixed results, pending runs, or flags.
+  Tests with failures, mixed results, pending submissions, or flags.
   - hide_parts = []
-  - hide_parts << "#{passing_count} passing" if passing_count.positive?
+  - hide_parts << "#{clean_count} clean" if clean_count.positive?
   - hide_parts << "#{not_run_count} not yet run" if not_run_count.positive?
   - if hide_parts.any?
     %span.text-fg-subtle
@@ -33,7 +51,7 @@
 - if computers.empty?
   .mt-4.rounded-md.border.border-border-subtle.bg-bg-subtle.px-4.py-6.text-center.text-fg-muted.text-sm
     No computers have submitted results for this commit yet.
-- elsif interesting.empty? && passing_count.positive?
+- elsif interesting.empty? && clean_count.positive?
   .mt-4.rounded-md.border.border-border-subtle.bg-bg-subtle.px-4.py-6.text-center.text-fg-muted.text-sm
     All reported tests are passing on every computer. Nothing to investigate here.
 - elsif interesting.empty?
