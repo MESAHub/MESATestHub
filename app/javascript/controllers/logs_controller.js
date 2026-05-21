@@ -19,12 +19,14 @@ import { Controller } from "@hotwired/stimulus"
 // the chosen computer name without re-deriving the path.
 export default class extends Controller {
   static targets = [
-    "frame", "placeholder", "content", "currentLabel", "computerButton"
+    "frame", "placeholder", "content", "currentLabel", "computerButton",
+    "downloadLink"
   ]
   static values = {
     urlTemplate: String,
     defaultComputer: String,
-    activeTab: String
+    activeTab: String,
+    shortSha: String
   }
 
   connect() {
@@ -68,6 +70,7 @@ export default class extends Controller {
     this._currentComputer = name
     if (this.hasCurrentLabelTarget) this.currentLabelTarget.textContent = name
     this._updateButtonStates(name)
+    this._updateDownloadLink(name)
     this._showLoading(name)
 
     const url = this.urlTemplateValue.replace("__COMPUTER__", encodeURIComponent(name))
@@ -86,6 +89,17 @@ export default class extends Controller {
     } finally {
       this._loading = false
     }
+  }
+
+  _updateDownloadLink(name) {
+    if (!this.hasDownloadLinkTarget) return
+    const href = this.urlTemplateValue.replace("__COMPUTER__", encodeURIComponent(name))
+    this.downloadLinkTarget.setAttribute("href", href)
+    const sha = this.hasShortShaValue ? this.shortShaValue : ""
+    const filename = sha
+      ? `build_log_${sha}_${name}.log`
+      : `build_log_${name}.log`
+    this.downloadLinkTarget.setAttribute("download", filename)
   }
 
   _updateButtonStates(activeName) {

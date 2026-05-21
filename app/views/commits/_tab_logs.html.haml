@@ -17,7 +17,8 @@
                                               data: { controller: "logs",
                                                       logs_url_template_value: commit_build_log_path(branch: @selected_branch.name, sha: @commit.short_sha, computer: "__COMPUTER__"),
                                                       logs_default_computer_value: default_name.to_s,
-                                                      logs_active_tab_value: @active_tab.to_s } }
+                                                      logs_active_tab_value: @active_tab.to_s,
+                                                      logs_short_sha_value: @commit.short_sha } }
   - if @per_computer.empty?
     .px-4.py-10.text-center.text-fg-muted.text-sm No computers have submitted for this commit.
   - else
@@ -43,6 +44,20 @@
 
     .px-4.py-4
       .relative.rounded-md.border.border-border-subtle.bg-bg-subtle.overflow-hidden{ data: { logs_target: "frame" } }
+        -# Download link, floating in the top-right corner. The
+        -# `download` HTML attribute is honored on same-origin URLs
+        -# and triggers a save-as instead of opening the log inline.
+        -# The controller refreshes both `href` and `download` when
+        -# the user picks a different computer.
+        - if default_name
+          = link_to commit_build_log_path(branch: @selected_branch.name, sha: @commit.short_sha, computer: default_name),
+                   download: "build_log_#{@commit.short_sha}_#{default_name}.log",
+                   title: "Download this build log",
+                   class: "absolute top-2 right-2 z-10 inline-flex items-center gap-1 rounded-md border border-border bg-bg-elev px-2 py-1 text-fg-muted hover:bg-bg-muted hover:text-fg no-underline",
+                   style: "box-shadow: var(--shadow-card-sm); font-size: 11px;",
+                   data: { logs_target: "downloadLink" } do
+            = mesa_icon(:download, size: 13)
+            %span Download
         -# Placeholder shown until the controller swaps in real content.
         .py-12.text-center.text-fg-muted.text-sm{ data: { logs_target: "placeholder" } }
           %span Click the Logs tab to load the build log…
