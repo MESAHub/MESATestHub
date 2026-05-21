@@ -1,0 +1,201 @@
+@import "tailwindcss";
+
+/* MESA Test Hub design tokens — ported from
+   docs/design_handoff_mesa_testhub/styles/tokens.css. Each @theme entry
+   becomes a CSS custom property at :root *and* a Tailwind utility — e.g.,
+   `--color-brand` → `.bg-brand` / `.text-brand` / `.border-brand`. */
+@theme {
+  /* Brand */
+  --color-brand: #3a56fd;
+  --color-brand-hover: #2e48e5;
+  --color-brand-pressed: #2438c2;
+  --color-brand-soft: #ebeeff;
+  --color-brand-soft-text: #1e2ebf;
+  --color-brand-ring: rgba(58, 86, 253, 0.35);
+
+  /* Surfaces (light) */
+  --color-bg: #ffffff;
+  --color-bg-subtle: #f7f8fa;
+  --color-bg-muted: #eceef2;
+  --color-bg-elev: #ffffff;
+  --color-border: #d8dde4;
+  --color-border-strong: #b7bec9;
+  --color-border-subtle: #e6e8ec;
+
+  /* Foreground */
+  --color-fg: #1f2328;
+  --color-fg-muted: #57606a;
+  --color-fg-subtle: #8b949e;
+  --color-fg-on-brand: #ffffff;
+
+  /* Status. The base values are brighter than the GitHub Primer
+     defaults the design started from — the original palette read as
+     muddy on subway-map circles and other large color blocks. The
+     "-soft" variants stay accessible-on-white for pill backgrounds. */
+  --color-success: #2ea043;
+  --color-success-fg: #ffffff;
+  --color-success-soft: #d8f5df;
+  --color-success-soft-text: #0a5825;
+  --color-danger: #e5484d;
+  --color-danger-fg: #ffffff;
+  --color-danger-soft: #ffe4e6;
+  --color-danger-soft-text: #a40e26;
+  --color-warning: #d4a014;
+  --color-warning-soft: #fef6cf;
+  --color-warning-soft-text: #6b4900;
+  --color-skipped: #8b949e;
+  --color-skipped-soft: #eceef2;
+  --color-buildfail: #a40e26;
+  --color-buildfail-soft: #f3dada;
+  --color-buildfail-soft-text: #6e1818;
+  --color-info: #3b82f6;
+  --color-info-soft: #ddeaff;
+  --color-info-soft-text: #0a3a8f;
+
+  /* Shadows */
+  --shadow-card-sm: 0 1px 0 rgba(31, 35, 40, 0.04);
+  --shadow-card-md: 0 1px 3px rgba(31, 35, 40, 0.06), 0 8px 24px rgba(31, 35, 40, 0.05);
+  --shadow-card-lg: 0 8px 32px rgba(31, 35, 40, 0.1);
+  --shadow-focus: 0 0 0 3px var(--color-brand-ring);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  /* Type */
+  --font-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono:
+    "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Layout */
+  --spacing-nav-h: 52px;
+  --container-app: 1320px;
+}
+
+/* Theme switching via <html data-theme="dark">. The variable overrides
+   below replace the @theme defaults at runtime, so every utility built on
+   them flips automatically. The custom `dark:` variant lets us scope
+   utilities to dark mode when we need something stronger than a token
+   swap (e.g., different shadow, different glyph). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+[data-theme="dark"] {
+  --color-bg: #0d1117;
+  --color-bg-subtle: #0a0e14;
+  --color-bg-muted: #161b22;
+  --color-bg-elev: #161b22;
+  --color-border: #2a3038;
+  --color-border-strong: #3d444d;
+  --color-border-subtle: #21262d;
+
+  --color-fg: #e6edf3;
+  --color-fg-muted: #9198a1;
+  --color-fg-subtle: #6e7681;
+
+  --color-brand: #6b82ff;
+  --color-brand-hover: #8195ff;
+  --color-brand-pressed: #4f6afd;
+  --color-brand-soft: rgba(107, 130, 255, 0.14);
+  --color-brand-soft-text: #a8b6ff;
+  --color-brand-ring: rgba(107, 130, 255, 0.35);
+
+  --color-success: #3fb950;
+  --color-success-soft: rgba(63, 185, 80, 0.15);
+  --color-success-soft-text: #4ac263;
+  --color-danger: #f85149;
+  --color-danger-soft: rgba(248, 81, 73, 0.15);
+  --color-danger-soft-text: #ff7b73;
+  --color-warning: #d29922;
+  --color-warning-soft: rgba(210, 153, 34, 0.15);
+  --color-warning-soft-text: #e3b341;
+  --color-skipped: #6e7681;
+  --color-skipped-soft: rgba(110, 118, 129, 0.18);
+  --color-buildfail: #9d2929;
+  --color-buildfail-soft: rgba(157, 41, 41, 0.22);
+  --color-buildfail-soft-text: #ff9b9b;
+  --color-info: #6b82ff;
+  --color-info-soft: rgba(107, 130, 255, 0.18);
+  --color-info-soft-text: #a8b6ff;
+
+  --shadow-card-sm: 0 1px 0 rgba(0, 0, 0, 0.4);
+  --shadow-card-md: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-card-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* Base — applied only on pages that opt into the modern layout via the
+   `.mesa-modern` class on <body>. We avoid touching `body` directly so the
+   legacy Bootstrap pages keep their existing typography while the migration
+   is in flight. */
+@layer base {
+  .mesa-modern {
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01", "ss03";
+    color: var(--color-fg);
+    background: var(--color-bg-subtle);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .mesa-modern .mono,
+  .mesa-modern code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+  }
+}
+
+/* Component primitives — applied via class names rather than utility
+   stacks where the same widget shows up across multiple views. The
+   focus ring especially needs `--color-brand-ring` (which flips per
+   theme) and Tailwind's built-in ring utilities don't reach our
+   tokens cleanly.
+
+   All rules are scoped under `.mesa-modern` so legacy Bootstrap pages
+   are unaffected. */
+@layer components {
+  .mesa-modern .mesa-input {
+    @apply w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg;
+    transition: box-shadow 0.12s, border-color 0.12s;
+  }
+  .mesa-modern .mesa-input::placeholder {
+    color: var(--color-fg-subtle);
+  }
+  .mesa-modern .mesa-input:focus,
+  .mesa-modern .mesa-input:focus-visible {
+    border-color: var(--color-brand);
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+
+  .mesa-modern .mesa-label {
+    @apply block text-xs font-medium uppercase tracking-wide text-fg-subtle;
+  }
+
+  .mesa-modern .mesa-btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-elev px-3 py-1.5 text-sm font-medium text-fg cursor-pointer;
+    transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+  }
+  .mesa-modern .mesa-btn:hover {
+    background: var(--color-bg-muted);
+  }
+  .mesa-modern .mesa-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+  .mesa-modern .mesa-btn-primary {
+    background: var(--color-brand);
+    border-color: var(--color-brand);
+    color: var(--color-fg-on-brand);
+  }
+  .mesa-modern .mesa-btn-primary:hover {
+    background: var(--color-brand-hover);
+    border-color: var(--color-brand-hover);
+  }
+  .mesa-modern .mesa-btn-block {
+    @apply w-full;
+  }
+}

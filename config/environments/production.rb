@@ -33,7 +33,12 @@ Rails.application.configure do
 
   # Compress JavaScripts and CSS.
   config.assets.js_compressor = :terser
-  # config.assets.css_compressor = :sass
+  # Explicitly disable the CSS compressor: sassc-rails defaults to :sass in
+  # non-development environments, but SassC can't parse Tailwind v4's modern
+  # color syntax (rgb(from red r g b), etc.). Tailwind's own build is already
+  # minified; the legacy Bootstrap bundle isn't huge enough to need extra
+  # compression. Revisit after Phase 4 drops Bootstrap and sassc-rails.
+  config.assets.css_compressor = nil
 
   # Do not fallback to assets pipeline if a precompiled asset is missed.
   config.assets.compile = true

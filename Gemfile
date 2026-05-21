@@ -33,13 +33,23 @@ gem 'faraday-http-cache'
 gem 'faraday-retry'
 gem 'github_webhook', '~> 1.4'
 
-# Frontend (Phase 4 retires these)
+# Frontend: legacy stack — retired piecewise as views migrate to the
+# Tailwind/Hotwire layout. Removed in Phase 4 Step 9.
 gem 'bootstrap', '~> 4.5'
 gem 'bootstrap_form'
 gem 'haml', '~> 6.1.2'
 gem 'haml-rails'
 gem 'high_voltage'
 gem 'jquery-rails'
+
+# Frontend: modern stack — coexists with the legacy stack during the
+# Phase 4 migration. The modern layout (`layouts/modern.html.haml`)
+# opts in per-controller; the legacy `application.html.haml` keeps
+# serving everything else.
+gem 'tailwindcss-rails', '~> 4.0'
+gem 'turbo-rails', '~> 2.0'
+gem 'stimulus-rails', '~> 1.3'
+gem 'importmap-rails', '~> 2.0'
 
 gem 'tzinfo-data', platforms: [:mingw, :mswin, :x64_mingw, :jruby]
 
