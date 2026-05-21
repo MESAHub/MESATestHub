@@ -17,4 +17,9 @@
               %div.font-mono.tabular-nums.text-fg{ class: "text-[14px]" }= row[:counts][key]
       - else
         .mt-2.rounded-md.bg-buildfail-soft.px-3.py-2.text-buildfail-soft-text.text-xs
-          Compilation failed. No test data for this computer.
+          %p.mb-1 Compilation failed. No test data for this computer.
+          - if row[:computer]
+            = link_to "View build log →",
+                     "?tab=logs&computer=#{row[:computer].name}",
+                     class: "underline underline-offset-2 hover:opacity-80 transition-opacity font-medium",
+                     data: { action: "click->tabs#switchFromLink" }

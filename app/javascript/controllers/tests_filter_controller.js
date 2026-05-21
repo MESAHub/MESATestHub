@@ -19,23 +19,24 @@ export default class extends Controller {
     this.applyActive(this.activeValue)
     // Banner shortcuts ("See mixed tests", "See failing tests")
     // route through the tabs controller, which broadcasts a
-    // `tabs:filter` event after switching panels. Pick that up so
-    // landing on the Tests tab from a banner button lands on the
-    // right pre-applied chip rather than the default "All".
-    this._onTabsFilter = this._handleTabsFilter.bind(this)
-    document.addEventListener("tabs:filter", this._onTabsFilter)
+    // `tabs:request` event with `detail.params` carrying any URL
+    // params other than `tab` itself. Pick the `filter` one off so
+    // landing on Tests from a shortcut lands on the right chip
+    // rather than the default "All".
+    this._onTabsRequest = this._handleTabsRequest.bind(this)
+    document.addEventListener("tabs:request", this._onTabsRequest)
   }
 
   disconnect() {
-    document.removeEventListener("tabs:filter", this._onTabsFilter)
+    document.removeEventListener("tabs:request", this._onTabsRequest)
   }
 
-  _handleTabsFilter(event) {
-    if (!event.detail) return
-    if (event.detail.tab !== "tests") return
-    if (!event.detail.filter) return
-    this.activeValue = event.detail.filter
-    this.applyActive(event.detail.filter)
+  _handleTabsRequest(event) {
+    if (!event.detail || event.detail.tab !== "tests") return
+    const filter = event.detail.params && event.detail.params.filter
+    if (!filter) return
+    this.activeValue = filter
+    this.applyActive(filter)
   }
 
   select(event) {

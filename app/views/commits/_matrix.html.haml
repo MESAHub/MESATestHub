@@ -19,21 +19,11 @@
 - # Driving off the matrix instead of `row[:overall]` matters now
 - # that pass-with-pending-neighbors classifies as :pass — we
 - # still want to surface those rows so the user can see *which*
-- # cells didn't report.
+- # cells didn't report. The triage lives in CommitsHelper because
+- # HAML can't carry multi-line case/if dispatch in a `- ...`
+- # block.
 - built_computer_ids = per_computer.select { |r| r[:built] }.map { |r| r[:computer_id] }
-- interesting = []
-- clean_count = 0
-- not_run_count = 0
-- per_test.each do |row|
--   built_cells = (row[:cells_by_computer] || {}).select { |cid, _| built_computer_ids.include?(cid) }
--   if built_cells.empty?
--     not_run_count += 1
--   elsif built_cells.values.all? { |c| c[:status] == :pass && c[:flags].none? { |_, v| v } }
--     clean_count += 1
--   else
--     interesting << row
--   end
-- end
+- interesting, clean_count, not_run_count = matrix_partition(per_test, built_computer_ids)
 - computers = per_computer.map { |r| r[:computer] }.compact
 
 %h3.font-semibold.text-fg.flex.items-center.gap-2 Test × Computer matrix

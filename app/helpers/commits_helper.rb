@@ -162,6 +162,34 @@ module CommitsHelper
     match && match[1].to_i
   end
 
+  # Triage per_test rows into the three buckets the Summary matrix
+  # cares about: rows where any built-computer cell isn't a clean
+  # pass (the "interesting" rows to show), rows where every built
+  # cell is a clean pass (hidden), and rows with no built cells at
+  # all (also hidden, counted separately so the caption can read
+  # "Hiding X clean and Y not yet run"). Built here as a helper so
+  # the partial doesn't drag a multi-line case dispatch through
+  # HAML's one-statement-per-line constraint.
+  def matrix_partition(per_test, built_computer_ids)
+    interesting = []
+    clean_count = 0
+    not_run_count = 0
+    built_set = built_computer_ids.to_set
+    per_test.each do |row|
+      built_cells = (row[:cells_by_computer] || {}).select do |cid, _|
+        built_set.include?(cid)
+      end
+      if built_cells.empty?
+        not_run_count += 1
+      elsif built_cells.values.all? { |c| c[:status] == :pass && c[:flags].none? { |_, v| v } }
+        clean_count += 1
+      else
+        interesting << row
+      end
+    end
+    [interesting, clean_count, not_run_count]
+  end
+
   # Visual attributes for a Test × Computer matrix cell. Returns a
   # hash the `_matrix_cell` partial uses to render the cell without
   # bringing the dispatching logic into HAML. Encoding follows the

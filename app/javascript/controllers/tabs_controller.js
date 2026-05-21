@@ -41,14 +41,18 @@ export default class extends Controller {
     this.applyActive(tab)
     this.pushUrl(tab)
 
-    // If the link carries a `filter` param (banner shortcut from
-    // "See failing tests", "See mixed tests"), broadcast it so the
-    // target panel's filter controller can apply it. We bubble the
-    // event up to `document` so per-panel listeners can subscribe
-    // anywhere in the tree.
-    const filter = url.searchParams.get("filter")
-    if (filter) {
-      this.dispatch("filter", { detail: { tab, filter }, bubbles: true, prefix: "tabs" })
+    // Forward any non-`tab` URL params so panel-level controllers
+    // (filter chips, logs picker, etc.) can react to the post-switch
+    // state. Banner / cross-panel shortcuts pack details like
+    // `filter=mixed` or `computer=rusty` into the href; this single
+    // `tabs:request` event delivers them to whichever controller
+    // cares.
+    const params = {}
+    for (const [key, value] of url.searchParams) {
+      if (key !== "tab") params[key] = value
+    }
+    if (Object.keys(params).length > 0) {
+      this.dispatch("request", { detail: { tab, params }, bubbles: true, prefix: "tabs" })
     }
   }
 

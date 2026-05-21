@@ -36,7 +36,9 @@ export default class extends Controller {
     this._available = null
     this._currentComputer = this.defaultComputerValue
     this._onTabsChange = this._handleTabsChange.bind(this)
+    this._onTabsRequest = this._handleTabsRequest.bind(this)
     document.addEventListener("tabs:change", this._onTabsChange)
+    document.addEventListener("tabs:request", this._onTabsRequest)
     // Probe upstream so the tab strip can disable Logs before the
     // user clicks. Runs unconditionally — the side effect belongs
     // to the strip, not the active panel.
@@ -45,12 +47,34 @@ export default class extends Controller {
 
   disconnect() {
     document.removeEventListener("tabs:change", this._onTabsChange)
+    document.removeEventListener("tabs:request", this._onTabsRequest)
   }
 
   _handleTabsChange(event) {
     if (event.detail && event.detail.tab === "logs") {
       this._maybeLoadInitial()
     }
+  }
+
+  // Cross-panel handoff: a "View build log" link in the Computers
+  // tab packs `?tab=logs&computer=<name>` and the tabs controller
+  // forwards both via `tabs:request`. Load that specific log even
+  // if the upstream-probe-on-default-computer disabled the tab,
+  // and re-enable the tab so subsequent picker clicks work.
+  _handleTabsRequest(event) {
+    if (!event.detail || event.detail.tab !== "logs") return
+    const computer = event.detail.params && event.detail.params.computer
+    if (!computer) return
+    this._enableLogsTab()
+    this.loadComputer(computer)
+  }
+
+  _enableLogsTab() {
+    const link = document.querySelector('[data-tabs-target="link"][data-tab="logs"]')
+    if (!link) return
+    link.removeAttribute("aria-disabled")
+    link.removeAttribute("title")
+    link.classList.remove("opacity-50", "cursor-not-allowed")
   }
 
   _maybeLoadInitial() {
