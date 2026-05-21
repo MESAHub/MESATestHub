@@ -1,5 +1,17 @@
 - content_for :title, "#{@commit.short_sha} · MESA Test Hub"
 
+-# Opt this page out of Turbo Drive's snapshot cache. The tabs
+-# Stimulus controller does `history.replaceState` to keep
+-# `?tab=…` in the URL bookmarkable; that desynchronises Turbo's
+-# URL tracking just enough that on browser-back from /commits to
+-# /commits/:sha the URL gets updated but the cached snapshot
+-# doesn't get re-applied, leaving the user staring at the index
+-# body under the show URL. Forcing a fresh fetch on back nav
+-# avoids the whole snapshot-vs-URL mismatch.
+- content_for :head_extras do
+  %meta{ name: "turbo-cache-control", content: "no-cache" }
+
+
 .space-y-4{ data: { controller: "tabs", tabs_active_value: @active_tab.to_s } }
   = render "commits/show_breadcrumb"
   = render "commits/show_hero"

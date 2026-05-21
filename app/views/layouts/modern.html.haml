@@ -7,6 +7,9 @@
     %meta{ name: "description", content: content_for?(:description) ? yield(:description) : "MESA Test Hub — CI results for the MESA stellar evolution code." }
     = csrf_meta_tags
     = csp_meta_tag
+    -# Per-page `<head>` extras (e.g. turbo-cache-control). Pages opt
+    -# in via `content_for :head_extras do ... end`.
+    = yield :head_extras
 
     -# Pre-paint theme hydration to avoid flash of incorrect color scheme.
     -# Reads `localStorage.mesa-theme` (light|dark|system); falls back to
