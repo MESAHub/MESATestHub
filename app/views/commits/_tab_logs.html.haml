@@ -1,0 +1,21 @@
+-# Logs tab — computer picker + link out to flatiron logs. Substep
+-# pending for in-page log streaming.
+.rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+  %h3.font-semibold.text-fg.mb-3 Build &amp; test logs
+  - if @per_computer.empty?
+    %p.text-fg-muted.text-sm No computers have submitted for this commit.
+  - else
+    %p.text-fg-muted.text-sm.mb-3
+      Log files live on the Flatiron logs host; each link below opens the build log for that computer.
+    %ul.divide-y.divide-border-subtle
+      - @per_computer.each do |row|
+        - log_url = "https://mesa-logs.flatironinstitute.org/#{@commit.sha}/#{row[:computer]&.name}/build.log"
+        %li.flex.items-center.justify-between.gap-3.py-2
+          .flex.items-center.gap-2.min-w-0
+            %span.inline-block.h-2.w-2.rounded-full.shrink-0{ class: status_dot_class_for_computer(row[:state]) }
+            %span.font-mono.text-fg.truncate{ class: "text-[12px]" }= row[:computer]&.name
+          = link_to "Build log",
+                   log_url,
+                   target: "_blank", rel: "noopener",
+                   class: "mesa-btn",
+                   style: "padding: 4px 10px; font-size: 12px;"

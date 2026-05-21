@@ -1,0 +1,27 @@
+-# Breadcrumb: ← Commits / branch chip / sha — plus prev/next jumps.
+%nav.flex.flex-wrap.items-center.justify-between.gap-3
+  .flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+    = link_to commits_path(branch: @selected_branch.name),
+             class: "inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-bg-muted hover:text-fg no-underline" do
+      = mesa_icon(:arrow_left, size: 14)
+      %span Commits
+    %span.text-fg-subtle /
+    = render "branch_picker", branch: @selected_branch, branches: @branches
+    %span.text-fg-subtle /
+    %span.font-mono.text-fg= @commit.short_sha
+
+  .flex.items-center.gap-2
+    - if @neighbors[:older]
+      = link_to commit_path(branch: @selected_branch.name, sha: @neighbors[:older].short_sha),
+               class: "mesa-btn",
+               style: "padding: 4px 10px; font-size: 12px;",
+               title: @neighbors[:older].message_first_line(60) do
+        = mesa_icon(:arrow_left, size: 12)
+        %span.font-mono.tabular-nums= @neighbors[:older].short_sha
+    - if @neighbors[:newer]
+      = link_to commit_path(branch: @selected_branch.name, sha: @neighbors[:newer].short_sha),
+               class: "mesa-btn",
+               style: "padding: 4px 10px; font-size: 12px;",
+               title: @neighbors[:newer].message_first_line(60) do
+        %span.font-mono.tabular-nums= @neighbors[:newer].short_sha
+        = mesa_icon(:arrow_right, size: 12)

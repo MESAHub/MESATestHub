@@ -1,0 +1,20 @@
+-# Computers tab — per-computer cards, sorted worst-first. Substep
+-# coming in a follow-up; first pass is functional but visually basic.
+.grid.gap-3{ class: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" }
+  - @per_computer.each do |row|
+    - accent = computer_state_color(row[:state])
+    .rounded-lg.border.border-border.bg-bg-elev.p-4{ style: "box-shadow: var(--shadow-card-sm); border-left: 3px solid var(--color-#{accent});" }
+      .flex.items-center.justify-between.gap-2.mb-2
+        .flex.items-center.gap-2.min-w-0
+          %span.inline-block.h-2.w-2.rounded-full.shrink-0{ class: status_dot_class_for_computer(row[:state]) }
+          %span.font-mono.text-fg.truncate{ class: "text-[13px]" }= row[:computer]&.name
+        %span.text-fg-muted.font-mono.tabular-nums{ class: "text-[11px]" }= summary_for_computer(row)
+      - if row[:built]
+        .grid.grid-cols-5.gap-2.mt-2
+          - %i[pass fail pending fpe checksum].each do |key|
+            .rounded-md.bg-bg-subtle.px-2.py-1.text-center
+              %div.text-fg-subtle.uppercase.tracking-wide{ class: "text-[10px]" }= key.to_s.upcase
+              %div.font-mono.tabular-nums.text-fg{ class: "text-[14px]" }= row[:counts][key]
+      - else
+        .mt-2.rounded-md.bg-buildfail-soft.px-3.py-2.text-buildfail-soft-text.text-xs
+          Compilation failed. No test data for this computer.

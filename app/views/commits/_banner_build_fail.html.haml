@@ -1,0 +1,20 @@
+-# All builds failed. No test data. Locals: state, failed_ids, computers_by_id, etc.
+.rounded-md.border.border-border.bg-bg-elev.p-3{ style: "border-left: 3px solid var(--color-buildfail);" }
+  .flex.items-start.gap-3
+    %span.text-buildfail.shrink-0= mesa_icon(:x, size: 16)
+    .flex-1.min-w-0.space-y-1
+      %p.text-sm
+        %span.font-semibold.text-buildfail Build failed on every computer.
+        %span.text-fg-muted No test data for this commit.
+      - if failed_ids.any?
+        %p.text-fg-subtle{ class: "text-[11px]" }
+          %span Failed:
+          - failed_ids.each_with_index do |id, i|
+            %span.font-mono.text-buildfail-soft-text.ml-1
+              = computers_by_id[id]&.name || "computer ##{id}"
+              = ',' unless i == failed_ids.size - 1
+    %a.mesa-btn.shrink-0{ href: "?tab=computers",
+                          style: "padding: 4px 10px; font-size: 12px;",
+                          data: { action: "click->tabs#switchFromLink" } }
+      See computers
+      = mesa_icon(:arrow_right, size: 12)

@@ -1,0 +1,20 @@
+-# Tests tab — per-test rows with mini computer ribbon. Substep
+-# coming in a follow-up; for now render the per_test_summary as a
+-# compact list so the page is functional.
+.rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);" }
+  .px-4.py-2.border-b.border-border-subtle.text-fg-subtle.text-xs
+    = pluralize(@per_test.size, "test case")
+    on this commit. Full search + ribbon coming in a follow-up substep.
+  - if @per_test.empty?
+    .px-4.py-10.text-center.text-fg-subtle.text-sm No tests reported for this commit.
+  - else
+    %ul.divide-y.divide-border-subtle
+      - @per_test.each do |row|
+        %li.flex.items-center.gap-3.px-4.py-2
+          %span.inline-block.h-2.w-2.rounded-full.shrink-0{ class: status_dot_class_for_test(row[:overall]) }
+          .flex-1.min-w-0
+            %span.font-mono.text-fg.truncate{ class: "text-[12px]" }= row[:test_case]&.name
+            %span.text-fg-subtle.ml-1{ class: "text-[11px]" }
+              = surround '(', ')' do
+                = row[:test_case]&.module
+          %span.text-fg-muted.font-mono.tabular-nums{ class: "text-[11px]" }= summary_for_test(row)

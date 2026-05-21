@@ -1,0 +1,10 @@
+-# Some test runs still in flight. Info-blue, no action button.
+- count = state[:tests][:pending_tests]
+.rounded-md.border.border-border.bg-bg-elev.p-3{ style: "border-left: 3px solid var(--color-info);" }
+  .flex.items-start.gap-3
+    %span.text-info.shrink-0= mesa_icon(:clock, size: 16)
+    .flex-1.min-w-0
+      %p.text-sm
+        %span.font-semibold.text-info= pluralize(count, "test")
+        still running.
+        %span.text-fg-muted Results below may be incomplete.

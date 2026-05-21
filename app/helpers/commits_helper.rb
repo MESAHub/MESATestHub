@@ -7,13 +7,18 @@ module CommitsHelper
     x: '<path d="M4 4l8 8M12 4l-8 8"/>'.html_safe,
     branch: '<circle cx="5" cy="3" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="8" r="1.5"/><path d="M5 4.5v7M5 9c0-2 3-2 3-3.5"/>'.html_safe,
     chevron: '<path d="M4 6l4 4 4-4"/>'.html_safe,
+    arrow_left: '<path d="M11 8H3M3 8l4-4M3 8l4 4"/>'.html_safe,
+    arrow_right: '<path d="M3 8h9M12 8l-4-4M12 8l-4 4"/>'.html_safe,
     search: '<circle cx="7" cy="7" r="4"/><path d="M10 10l3 3"/>'.html_safe,
     clock: '<circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/>'.html_safe,
     eye_off: '<path d="M2 8s2-4 6-4 6 4 6 4-2 4-6 4-6-4-6-4zM2 2l12 12"/>'.html_safe,
     warn: '<path d="M8 2l6 11H2l6-11zM8 7v3M8 11.5v.01"/>'.html_safe,
     wrench: '<path d="M10.5 1.5a3 3 0 014 4l-1.5 1.5-1-1 1.2-1.2a1.5 1.5 0 00-2.1-2.1L10 3.8l-1-1 1.5-1.3zM9 5l5 5-3 3-5-5 3-3zM5.5 8.5l-3 3a1 1 0 001.4 1.4l3-3"/>'.html_safe,
     neq: '<path d="M3 6h10M3 10h10"/><path d="M11 3l-6 10"/>'.html_safe,
-    plus: '<path d="M8 3v10M3 8h10"/>'.html_safe
+    plus: '<path d="M8 3v10M3 8h10"/>'.html_safe,
+    file: '<path d="M4 2h5l3 3v9H4z"/><path d="M9 2v3h3"/>'.html_safe,
+    github: '<path d="M8 1.5C4.4 1.5 1.5 4.4 1.5 8c0 2.9 1.9 5.3 4.4 6.2.3.1.4-.1.4-.3v-1.2c-1.8.4-2.2-.8-2.2-.8-.3-.7-.7-.9-.7-.9-.6-.4 0-.4 0-.4.6 0 1 .7 1 .7.6 1 1.6.7 2 .6.1-.4.2-.7.4-.9-1.4-.2-2.9-.7-2.9-3.2 0-.7.3-1.3.7-1.7-.1-.2-.3-.9.1-1.8 0 0 .6-.2 1.8.7.5-.1 1.1-.2 1.6-.2.6 0 1.1.1 1.6.2 1.2-.8 1.8-.7 1.8-.7.4.9.1 1.6.1 1.8.4.4.7 1 .7 1.7 0 2.5-1.5 3-2.9 3.2.2.2.4.6.4 1.2v1.8c0 .2.1.4.4.3 2.6-.9 4.4-3.3 4.4-6.2 0-3.6-2.9-6.5-6.5-6.5z"/>'.html_safe,
+    copy: '<rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1 1 0 011-1h7"/>'.html_safe
   }.freeze
 
   def mesa_icon(name, size: 16, css: nil)
@@ -134,6 +139,129 @@ module CommitsHelper
     safe_join(chips, content_tag(:span, " ", class: "inline-block w-1"))
   end
 
+  # Small label-over-value block used in the commit detail hero's
+  # stat row. Label is uppercase 11px; value is 22px/600. `color` is
+  # a Tailwind text-* utility class applied to the value.
+  def stat_block(label:, value:, color: "text-fg")
+    content_tag(:div, class: "min-w-0") do
+      safe_join([
+        content_tag(:span, label, class: "mesa-label mb-1"),
+        content_tag(:span, value,
+                    class: "block font-semibold tabular-nums #{color}",
+                    style: "font-size: 22px; letter-spacing: -0.4px; line-height: 1.1;")
+      ])
+    end
+  end
+
+  # Extract a PR number from a commit message of the form
+  # "Subject line (#1234)" or "(#1234) Subject" — MESA uses the
+  # trailing-parens form. Returns the integer or nil.
+  def commit_pr_number(commit)
+    match = commit.message.to_s.match(/\(#(\d+)\)/)
+    match && match[1].to_i
+  end
+
+  # Tailwind background class for a per-computer status dot in the
+  # Summary sidebar / Computers tab. Mirrors the worst-first colors
+  # used elsewhere.
+  def status_dot_class_for_computer(state)
+    case state
+    when :build_fail then "bg-buildfail"
+    when :fail       then "bg-danger"
+    when :pending    then "bg-info"
+    when :mixed      then "bg-warning"
+    when :all_pass   then "bg-success"
+    else "bg-skipped"
+    end
+  end
+
+  # One-line mono summary text for a per-computer row. Worst-first
+  # ranking matches the design's "right side of the sidebar entry":
+  # "no build" → "{n} fail" → "{n} pending" → wrench + checksum
+  # counts → "{pass} ok".
+  def summary_for_computer(row)
+    counts = row[:counts]
+    return "no build" if row[:state] == :build_fail
+    return "#{counts[:fail]} fail" if counts[:fail].positive?
+    return "#{counts[:pending]} pending" if counts[:pending].positive?
+    flag_parts = []
+    flag_parts << "#{counts[:fpe]} fpe" if counts[:fpe].positive?
+    flag_parts << "#{counts[:checksum]} ≠" if counts[:checksum].positive?
+    return flag_parts.join(" · ") if flag_parts.any?
+    "#{counts[:pass]} ok"
+  end
+
+  # Dot color for a per-test summary row. The design treats :flagged
+  # the same as :mixed for the indicator color (a passing-but-flagged
+  # test is amber, not green) — different from :pass.
+  def status_dot_class_for_test(overall)
+    case overall
+    when :fail    then "bg-danger"
+    when :mixed   then "bg-warning"
+    when :flagged then "bg-warning"
+    when :pending then "bg-info"
+    when :pass    then "bg-success"
+    else "bg-skipped"
+    end
+  end
+
+  # Numeric badge for the Tests tab. Picks the first nonzero of
+  # (uniform_failing, mixed, fpe+checksum) — matches the prototype's
+  # priority. Returns `[value, tone_classes]` or nil when no badge
+  # should render. Tone is the Tailwind class pair for the badge
+  # background + text color.
+  def tests_tab_badge(state)
+    tests = state[:tests]
+    flags = state[:flags]
+    if tests[:uniform_failing_tests].positive?
+      [tests[:uniform_failing_tests], "bg-danger-soft text-danger-soft-text"]
+    elsif tests[:mixed_tests].positive?
+      [tests[:mixed_tests], "bg-warning-soft text-warning-soft-text"]
+    elsif (flags[:fpe].to_i + flags[:checksum].to_i).positive?
+      [flags[:fpe].to_i + flags[:checksum].to_i, "bg-warning-soft text-warning-soft-text"]
+    end
+  end
+
+  # Numeric badge for the Computers tab. Equal to the failed-build
+  # count; toned buildfail when *every* build failed, otherwise amber.
+  # Returns `[value, tone_classes]` or nil.
+  def computers_tab_badge(state)
+    failed = state[:build][:failed_build_computer_ids].size
+    return nil if failed.zero?
+    tone =
+      if state[:build][:status] == :all_fail
+        "bg-buildfail-soft text-buildfail-soft-text"
+      else
+        "bg-warning-soft text-warning-soft-text"
+      end
+    [failed, tone]
+  end
+
+  # CSS color token name (sans `--color-` prefix) keyed to a per-row
+  # state symbol. Used by the Computers tab's card-border accent.
+  def computer_state_color(state)
+    {
+      build_fail: "buildfail",
+      fail: "danger",
+      pending: "info",
+      mixed: "warning",
+      all_pass: "success"
+    }.fetch(state, "skipped")
+  end
+
+  # Compact one-line summary for a per-test row in the Tests tab.
+  def summary_for_test(row)
+    counts = row[:counts]
+    return "#{counts[:fail]} fail" if counts[:fail] > 0 && counts[:pass] == 0
+    return "#{counts[:fail]} fail · #{counts[:pass]} pass" if counts[:fail].positive?
+    return "#{counts[:pending]} pending" if counts[:pending].positive?
+    flag_parts = []
+    flag_parts << "#{counts[:fpe]} fpe" if counts[:fpe].positive?
+    flag_parts << "#{counts[:checksum]} ≠" if counts[:checksum].positive?
+    return flag_parts.join(" · ") if flag_parts.any?
+    "#{counts[:pass]} ok"
+  end
+
   # Initials avatar for a commit author. Hue is deterministically
   # derived from the name so the same author looks the same across
   # pages. Soft hue, dark text, 22px circle.
@@ -185,6 +313,19 @@ module CommitsHelper
       next nil if by_bucket[id].empty?
       [id, label, by_bucket[id]]
     end
+  end
+
+  # Past-tense "6d ago" / "2w ago" / "3mo ago" — the conventional shape
+  # for "how long ago was this committed?" Used on the commit detail
+  # hero where there's no cursor to anchor a "−6d" reading to.
+  def time_ago_compact(time)
+    seconds = (Time.current - time).to_i
+    return "just now" if seconds < 60
+    return "#{seconds / 60}m ago"   if seconds < 3600
+    return "#{seconds / 3600}h ago" if seconds < 86_400
+    return "#{seconds / 86_400}d ago" if seconds < 86_400 * 30
+    return "#{seconds / (86_400 * 30)}mo ago" if seconds < 86_400 * 365
+    "#{seconds / (86_400 * 365)}y ago"
   end
 
   # Compact "−6d" / "−2w" / "−3mo" offset from a reference moment.
