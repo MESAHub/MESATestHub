@@ -112,13 +112,16 @@ that makes the change.
   `DISABLE_SPRING=1 bin/rails tailwindcss:build`. The Rails dev
   server *will not* pick up new class names on its own — Sprockets
   serves the existing `tailwind.css` build until it's rewritten.
-- **HAML class shorthand can't hold Tailwind brackets.** `.text-[10px]`
-  in HAML's dotted-shorthand fails to parse (HAML thinks the `[` opens
-  an attribute). Any utility with brackets (`text-[10px]`,
-  `grid-cols-[12px_minmax(0,2.4fr)]`, etc.) must live in the explicit
-  `{ class: "…" }` hash. Same goes for empty tags — write `%span &nbsp;`
-  or give the tag content; bare `%span` followed by sibling tags
-  trips an "illegal nesting" error.
+- **HAML class shorthand can't hold Tailwind brackets *or* decimal
+  class names.** `.text-[10px]` in the dotted-shorthand fails to parse
+  (HAML thinks `[` opens an attribute), and `.h-1\.5` doesn't work
+  either — `\.` is not a valid escape; HAML eats `h-1` as one class
+  and dumps the rest of the line as text content. Any utility with
+  brackets (`text-[10px]`, `grid-cols-[12px_minmax(0,2.4fr)]`) or
+  decimal names (`h-1.5`, `w-2.5`, `gap-0.5`) must live in the
+  explicit `{ class: "…" }` hash. Same goes for empty tags — write
+  `%span &nbsp;` or give the tag content; bare `%span` followed by
+  sibling tags trips an "illegal nesting" error.
 - **Dev preview routes must mount BEFORE catch-all `/:branch/commits`.**
   The `branch: /.*/` constraint will happily consume `dev/preview` as
   a branch name. The `dev/preview/...` block lives near the top of

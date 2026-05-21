@@ -38,7 +38,7 @@
                            logs_computer: name,
                            logs_state: row[:state].to_s,
                            action: "click->logs#selectComputer" } }
-            %span.inline-block.h-1\.5.w-1\.5.rounded-full.mr-1{ class: status_dot_class_for_computer(row[:state]) }
+            %span{ class: "inline-block h-1.5 w-1.5 rounded-full mr-1 #{status_dot_class_for_computer(row[:state])}" }
             = name
 
     .px-4.py-4
