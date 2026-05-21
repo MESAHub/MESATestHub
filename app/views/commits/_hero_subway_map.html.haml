@@ -51,16 +51,26 @@
           "aria-label": "Recent #{count} commits, current outlined",
           class: "block w-full",
           style: "height: auto;" }
-      %defs
-        %marker#hero-subway-arrow{ viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "6", markerHeight: "6", orient: "auto-start-reverse", fill: "var(--color-border-strong)" }
-          %path{ d: "M 0 0 L 10 5 L 0 10 z" }
       - if count > 1
+        -# Connecting line — no end-cap arrow now. The per-segment
+        -# arrowheads below carry the direction-of-time signal, so a
+        -# single right-end arrow would be redundant noise.
         %line{ x1: pad_x, y1: center_y,
-               x2: pad_x + station_spacing * (count - 1) + 10,
+               x2: pad_x + station_spacing * (count - 1),
                y2: center_y,
                stroke: "var(--color-border-strong)",
-               "stroke-width": 2,
-               "marker-end": "url(#hero-subway-arrow)" }
+               "stroke-width": 2 }
+        -# Midpoint arrowheads: one small filled triangle centered
+        -# between consecutive stations, pointing right (newest →
+        -# oldest). Each triangle is ~9px wide × 8px tall. Inline
+        -# `<polygon>` rather than a `marker-mid` because `<line>`
+        -# elements don't accept mid markers and switching to a
+        -# `<polyline>` introduces redundant marker positions at
+        -# every station.
+        - (0...count - 1).each do |i|
+          - mx = pad_x + station_spacing * (i + 0.5)
+          %polygon{ points: "#{mx - 4},#{center_y - 4} #{mx + 5},#{center_y} #{mx - 4},#{center_y + 4}",
+                    fill: "var(--color-border-strong)" }
       - window.each_with_index do |commit, i|
         - state = commit.commit_state
         - x = pad_x + station_spacing * i
