@@ -1,16 +1,15 @@
--# Summary tab — matrix + sidebar. Substep coming in a follow-up; for
--# now render a coverage card so the page is meaningful.
+-# Summary tab. Two-column grid at lg+: filtered Test × Computer
+-# matrix on the left, computers sidebar on the right. The matrix
+-# filters to only failing/mixed/pending/flagged tests so the
+-# user's attention lands on what's actually broken; the unfiltered
+-# list lives on the Tests tab.
 .grid.gap-4{ class: "grid-cols-1 lg:grid-cols-[1fr_320px]" }
   .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
-    %h3.font-semibold.text-fg.mb-2 Test × Computer matrix
-    %p.text-fg-muted.text-sm.mb-4
-      The cross-tab of every test case × every computer that submitted, with cell colors keyed to status and flags. Coming in a follow-up substep.
-    .rounded-md.border.border-border-subtle.bg-bg-subtle.p-6.text-center.text-fg-subtle.text-sm
-      = pluralize(@matrix.size, "test case")
-      ·
-      = pluralize(@per_computer.size, "computer")
-      ·
-      matrix data ready, rendering pending
+    = render "commits/matrix",
+             per_test: @per_test,
+             per_computer: @per_computer,
+             branch: @selected_branch,
+             sha: @commit.short_sha
   .space-y-4
     .rounded-lg.border.border-border.bg-bg-elev.p-4{ style: "box-shadow: var(--shadow-card-sm);" }
       %h3.font-semibold.text-fg.mb-2.flex.items-center.gap-2
@@ -20,7 +19,7 @@
         - @per_computer.each do |row|
           %li.py-2.flex.items-center.justify-between.gap-2
             .flex.items-center.gap-2.min-w-0
-              %span.inline-block.h-2.w-2.rounded-full.shrink-0{ class: status_dot_class_for_computer(row[:state]) }
+              %span{ class: "inline-block h-2 w-2 rounded-full shrink-0 #{status_dot_class_for_computer(row[:state])}" }
               %span.font-mono.text-fg.truncate{ class: "text-[12px]" }
                 = row[:computer]&.name || "computer ##{row[:computer_id]}"
             %span.font-mono.text-fg-muted.shrink-0{ class: "text-[11px]" }= summary_for_computer(row)

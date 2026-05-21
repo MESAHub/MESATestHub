@@ -162,6 +162,74 @@ module CommitsHelper
     match && match[1].to_i
   end
 
+  # Visual attributes for a Test × Computer matrix cell. Returns a
+  # hash the `_matrix_cell` partial uses to render the cell without
+  # bringing the dispatching logic into HAML. Encoding follows the
+  # design handoff's table of cell states (see
+  # `docs/design_handoff_mesa_testhub/README.md` → "Test×Computer
+  # matrix"). Key shape:
+  #
+  #   kind:        :solid | :striped — controls background pattern.
+  #   bg:          primary fill (a `var(--color-…)` string).
+  #   stripe:      secondary stripe color for :striped cells.
+  #   glyph:       optional centered icon name (:x, :neq, :wrench,
+  #                :clock, :check).
+  #   glyph_color: color for the glyph (usually white on solids).
+  #   corner:      optional corner-badge icon name (:plus, :wrench).
+  #   corner_bg:   background for the corner badge.
+  #   label:       short text used as the cell's `title` tooltip.
+  def matrix_cell_attrs(cell)
+    return { kind: :solid, bg: "var(--color-bg-muted)", label: "no data" } unless cell
+
+    flags = cell[:flags] || {}
+    case cell[:status]
+    when :no_build
+      { kind: :striped,
+        bg: "var(--color-bg-subtle)",
+        stripe: "var(--color-bg-muted)",
+        label: "build failed — test not run" }
+    when :pending
+      { kind: :striped,
+        bg: "var(--color-info-soft)",
+        stripe: "var(--color-info)",
+        glyph: :clock,
+        glyph_color: "var(--color-info-soft-text)",
+        label: "pending" }
+    when :fail
+      { kind: :solid,
+        bg: "var(--color-danger)",
+        glyph: :x,
+        glyph_color: "white",
+        label: "fail" }
+    when :pass
+      label_parts = ["pass"]
+      label_parts << "FPE" if flags[:fpe]
+      label_parts << "checksum ≠" if flags[:checksum]
+      label_parts << "full inlists" if flags[:inlists_full]
+      label = label_parts.join(" · ")
+
+      if flags[:fpe] && flags[:checksum]
+        { kind: :solid, bg: "var(--color-warning)", glyph: :neq, glyph_color: "white",
+          corner: :wrench, corner_bg: "var(--color-warning-soft-text)", label: label }
+      elsif flags[:checksum]
+        corner = flags[:inlists_full] ? :plus : nil
+        { kind: :solid, bg: "var(--color-warning)", glyph: :neq, glyph_color: "white",
+          corner: corner, corner_bg: "var(--color-info)", label: label }
+      elsif flags[:fpe]
+        corner = flags[:inlists_full] ? :plus : nil
+        { kind: :solid, bg: "var(--color-warning)", glyph: :wrench, glyph_color: "white",
+          corner: corner, corner_bg: "var(--color-info)", label: label }
+      elsif flags[:inlists_full]
+        { kind: :solid, bg: "var(--color-success)",
+          corner: :plus, corner_bg: "var(--color-info)", label: label }
+      else
+        { kind: :solid, bg: "var(--color-success)", label: label }
+      end
+    else
+      { kind: :solid, bg: "var(--color-skipped)", label: cell[:status].to_s }
+    end
+  end
+
   # Tailwind background class for a per-computer status dot in the
   # Summary sidebar / Computers tab. Mirrors the worst-first colors
   # used elsewhere.

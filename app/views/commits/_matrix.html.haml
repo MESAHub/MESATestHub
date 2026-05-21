@@ -1,0 +1,66 @@
+-# Test × Computer matrix for the Summary tab. Filters to
+-# "interesting" rows only — failing, mixed, pending, or flagged
+-# tests — since on commits with 100+ test cases the all-green
+-# rows would dwarf the few that actually need attention. The
+-# legend above shows every cell kind, and the user can switch to
+-# the Tests tab for the unfiltered list.
+-#
+-# Locals:
+-#   per_test:     output of `Commit#per_test_summary` (sorted
+-#                 worst-first).
+-#   per_computer: output of `Commit#per_computer_summary` (sorted
+-#                 worst-first).
+-#   branch:       Branch the commit lives on (for cell links).
+-#   sha:          Short SHA of the commit (for cell links).
+
+- interesting = per_test.reject { |row| %i[pass not_run].include?(row[:overall]) }
+- computers = per_computer.map { |r| r[:computer] }.compact
+- passing_count = per_test.count { |row| row[:overall] == :pass }
+- not_run_count = per_test.count { |row| row[:overall] == :not_run }
+
+%h3.font-semibold.text-fg.flex.items-center.gap-2 Test × Computer matrix
+%p.text-fg-muted.text-sm.mt-1.mb-3
+  Tests with failures, mixed results, pending runs, or flags.
+  - hide_parts = []
+  - hide_parts << "#{passing_count} passing" if passing_count.positive?
+  - hide_parts << "#{not_run_count} not yet run" if not_run_count.positive?
+  - if hide_parts.any?
+    %span.text-fg-subtle
+      = "Hiding #{hide_parts.join(' and ')}."
+
+= render "commits/matrix_legend"
+
+- if computers.empty?
+  .mt-4.rounded-md.border.border-border-subtle.bg-bg-subtle.px-4.py-6.text-center.text-fg-muted.text-sm
+    No computers have submitted results for this commit yet.
+- elsif interesting.empty? && passing_count.positive?
+  .mt-4.rounded-md.border.border-border-subtle.bg-bg-subtle.px-4.py-6.text-center.text-fg-muted.text-sm
+    All reported tests are passing on every computer. Nothing to investigate here.
+- elsif interesting.empty?
+  .mt-4.rounded-md.border.border-border-subtle.bg-bg-subtle.px-4.py-6.text-center.text-fg-muted.text-sm
+    No test results yet — every test is still pending or blocked by a build failure.
+- else
+  .mt-4.overflow-x-auto
+    .grid.gap-1{ style: "grid-template-columns: minmax(160px, 1fr) repeat(#{computers.size}, 22px); align-items: end;" }
+      -# Header row: empty corner cell + vertical computer labels.
+      %span &nbsp;
+      - computers.each do |c|
+        %span.font-mono.text-fg-subtle.justify-self-center{
+          class: "text-[10px]",
+          style: "writing-mode: vertical-rl; transform: rotate(180deg); height: 80px; line-height: 22px;",
+          title: c.name }
+          = c.name
+      -# Body rows: test label + one cell per computer.
+      - interesting.each do |row|
+        - test_case = row[:test_case]
+        - next unless test_case
+        .min-w-0.font-mono.text-fg{ class: "text-[11px]" }
+          %span.text-fg-subtle= "#{test_case.module}/"
+          %span.truncate.inline-block.align-middle{ style: "max-width: 240px;" }= test_case.name
+        - computers.each do |c|
+          = render "commits/matrix_cell",
+                   cell: row[:cells_by_computer][c.id],
+                   test_case: test_case,
+                   computer: c,
+                   branch: branch,
+                   sha: sha
