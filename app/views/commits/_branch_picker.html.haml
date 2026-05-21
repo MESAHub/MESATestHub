@@ -1,0 +1,21 @@
+-# Inline branch chip + dropdown picker.
+-# Locals:
+-#   branch:   current Branch
+-#   branches: enumerable of Branch records to show
+.relative.inline-flex{ data: { controller: "dropdown", open: "false" } }
+  %button.inline-flex.items-center.gap-2.rounded-md.px-2.5.py-1.text-sm.font-mono.text-brand-soft-text.bg-brand-soft.hover:bg-brand-soft.border.border-brand-soft.cursor-pointer{ type: "button", "aria-haspopup": "listbox", "aria-expanded": "false", data: { action: "click->dropdown#toggle" } }
+    %span.text-brand= mesa_icon(:branch, size: 13)
+    %span= branch.name
+    %span.text-brand-soft-text= mesa_icon(:chevron, size: 12)
+
+  .absolute.left-0.top-full.z-10.mt-1.w-72.rounded-md.border.border-border.bg-bg-elev.p-1.text-sm{ hidden: true, style: "box-shadow: var(--shadow-card-md);", data: { dropdown_target: "menu" } }
+    .max-h-80.overflow-y-auto
+      - branches.each do |b|
+        - active = (b == branch)
+        = link_to commits_path(branch: b.name),
+                 class: "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 font-mono text-[12px] no-underline #{active ? 'bg-brand text-fg-on-brand' : 'text-fg hover:bg-bg-muted'}" do
+          %span.flex.items-center.gap-1.5.truncate
+            %span= mesa_icon(:branch, size: 11)
+            = b.name
+          - if b == branch
+            %span.uppercase.tracking-wide.opacity-80{ class: "text-[10px]" } current

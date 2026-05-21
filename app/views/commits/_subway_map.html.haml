@@ -1,0 +1,136 @@
+-# Inline subway-map visualization of the current page's commits.
+-#
+-# Layout: newest-on-left, oldest-on-right, mirroring the table
+-# directly below (which is reverse-chronological top-to-bottom).
+-# The whole page (≤25 commits) renders as stations inside a single
+-# SVG; the surrounding clip window shows 13 at a time, and the
+-# `pan_map` Stimulus controller animates the inner track between
+-# two resting positions per page: "newest view" (stations 0..12) and
+-# "oldest view" (stations 12..24). Station 12 is shared between
+-# views so the transition has a visual anchor.
+-#
+-# Pan buttons:
+-#   - Newer (←): on the left side of the map, animates toward the
+-#     newest end of the page, or follows `?after=<newest visible>`
+-#     to the next-newer page (which initializes at oldest view to
+-#     show the bridge commits immediately after this page).
+-#   - Older (→): on the right side, animates toward the oldest end
+-#     or follows `?before=<oldest visible - 1s>` to the next-older
+-#     page (which initializes at newest view, default).
+-#
+-# When a button's next click would paginate instead of pan, it shows
+-# a "Newer" / "Older" text label alongside the chevron — toggled by
+-# the controller via `data-mode="paginate"`.
+-#
+-# Locals:
+-#   commits:       array of Commit instances, newest-first.
+-#   commit_states: { commit_id => state_hash } from CommitState.
+
+- count = commits.size
+- return if count.zero?
+- build_colors = { all_ok: "var(--color-success)", some_fail: "var(--color-warning)", all_fail: "var(--color-buildfail)", unknown: "var(--color-skipped)" }
+- tests_colors = { all_pass: "var(--color-success)", mixed: "var(--color-warning)", fail: "var(--color-danger)", pending_partial: "var(--color-info)", pending: "var(--color-skipped)", not_run: "var(--color-skipped)" }
+- build_color = ->(status) { build_colors[status] || "var(--color-skipped)" }
+- tests_color = ->(status) { tests_colors[status] || "var(--color-skipped)" }
+- station_spacing = 68
+- pad_x = 36
+- panel_h = 96
+- center_y = 36
+- ring_outer_r = 12
+- ring_inner_r = 8
+- core_r = 5
+- visible_count = [13, count].min
+- track_w = pad_x * 2 + station_spacing * [count - 1, 0].max + 20
+- window_w = pad_x * 2 + station_spacing * [visible_count - 1, 0].max + 20
+
+-# Newest-on-left: render commits in their natural order (the
+-# controller already gives us newest-first).
+- ordered = commits
+- # Map shift coordinates. shift=0 shows the leftmost (newest) 13.
+- # shift=min_shift shows the rightmost (oldest) 13.
+- max_shift = 0
+- min_shift = -(track_w - window_w)
+- initial_shift = (@map_initial_view == :oldest) ? min_shift : max_shift
+
+.rounded-lg.border.border-border.bg-bg-elev.p-4{ style: "box-shadow: var(--shadow-card-sm);" }
+  .flex.items-center.justify-between.font-semibold.uppercase.tracking-wide.text-fg-subtle.mb-3{ class: "text-[11px]" }
+    %span Visible commits
+    %span.normal-case.font-normal.text-fg-subtle.tabular-nums
+      - if count > visible_count
+        = "showing #{visible_count} of #{count}"
+      - else
+        = "#{count} of #{@commits.length}"
+
+  .flex.items-center.justify-center.gap-2{ data: { controller: "pan-map subway-map", pan_map_shift_value: initial_shift, pan_map_min_shift_value: min_shift, pan_map_max_shift_value: max_shift, pan_map_older_url_value: (@older_href || ""), pan_map_newer_url_value: (@newer_href || "") } }
+
+    -# Newer button (left side). Label "Newer" only visible in paginate
+    -# mode (when the next click would navigate to another page).
+    %button.flex.items-center.gap-1.rounded-md.border.border-border.bg-bg-elev.px-2.py-1.text-fg-muted.hover:bg-bg-muted.cursor-pointer.transition-colors{ type: "button", "aria-label": "Pan to newer commits", data: { pan_map_target: "newerButton", action: "click->pan-map#panNewer" } }
+      %span.inline-block{ style: "transform: rotate(90deg);" }= mesa_icon(:chevron, size: 16)
+      %span.hidden.text-xs.font-medium{ data: { pan_map_target: "newerLabel" } } Newer
+
+    .relative.flex-none{ style: "width: #{window_w}px; overflow-x: clip; overflow-y: visible;" }
+      .relative{ style: "width: #{track_w}px; will-change: transform; transform: translateX(#{initial_shift}px); transition: transform 0.45s cubic-bezier(0.65, 0, 0.35, 1);", data: { pan_map_target: "track" } }
+        %svg{ viewBox: "0 0 #{track_w} #{panel_h}", width: track_w, height: panel_h, role: "img", "aria-label": "Subway map of #{count} commits, newest left to oldest right" }
+          %defs
+            %marker#subway-arrow{ viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse", fill: "var(--color-border-strong)" }
+              %path{ d: "M 0 0 L 10 5 L 0 10 z" }
+          - if count > 1
+            - x_start = pad_x
+            - x_end = pad_x + station_spacing * (count - 1) + 14
+            %line{ x1: x_start, y1: center_y, x2: x_end, y2: center_y, stroke: "var(--color-border-strong)", "stroke-width": 2, "marker-end": "url(#subway-arrow)" }
+          - ordered.each_with_index do |commit, i|
+            - state = commit_states[commit.id]
+            - x = pad_x + station_spacing * i
+            - ring   = tests_color.call(state[:tests][:status])
+            - core   = build_color.call(state[:build][:status])
+            - title  = "#{commit.short_sha} · build #{state[:build][:status]} · tests #{state[:tests][:status]}"
+            %g
+              %a{ href: commit_path(branch: @branch.name, sha: commit.short_sha),
+                  data: { commit_id: commit.id, action: "mouseenter->subway-map#show mouseleave->subway-map#hide focus->subway-map#show blur->subway-map#hide" } }
+                %circle{ cx: x, cy: center_y, r: ring_outer_r, fill: ring }
+                %circle{ cx: x, cy: center_y, r: ring_inner_r, fill: "var(--color-bg-elev)" }
+                %circle{ cx: x, cy: center_y, r: core_r, fill: core }
+                %title= title
+              %text{ x: x, y: panel_h - 22, "text-anchor": "middle", "font-family": "var(--font-mono)", "font-size": "11", fill: "var(--color-fg-subtle)" }
+                = commit.short_sha
+              %text{ x: x, y: panel_h - 8, "text-anchor": "middle", "font-size": "11", fill: "var(--color-fg-subtle)" }
+                = short_relative_time(commit.commit_time, now: @before_time)
+
+        .pointer-events-none.absolute.inset-0
+          - ordered.each_with_index do |commit, i|
+            - state = commit_states[commit.id]
+            - x = pad_x + station_spacing * i
+            - shift_pct = ((x.to_f / track_w) * 100).round(2)
+            .absolute.z-10.rounded-md.border.border-border.bg-bg-elev.p-2.text-xs{ hidden: true, style: "box-shadow: var(--shadow-card-md); width: 260px; left: #{x}px; bottom: #{panel_h - center_y + 20}px; transform: translateX(-#{shift_pct}%);", data: { subway_map_target: "popover", commit_id: commit.id } }
+              .flex.items-center.gap-2.mb-1.text-fg
+                %span.font-mono.text-brand{ class: "text-[12px]" }= commit.short_sha
+                %span.text-fg-subtle ·
+                %span.text-fg-subtle.tabular-nums{ class: "text-[11px]" }= short_relative_time(commit.commit_time, now: @before_time)
+              .font-medium.text-fg.mb-1.line-clamp-2= commit.message_first_line(80)
+              .flex.items-center.gap-2.text-fg-muted{ class: "text-[11px]" }
+                = commit_avatar(commit.author, size: 16)
+                %span.truncate= commit.author
+              .mt-2.flex.flex-wrap.gap-1
+                = build_status_pill(state, size: :sm)
+                = test_status_pill(state, size: :sm)
+
+    -# Older button (right side).
+    %button.flex.items-center.gap-1.rounded-md.border.border-border.bg-bg-elev.px-2.py-1.text-fg-muted.hover:bg-bg-muted.cursor-pointer.transition-colors{ type: "button", "aria-label": "Pan to older commits", data: { pan_map_target: "olderButton", action: "click->pan-map#panOlder" } }
+      %span.hidden.text-xs.font-medium{ data: { pan_map_target: "olderLabel" } } Older
+      %span.inline-block{ style: "transform: rotate(-90deg);" }= mesa_icon(:chevron, size: 16)
+
+  .mt-3.flex.flex-col.items-center.gap-1.text-fg-muted{ class: "text-[11px]" }
+    .flex.flex-wrap.items-center.justify-center.gap-x-3.gap-y-1
+      %span.font-semibold.uppercase.tracking-wide.text-fg-subtle Core (build)
+      = render "subway_legend_swatch", kind: :core, color: "var(--color-success)",   label: "All built"
+      = render "subway_legend_swatch", kind: :core, color: "var(--color-warning)",   label: "Mixed build"
+      = render "subway_legend_swatch", kind: :core, color: "var(--color-buildfail)", label: "Build failed"
+      = render "subway_legend_swatch", kind: :core, color: "var(--color-skipped)",   label: "No build data"
+    .flex.flex-wrap.items-center.justify-center.gap-x-3.gap-y-1
+      %span.font-semibold.uppercase.tracking-wide.text-fg-subtle Ring (tests)
+      = render "subway_legend_swatch", kind: :ring, color: "var(--color-success)", label: "All passing"
+      = render "subway_legend_swatch", kind: :ring, color: "var(--color-warning)", label: "Mixed"
+      = render "subway_legend_swatch", kind: :ring, color: "var(--color-danger)",  label: "Failing"
+      = render "subway_legend_swatch", kind: :ring, color: "var(--color-info)",    label: "Incomplete"
+      = render "subway_legend_swatch", kind: :ring, color: "var(--color-skipped)", label: "Untested"

@@ -1,6 +1,7 @@
 class CommitsController < ApplicationController
   skip_before_action :authorize_user, only: :show, if: :root_page?
   before_action :set_commit, only: :show
+  layout "modern", only: [:index]
 
   def show
     @test_case_commits = [@problem_tccs, @skimpy_tccs].flatten.sort_by(&:test_case)
@@ -177,7 +178,6 @@ class CommitsController < ApplicationController
   end
 
   def index
-    @page_length = 25
     @branches = Branch.includes(:head).order(:name)
     @branch_names = @branches.pluck(:name)
     @branch = if @branch_names.include? CGI.unescape(params[:branch])
@@ -185,127 +185,109 @@ class CommitsController < ApplicationController
               else
                 redirect_to(commits_path(branch: 'main'), alert: "Branch <span class='text-monospace'>#{CGI.unescape(params[:branch])}</span> does not exist; showing commits on <span class='text-monospace'>main</span>.") and return
               end
-    # @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.main
-    @branches_recent = Branch.recent
-    @branches_older = Branch.older
-    # which page of commits do we want?
-    @page = (params[:page] || 1).to_i
 
-    @commits = @branch.ordered_commits.page(@page).per(@page_length)
+    # Cursor pagination by commit_time. Two URL params drive it:
+    #
+    #   ?before=X   page of newest 25 commits with commit_time < X.
+    #               Map initializes at the "newest" view (commits
+    #               0..12 of the 25 visible on the left).
+    #   ?after=Y    page of oldest 25 commits with commit_time > Y,
+    #               displayed newest-first. Map initializes at the
+    #               "oldest" view (commits 12..24) — i.e., the
+    #               bridge between this page and the older one the
+    #               user just panned from.
+    #
+    # Bare dates parse to end-of-day for `before` (so the picked day
+    # is included) and beginning-of-day for `after` (so the picked
+    # day is also included). Either form is bookmarkable.
+    #
+    # The headline + date chip always show "on or before <newest
+    # visible>" regardless of which param produced the page, so the
+    # `?after=` form is a navigation detail rather than a different
+    # mental model for the user.
+    @page_size = (params[:per_page] || 25).to_i.clamp(5, 200)
 
-    # # grab commits for that page (which also includes how many pages there are)
-    # commit_shas = Commit.api_commits(
-    #   auto_paginate: false,
-    #   sha: @branch.head.sha,
-    #   per_page: @page_length,
-    #   page: @page).map { |c| c[:sha] }
-    
-    # # determine number of pages through tortured exploration of the "last" link
-    # # provided by the api client
-    # @num_pages = if Commit.api(auto_paginate: false).last_response.rels[:last]
-    #                link = Commit.api(auto_paginate: false).last_response
-    #                             .rels[:last].href
-    #                m = %r{api.github.com/.*\?page=(?<num_pages>\d+)}.match(link)
-    #                m[:num_pages]
-    #              else
-    #                @page
-    #              end.to_i
-    
-    # # subset = commit_shas[@page_length * (@page - 1), @page_length]
-    # @commits = @branch.commits.where(sha: commit_shas).to_a
-    #   .sort! { |a, b| commit_shas.index(a.sha) <=> commit_shas.index(b.sha) }      
+    if params[:after].present?
+      @after_time = parse_after_param(params[:after])
+      rows = @branch.ordered_commits
+                    .where('commits.commit_time > ?', @after_time)
+                    .reorder('commits.commit_time ASC')
+                    .limit(@page_size + 1)
+                    .includes(:submissions,
+                              test_case_commits: { test_instances: [] })
+                    .to_a
+      @has_more_newer = rows.size > @page_size
+      rows.pop if @has_more_newer
+      @commits = rows.reverse
+      @map_initial_view = :oldest
+      @at_head_of_history = false
+    else
+      @before_time_param = parse_before_param(params[:before])
+      @before_explicit = params[:before].present?
+      rows = @branch.ordered_commits
+                    .where('commits.commit_time < ?', @before_time_param)
+                    .limit(@page_size + 1)
+                    .includes(:submissions,
+                              test_case_commits: { test_instances: [] })
+                    .to_a
+      @has_more_older_via_main_fetch = rows.size > @page_size
+      rows.pop if @has_more_older_via_main_fetch
+      @commits = rows
+      @map_initial_view = :newest
+      @at_head_of_history = !@before_explicit
+    end
 
-    @start_num = 1 + (@page - 1) * @commits.limit_value
-    @stop_num = @start_num + @commits.length - 1
+    # Whether the opposite-direction page exists. The main fetch
+    # already told us about one direction (via the +1 trick); for
+    # the other we run a cheap EXISTS against the same recursive
+    # CTE. On a multi-thousand-commit branch this stays sub-ms.
+    if @commits.any?
+      newest_visible_time = @commits.first.commit_time
+      oldest_visible_time = @commits.last.commit_time
+      @has_more_older =
+        if defined?(@has_more_older_via_main_fetch)
+          @has_more_older_via_main_fetch
+        else
+          Commit.from("(#{@branch.reachable_commits_sql}) AS commits")
+                .where('commits.commit_time < ?', oldest_visible_time)
+                .exists?
+        end
+      @has_more_newer ||=
+        if @at_head_of_history
+          false
+        else
+          Commit.from("(#{@branch.reachable_commits_sql}) AS commits")
+                .where('commits.commit_time > ?', newest_visible_time)
+                .exists?
+        end
+    else
+      @has_more_older = false
+      @has_more_newer = false
+    end
+
+    # Effective display cursor — what the headline + date chip read.
+    @before_time = @commits.first&.commit_time || @before_time_param || Time.zone.now
+
+    @older_href =
+      if @has_more_older
+        commits_path(branch: @branch.name, before: (@commits.last.commit_time - 1.second).iso8601)
+      end
+    @newer_href =
+      if @has_more_newer
+        commits_path(branch: @branch.name, after: @commits.first.commit_time.iso8601)
+      end
+
     @max_num = @branch.reachable_commit_count
 
-    # @start_num = 1 + (@page - 1) * @page_length
-    # @stop_num = @start_num + @commits.length
-
-    # # set buttons for pages
-    # @page_button_data = []
-    # @page_button_data << if @page > 1
-    #                        {
-    #                          label: 'First',
-    #                          href: commits_path(branch: @branch.name, page: 1),
-    #                          klass: '',
-    #                          disabled: false
-    #                        }
-    #                      else
-    #                        {
-    #                          label: 'First',
-    #                          href: '#',
-    #                          klass: ' disabled',
-    #                          disabled: true
-    #                        }
-    #                      end
-    # 1.upto(@num_pages) do |page|
-    #   next unless (page - @page).abs <= 3
-
-    #   @page_button_data << case (page - @page).abs
-    #   when 0
-    #     {
-    #       label: page.to_s,
-    #       href: commits_path(branch: @branch.name, page: page),
-    #       klass: ' active',
-    #       disabled: false
-    #     }
-    #   when 1..2
-    #     {
-    #       label: page.to_s,
-    #       href: commits_path(branch: @branch.name, page: page),
-    #       klass: '',
-    #       disabled: false
-    #     }
-    #   when 3
-    #     {
-    #       label: '<i class="fa fa-ellipsis-h" aria-hidden="true"></i>'.html_safe,
-    #       href: '#',
-    #       klass: ' disabled',
-    #       disabled: true
-    #     }
-    #   end
-
-    # end
-
-    # # add "Last" button
-    # @page_button_data << if @page < @num_pages
-    #                        {
-    #                          label: 'Last',
-    #                          href: commits_path(branch: @branch.name, page: @num_pages),
-    #                          klass: '',
-    #                          disabled: false
-    #                        }
-    #                      else
-    #                        {
-    #                          label: 'Last',
-    #                          href: '#',
-    #                          klass: ' disabled',
-    #                          disabled: true
-    #                        }
-    #                      end
-
-    @row_classes = {}
-    @btn_classes = {}
-    @commits.each do |commit|
-      @row_classes[commit] = case commit.status
-      when 3 then 'list-group-item-warning'
-      when 2 then 'list-group-item-primary'
-      when 1 then 'list-group-item-danger'
-      when 0 then 'list-group-item-success'
-      else
-        'list-group-item-info'
-      end
-      @btn_classes[commit] = case commit.status
-      when 3 then 'btn-warning'
-      when 2 then 'btn-primary'
-      when 1 then 'btn-danger'
-      when 0 then 'btn-success'
-      else
-        'btn-info'
-      end
-
+    # Per-commit aggregated state — feeds the status dot, pills, flag
+    # chips, and the subway map. The CommitState concern memoizes its
+    # queries on each Commit instance, so calling these helpers across
+    # views in the same request stays cheap.
+    @commit_states = @commits.each_with_object({}) do |commit, h|
+      h[commit.id] = commit.commit_state
     end
+
+    @last_activity_at = @commits.first&.commit_time
   end
 
   # API call to allow asynchronous loading of nearby commits
@@ -340,6 +322,44 @@ class CommitsController < ApplicationController
   end
 
   private
+
+  # Parse the `before=` URL parameter for cursor pagination.
+  #
+  #   blank        → "now" (latest commits)
+  #   "2026-03-05" → end of Mar 5 in the request's time zone so the
+  #                  whole day is included
+  #   ISO 8601 ts  → exact moment, as produced by the Older/Newer link
+  #                  builders
+  #
+  # Bad input falls back to "now" rather than 422-ing — this is a
+  # navigation parameter, not data.
+  def parse_before_param(value)
+    return Time.zone.now if value.blank?
+
+    if value.to_s.match?(/[T:]/)
+      Time.zone.parse(value.to_s) || Time.zone.now
+    else
+      Date.parse(value.to_s).in_time_zone.end_of_day
+    end
+  rescue ArgumentError, Date::Error
+    Time.zone.now
+  end
+
+  # Sister parser for the `after=` URL parameter — the lower-bound
+  # cursor used when navigating from a page to its newer neighbor.
+  # Bare dates parse to beginning-of-day so the picked day itself is
+  # included in the result set.
+  def parse_after_param(value)
+    return nil if value.blank?
+
+    if value.to_s.match?(/[T:]/)
+      Time.zone.parse(value.to_s)
+    else
+      Date.parse(value.to_s).in_time_zone.beginning_of_day
+    end
+  rescue ArgumentError, Date::Error
+    nil
+  end
 
   def root_page?
     params[:sha] == 'head' && params[:branch] == 'main'

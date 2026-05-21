@@ -1,108 +1,90 @@
-.row
-  .col
-    %h1 Search Commits
-.row
-  .col-12.col-md-6
-    .btn-group
-      %button.btn.btn-outline-primary.btn-lg.dropdown-toggle{type: 'button', "data-toggle".to_sym => 'dropdown', 'aria-haspopup'.to_sym => true, 'aria-expanded'.to_sym => false}
-        =fa_icon 'code-fork'
-        %samp= @branch
-      .dropdown-menu{style: "max-height: 50vh; overflow-y: auto;", 'aria-labelledby': 'selected-branch'}
-        %h6.dropdown-header.font-weight-bold.text-dark Recently Updated Branches
-        - @branches_recent.each do |branch|
-          -if branch == @branch
-            =link_to branch, commits_path(branch: branch.name), class: "dropdown-item text-monospace active text-light bg-primary"
-          -else
-            =link_to branch, commits_path(branch: branch.name), class: "dropdown-item text-monospace text-reset"
-        .dropdown-divider
-        %h6.dropdown-header.font-weight-bold.text-dark Older Branches
-        - @branches_older.each do |branch|
-          -if branch == @branch
-            =link_to branch, commits_path(branch: branch.name), class: "dropdown-item text-monospace active text-reset text-light bg-primary"
-          -else
-            =link_to branch, commits_path(branch: branch.name), class: "dropdown-item text-monospace text-reset"
-  .col-12.col-md-6
-    %p.text-right.mb-1
-      %span.badge.badge-light Test Cases
-      %span.badge.badge-success Passing
-      %span.badge.badge-warning Mixed
-      %span.badge.badge-danger Failing
-      %span.badge.badge-info Untested
-    %p.text-right
-      %span.badge.badge-primary Mult. Checksums
-      %span.badge.badge-secondary Computers
-      %span.badge.badge-dark Completed Computers
-.row
-  .col-12.col-md-6
-    %p
-      %b
-        %i
-          Viewing
-          commits
-          =@start_num
-          through
-          =@stop_num
-          of
-          =@max_num
-          in
-        %span.text-monospace=@branch.name
-  -# .col-12.col-md-6
-  -#   %ul.pagination.pagination.justify-content-end
-  -#     =render partial: 'index_pagination_li'
+- content_for :title, "Commits on #{@branch.name}"
+- visible_count    = @commits.length
+- newer_disabled   = @newer_href.nil?
+- older_disabled   = @older_href.nil?
+- newer_href       = @newer_href
+- older_href       = @older_href
+- # When no explicit before= was passed, the cursor is "now" — surface
+- # that to the user as "latest" rather than rendering today's actual time,
+- # which feels arbitrary.
+- displayed_time   = @before_time.in_time_zone(time_zone)
 
-.row.mb-3
-  .col
-    = paginate @commits
-    %ul.list-group
-      - @commits.each do |commit|
-        - cache commit do
-          %li.list-group-item.list-group-item-action{class: @row_classes[commit]}
-            .d-flex.w-100.justify-content-between.mb-2
-              %h5.font-weight-bold
-                %a.text-reset{href: commit_path(branch: @branch.name, sha: commit.short_sha)}
-                  -if commit.run_optional?
-                    =fa_icon('plus-square', title: "Optional inlists run on all tests")
-                  -if commit.fpe_checks?
-                    =fa_icon('wrench', title: 'FPE checks run on all tests')
-                  -if commit.fine_resolution?
-                    =fa_icon('search-plus', title: 'Finer resolution')
-                  = commit.message_first_line
-                -if commit.message_rest
-                  %a.badge.badge-secondary{'data-toggle'.to_sym => 'collapse', href: "\#msg_#{commit.short_sha}", role: 'button', 'aria-expanded'.to_sym => 'false', 'aria-controls'.to_sym => "\#msg_#{commit.short_sha}"} &nbsp;&#8230;&nbsp;
-              .btn-group.my-0
-                %a.mr-1.my-0{href: commit_path(@branch.name, commit.short_sha)}
-                  %button.btn.text-monospace{class: @btn_classes[commit]}= commit.short_sha
-                %a.my-0{href: commit.github_url, target: '_blank'}
-                  %button.my-0.btn.text-monospace{class: @btn_classes[commit]}
-                    %i.fa.fa-code
-            .d-flex.w-100.justify-content-between
-              %p.mb-0
-                %span.font-weight-bold= commit.author
-                %span
-                  pushed on 
-                  =format_time(commit.created_at)
-              .mb-0
-                %p.text-right.mb-1
-                  %span.badge.badge-light= commit.test_case_count
-                  %span.badge.badge-success= commit.passed_count
-                  %span.badge.badge-warning= commit.mixed_count
-                  %span.badge.badge-danger= commit.failed_count
-                  %span.badge.badge-info= commit.untested_count
-                %p.text-right.mb-0
-                  %span.badge.badge-primary= commit.checksum_count
-                  %span.badge.badge-secondary= commit.computer_count
-                  %span.badge.badge-dark= commit.complete_computer_count
-            .d-flex.w-100
-              %p.mb-0.mt-2{class: 'collapse', id: "msg_#{commit.short_sha}"}= commit.message_rest
+.space-y-6
+  -# Headline: branch chip + date chip + muted time + summary line.
+  %header.flex.flex-col.gap-2
+    .flex.flex-wrap.items-baseline.gap-x-3.gap-y-2
+      %h1.text-2xl.font-semibold.tracking-tight.text-fg Commits on
+      = render "branch_picker", branch: @branch, branches: @branches
+      %span.text-2xl.font-semibold.tracking-tight.text-fg.whitespace-nowrap on or before
+      = render "date_picker", selected_time: displayed_time, branch: @branch
+      %span.font-mono.text-fg-subtle.tabular-nums{ class: "text-[12px]" }
+        = displayed_time.strftime("%-l:%M %P %Z")
 
--# =render partial: 'index_pagination'
--# .row.mb-3.mt-0
--#   .col.text-center.mt-0
--#     %nav{'aria-label' => 'commit page navigation'}
--#       %ul.pagination.pagination-lg.justify-content-center
--#         - @page_button_data.each do |button_data|
--#           %li{class: "page-item" + button_data[:klass]}
--#             - if button_data[:disabled] || button_data[:label].to_i == @page
--#               %span.page-link= button_data[:label]
--#             - else
--#               %a.page-link{href: button_data[:href]}= button_data[:label]
+    %p.text-xs.text-fg-muted
+      = "#{number_with_delimiter(@max_num)} commits on this branch"
+      %span.mx-1 ·
+      = "#{visible_count} shown"
+      - if @last_activity_at
+        %span.mx-1 ·
+        = "newest in view #{short_relative_time(@last_activity_at)}"
+
+  -# Subway map fills the top strip. The partial accepts the whole
+  -# page worth of commits and pans a fixed window through them.
+  = render "subway_map", commits: @commits, commit_states: @commit_states
+
+  -# Table card. The toolbar row (search input + Newer/Older
+  -# buttons) lived here previously but moved into the subway map
+  -# itself — its pan arrows double as page-navigation buttons
+  -# when at the far end of a page. The search box is also hidden
+  -# until it's actually wired to client-side filtering; restoring
+  -# it should be a single block insert here.
+  .rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);" }
+    -# Table header
+    .grid.gap-3.border-b.border-border-subtle.bg-bg-subtle.px-4.py-2.font-semibold.uppercase.tracking-wide.text-fg-subtle{ class: "text-[10px] grid-cols-[12px_minmax(0,2.4fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]" }
+      %span &nbsp;
+      %span Commit
+      %span SHA
+      %span Author
+      %span Build
+      %span Tests
+      %span Flags
+      %span.text-right When
+
+    -# Rows, grouped by age relative to the active cursor.
+    - if @commits.empty?
+      .px-4.py-10.text-center.text-sm.text-fg-muted
+        No commits on this branch on or before the selected date.
+    - else
+      - group_commits_by_age(@commits, now: displayed_time).each do |bucket_id, bucket_label, bucket_commits|
+        .border-b.border-border-subtle.bg-bg-subtle.px-4.py-1.flex.items-center.justify-between
+          %span.font-semibold.uppercase.tracking-wide.text-fg-subtle{ class: "text-[10px]" }= bucket_label
+          %span.text-fg-subtle.tabular-nums{ class: "text-[10px]" }= bucket_commits.size
+        - bucket_commits.each do |commit|
+          - state = @commit_states[commit.id]
+          = link_to commit_path(branch: @branch.name, sha: commit.short_sha),
+                   class: "grid gap-3 border-b border-border-subtle px-4 py-3 text-sm text-fg no-underline hover:bg-bg-subtle items-center grid-cols-[12px_minmax(0,2.4fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]" do
+            %span.inline-block.h-2.w-2.rounded-full{ class: status_dot_class(state), title: "build #{state[:build][:status]} · tests #{state[:tests][:status]}" }
+            .min-w-0.flex.flex-col.gap-0.5
+              %span.truncate.font-medium.text-fg= commit.message_first_line(80)
+              %span.text-fg-subtle{ class: "text-[11px]" }
+                - meta_parts = []
+                - meta_parts << "##{commit.pr_number}" if commit.respond_to?(:pr_number) && commit.pr_number
+                - meta_parts << "#{commit.test_case_count} test cases" if commit.test_case_count.to_i > 0
+                = meta_parts.join(" · ").presence || pluralize(commit.computer_count.to_i, "computer")
+            %span.font-mono.text-brand.truncate{ class: "text-[12px]" }= commit.short_sha
+            .flex.items-center.gap-2.min-w-0
+              = commit_avatar(commit.author)
+              %span.truncate.text-fg-muted{ class: "text-[12px]" }= commit.author
+            .min-w-0= build_status_pill(state, size: :sm)
+            .min-w-0= test_status_pill(state, size: :sm)
+            .flex.flex-wrap.items-center.gap-1.min-w-0= flag_chips(state)
+            %span.text-right.text-fg-subtle.tabular-nums{ class: "text-[11px]" }= short_relative_time(commit.commit_time, now: displayed_time)
+
+  -# Bottom pagination mirror for long pages.
+  .flex.items-center.justify-end.gap-2.text-xs
+    = link_to "← Newer", (newer_href || commits_path(branch: @branch.name)),
+                          class: "mesa-btn #{'pointer-events-none opacity-50' if newer_disabled}",
+                          aria: { disabled: newer_disabled }
+    = link_to "Older →", (older_href || "#"),
+                          class: "mesa-btn #{'pointer-events-none opacity-50' if older_disabled}",
+                          aria: { disabled: older_disabled }
