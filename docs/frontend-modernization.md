@@ -433,21 +433,69 @@ commit semantics. Dark mode toggle persists across navigations.
 
 The biggest page. Reference: `03-` through `08-prototype.png`.
 
-- Breadcrumb with mini branch chip.
-- Hero card with pill row, message, author, stats, sparkline.
-- Conditional banners (BuildFail, BuildPartial, Failing, Mixed,
-  Pending) — derive from `commit_state`.
-- Context-sensitive default tab (build issues → Computers, failures
-  → Tests, otherwise Summary). URL-controlled override.
-- Tabs: Summary (matrix) / Tests / Computers / Diff vs last pass /
-  Logs. Use Turbo Frames so tab switches are partial loads, not
-  full navigations.
-- Matrix legend above the matrix in Summary tab.
+**Status: scaffolding landed (2026-05-21)**, with the page structure,
+helpers, and minimal-but-functional content for every tab in place.
+Substep follow-ups will polish the heavier panels (matrix, Tests
+ribbon, log streaming).
 
-The "Diff vs last pass" tab needs a new comparison helper —
-"cells that changed status since the last clean commit on this
-branch." Use the recursive CTE topology to find the last clean
-commit, then diff matrices.
+Helpers added in advance of the view work (with specs):
+- `Branch#commit_neighbors(commit)` — `{ older:, newer: }` by
+  `commit_time`, drives the breadcrumb's prev/next buttons.
+- `Branch#last_clean_commit_before(commit, depth: 25)` — walks
+  older commits and returns the first all-built + all-passing
+  one; bounded so the walk is predictable on stale branches.
+- `Commit#default_detail_tab(state:)` — :computers / :tests /
+  :summary, picked server-side so there's no client-side flicker.
+- `Commit#per_computer_summary` — one hash per computer that
+  submitted, sorted worst-first, with pass/fail/pending/fpe/
+  checksum counts.
+- `Commit#per_test_summary` — one hash per test case with the
+  worst-first overall token and a per-computer cell row.
+- `Commit#cells_changed_since(other)` — matrix-diff for the
+  Diff tab; reports regressions and new fpe/checksum flags,
+  excludes informational `inlists_full`.
+
+Departures from the original handoff:
+- **Tabs are toggled in-place by a Stimulus controller** rather
+  than via Turbo Frames. All five panels render on the initial
+  request and the `tabs_controller.js` swaps `hidden` on click,
+  also updating `?tab=<id>` via `history.replaceState` so the
+  URL stays bookmarkable. Reason: matrix and per-computer data
+  are cheap enough to render once; turbo-frame partial loads
+  would double the helper work and complicate the URL story.
+- **`Diff vs last pass` lookback is capped at 25 older commits.**
+  The walk's per-commit cost is "build a matrix" which is itself
+  a couple of queries, so an unbounded walk on a stale branch
+  could easily fan out. If nothing turns up the tab is disabled
+  rather than slow.
+- **"Files changed" line in the hero meta is dropped** because
+  the codebase has no `files_changed` column — the prototype's
+  number came from a mock. PR number is parsed from the commit
+  message's trailing `(#NNN)` rather than from a column.
+- **Banners' action buttons (See computers / View diff / See
+  mixed tests) re-use the same Stimulus controller via
+  `data-action="click->tabs#switchFromLink"`** rather than
+  having their own dispatch. The `?tab=` query string is the
+  single source of truth.
+- **Logs tab is a per-computer link-out to
+  `mesa-logs.flatironinstitute.org`** rather than embedded log
+  rendering. The CORS-blocked HEAD-probe pattern from the
+  legacy view is deferred until the Railway domain repoints.
+
+Substep follow-ups (pending):
+- **Summary tab:** the actual Test × Computer matrix component
+  with the cell-encoding table from the handoff
+  (`pass`/`fail`/`pending`/`no_build` with `fpe`/`checksum`/
+  `inlists_full` overlays), plus the MatrixLegend above it.
+  Currently the Summary tab renders a placeholder card with
+  the matrix dimensions and the computers sidebar list.
+- **Tests tab:** search input, status/module filter chips, and
+  per-row mini-computer ribbon. Currently a flat per-test list
+  with status dots and compact summaries.
+- **Computers tab:** SDK info chip, maintained-by line, "last
+  successful build" link for no-build cards. Currently shows
+  the basics with a state-colored border accent.
+- **Logs tab:** in-page log streaming, computer picker dropdown.
 
 ### Step 7 — Test on commit (`/:branch/commits/:sha/tests/:module/:test`)
 

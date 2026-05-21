@@ -35,19 +35,26 @@ Before doing non-trivial work, read the appropriate doc:
   — plan for the Phase 4 frontend rewrite (Bootstrap+jQuery →
   Tailwind+Turbo+Stimulus, plus port of the design in
   `docs/design_handoff_mesa_testhub/`). Spans multiple sessions on
-  the `frontend-tailwind` branch. **Steps 0–2, 4, and 5 have
-  landed** — Tailwind + Turbo + Stimulus + importmap are installed
-  alongside the legacy stack; the 404 page, login, and the commits
-  index (`/:branch/commits`) all render through the modern layout;
-  `Commit#commit_state` / `#test_computer_matrix` /
-  `Branch#sparkline_data` / `TestCaseCommit#instances_for_display`
-  aggregation helpers live in
-  [`app/models/concerns/commit_state.rb`](app/models/concerns/commit_state.rb).
+  the `frontend-tailwind` branch. **Steps 0–5 have landed plus
+  Step 6 scaffolding** — Tailwind + Turbo + Stimulus + importmap
+  are installed alongside the legacy stack; the 404 page, login,
+  the commits index (`/:branch/commits`), and the commit detail
+  page (`/:branch/commits/:sha`) all render through the modern
+  layout; `Commit#commit_state` / `#test_computer_matrix` /
+  `#per_computer_summary` / `#per_test_summary` /
+  `#cells_changed_since` / `#default_detail_tab` /
+  `Branch#sparkline_data` / `Branch#commit_neighbors` /
+  `Branch#last_clean_commit_before` /
+  `TestCaseCommit#instances_for_display` aggregation helpers live
+  in
+  [`app/models/concerns/commit_state.rb`](app/models/concerns/commit_state.rb)
+  (and the relevant Branch methods in
+  [`app/models/branch.rb`](app/models/branch.rb)).
   Step 5 departed from the original handoff in a few ways — see
   the doc for the details (subway map instead of sparkline, no
   stat tiles, cursor pagination via a `before=` URL param instead
-  of Kaminari, inline date-picker chip). Step 6 (commit detail)
-  is next.
+  of Kaminari, inline date-picker chip). Step 6 substep follow-ups
+  (full matrix, Tests-tab search/ribbon, log streaming) are next.
 
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.
@@ -131,6 +138,31 @@ that makes the change.
   `parse_after_param` (beginning-of-day) in
   [`commits_controller.rb`](app/controllers/commits_controller.rb).
   No Kaminari for this index; no `?page=` param.
+- **Commit detail tabs are server-pre-rendered, not Turbo Frames.**
+  `commits#show` renders every panel (Summary / Tests / Computers /
+  Diff / Logs) on each request; the `tabs_controller.js` Stimulus
+  controller toggles `hidden` between them and replaceState's the
+  URL to `?tab=<id>`. Banner action buttons route through the same
+  controller via `data-action="click->tabs#switchFromLink"`. The
+  controller's `aria-selected` + border-brand updates have to stay
+  in sync with `_show_tab_strip.html.haml`'s class list — both
+  control the underline.
+- **`Branch#last_clean_commit_before` is bounded at 25 commits.**
+  Walking the recursive-CTE result and calling `commit_state` on
+  each is several queries per step, so an unbounded walk on a stale
+  branch could fan out. When nothing turns up the Diff tab gets
+  rendered with `aria-disabled="true"` and `pointer-events-none`,
+  not hidden — so users see why the comparison is missing.
+- **Multi-line Ruby in HAML attribute hashes does not work.**
+  Each `- …` line is its own Ruby statement; assignments,
+  conditionals, and arrays must fit on one line or move to a
+  helper. The tab strip's badge logic + array of tab specs lives
+  in
+  [`app/helpers/commits_helper.rb`](app/helpers/commits_helper.rb)
+  (`tests_tab_badge`, `computers_tab_badge`,
+  `computer_state_color`, etc.) precisely because trying to inline
+  multi-line `case` and ternaries in HAML threw "indented N levels
+  deeper than the previous line" errors.
 - **No user-facing Active Storage**. The default `:local` service is
   scaffolding only. The high-severity Active Storage CVEs are unreachable
   in this codebase.
