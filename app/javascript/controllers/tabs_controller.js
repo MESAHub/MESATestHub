@@ -50,6 +50,10 @@ export default class extends Controller {
       link.classList.toggle("border-transparent", !on)
       link.classList.toggle("-mb-px", on)
     })
+    // Surface the change so per-panel controllers (e.g. logs) can
+    // lazy-load on first reveal. Bubbles so listeners can subscribe
+    // at any ancestor — we use it on the logs controller scope.
+    this.dispatch("change", { detail: { tab: active }, bubbles: true })
   }
 
   pushUrl(tab) {

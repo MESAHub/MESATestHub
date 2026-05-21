@@ -1,21 +1,49 @@
--# Logs tab — computer picker + link out to flatiron logs. Substep
--# pending for in-page log streaming.
-.rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
-  %h3.font-semibold.text-fg.mb-3 Build &amp; test logs
+-# Logs tab. The page proxies build logs from the Flatiron logs
+-# host through `commits#build_log`; this partial just wires up
+-# the picker UI and hands off to the `logs` Stimulus controller
+-# for fetching + rendering. The fetch is deferred until the tab
+-# becomes active (or a user clicks a computer), so opening a
+-# commit that doesn't need logs costs zero bytes of upstream
+-# traffic.
+-#
+-# Default computer selection: `per_computer_summary` is already
+-# sorted worst-first, which means any `:build_fail` computer
+-# floats to position 0. If nothing failed to build, the first
+-# remaining sort key wins.
+- default = (@per_computer.find { |r| r[:state] == :build_fail } || @per_computer.first)
+- default_name = default && default[:computer]&.name
+
+.rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);",
+                                              data: { controller: "logs",
+                                                      logs_url_template_value: commit_build_log_path(branch: @selected_branch.name, sha: @commit.short_sha, computer: "__COMPUTER__"),
+                                                      logs_default_computer_value: default_name.to_s,
+                                                      logs_active_tab_value: @active_tab.to_s } }
   - if @per_computer.empty?
-    %p.text-fg-muted.text-sm No computers have submitted for this commit.
+    .px-4.py-10.text-center.text-fg-muted.text-sm No computers have submitted for this commit.
   - else
-    %p.text-fg-muted.text-sm.mb-3
-      Log files live on the Flatiron logs host; each link below opens the build log for that computer.
-    %ul.divide-y.divide-border-subtle
-      - @per_computer.each do |row|
-        - log_url = "https://mesa-logs.flatironinstitute.org/#{@commit.sha}/#{row[:computer]&.name}/build.log"
-        %li.flex.items-center.justify-between.gap-3.py-2
-          .flex.items-center.gap-2.min-w-0
-            %span.inline-block.h-2.w-2.rounded-full.shrink-0{ class: status_dot_class_for_computer(row[:state]) }
-            %span.font-mono.text-fg.truncate{ class: "text-[12px]" }= row[:computer]&.name
-          = link_to "Build log",
-                   log_url,
-                   target: "_blank", rel: "noopener",
-                   class: "mesa-btn",
-                   style: "padding: 4px 10px; font-size: 12px;"
+    .flex.flex-wrap.items-center.justify-between.gap-3.border-b.border-border-subtle.px-4.py-3
+      .flex.items-center.gap-2.text-sm
+        %span.text-fg-muted Computer:
+        %span.font-mono.text-fg{ data: { logs_target: "currentLabel" } }
+          = default_name || "—"
+      .flex.flex-wrap.gap-1
+        - @per_computer.each do |row|
+          - name = row[:computer]&.name
+          - next unless name
+          - active = (name == default_name)
+          %button{ type: "button",
+                   class: "rounded-md border px-2 py-1 text-[11px] font-mono cursor-pointer transition-colors " +
+                          (active ? "border-brand bg-brand-soft text-brand-soft-text" : "border-border bg-bg-elev text-fg-muted hover:bg-bg-muted"),
+                   data: { logs_target: "computerButton",
+                           logs_computer: name,
+                           logs_state: row[:state].to_s,
+                           action: "click->logs#selectComputer" } }
+            %span.inline-block.h-1\.5.w-1\.5.rounded-full.mr-1{ class: status_dot_class_for_computer(row[:state]) }
+            = name
+
+    .px-4.py-4
+      .relative.rounded-md.border.border-border-subtle.bg-bg-subtle.overflow-hidden{ data: { logs_target: "frame" } }
+        -# Placeholder shown until the controller swaps in real content.
+        .py-12.text-center.text-fg-muted.text-sm{ data: { logs_target: "placeholder" } }
+          %span Click the Logs tab to load the build log…
+        %pre.hidden.overflow-auto.p-4.font-mono.leading-relaxed.text-fg{ data: { logs_target: "content" }, class: "text-[12px] whitespace-pre-wrap break-words", style: "max-height: 60vh;" }

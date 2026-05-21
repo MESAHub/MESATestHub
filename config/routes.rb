@@ -50,6 +50,16 @@ Rails.application.routes.draw do
   get '/:branch/test_cases/:module/:test_case', to: 'test_cases#show',
   as: 'test_case', constraints: {test_case: /[^\/]+/, branch: /.*/}
 
+  # Build/test log proxy. Fetches the Flatiron-hosted log over HTTPS
+  # and returns it as plain text so the Logs tab can render in the
+  # page without CORS shenanigans. See CommitsController#build_log
+  # for the validation + bytes cap. Must mount BEFORE the catch-all
+  # `:branch/commits/:sha` route below.
+  get '/:branch/commits/:sha/build_log/:computer',
+      to: 'commits#build_log',
+      as: 'commit_build_log',
+      constraints: { branch: /.*/, sha: /[a-f0-9]+/, computer: /[^\/]+/ }
+
   # put this after the test case commit matcher since this is more general
   get '/:branch/commits/:sha', to: 'commits#show', as: 'commit', constraints: {branch: /.*/}
   get '/:branch/commits', to: 'commits#index', as: 'commits', constraints: {branch: /.*/}

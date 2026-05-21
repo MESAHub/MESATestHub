@@ -25,6 +25,25 @@ RSpec.describe 'Page renders', type: :request do
     post '/sessions', params: { email: user.email, password: 'pw-12345678' }
   end
 
+  describe 'GET /:branch/commits/:sha/build_log/:computer' do
+    let(:computer) { create(:computer, name: 'rusty', user: user) }
+    let!(:submission) { create(:submission, commit: commit, computer: computer) }
+
+    it 'returns 404 when the computer has no submissions for this commit' do
+      get "/main/commits/#{commit.short_sha}/build_log/never-submitted"
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.body).to include('no submissions')
+    end
+
+    it 'returns 404 when the commit does not exist' do
+      get "/main/commits/deadbeef/build_log/rusty"
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.body).to include('Commit not found')
+    end
+  end
+
   describe 'GET /:branch/commits/:sha' do
     it 'renders successfully' do
       get "/main/commits/#{commit.short_sha}"

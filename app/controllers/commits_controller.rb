@@ -154,6 +154,58 @@ class CommitsController < ApplicationController
     @last_activity_at = @commits.first&.commit_time
   end
 
+  # Proxy build logs hosted at the Flatiron logs server. Two reasons
+  # to fetch server-side: (1) the Railway-hosted app can't read the
+  # logs cross-origin via fetch() — that bridge gets re-built when
+  # `testhub.mesastar.org` repoints at Railway — and (2) we want a
+  # narrow allow-list so a logged-in user can't trick the page into
+  # fetching an arbitrary file (the computer name must come from a
+  # real submission for this commit).
+  #
+  # Returns plain text. Capped at LOG_BYTES_MAX so a runaway log
+  # can't OOM the server or hammer the user's browser. Timeouts are
+  # short — if the upstream is slow, we'd rather 504 than hang the
+  # tab.
+  LOG_BYTES_MAX = 5.megabytes
+  LOG_OPEN_TIMEOUT = 5
+  LOG_READ_TIMEOUT = 15
+
+  def build_log
+    sha = params[:sha]
+    commit = Commit.where('sha LIKE ?', "#{sha}%").first
+    return render(plain: "Commit not found", status: :not_found) unless commit
+
+    computer_name = params[:computer].to_s
+    has_submission = commit.submissions
+                           .joins(:computer)
+                           .where(computers: { name: computer_name })
+                           .exists?
+    unless has_submission
+      return render(plain: "Computer #{computer_name} has no submissions for this commit",
+                    status: :not_found)
+    end
+
+    log_uri = URI.parse(
+      "https://mesa-logs.flatironinstitute.org/" \
+      "#{commit.sha}/#{ERB::Util.url_encode(computer_name)}/build.log"
+    )
+
+    begin
+      body = fetch_log(log_uri)
+      response.headers["Cache-Control"] = "private, max-age=300"
+      render plain: body, content_type: "text/plain; charset=utf-8"
+    rescue LogNotFound
+      render plain: "Build log not found on Flatiron server.",
+             status: :not_found, content_type: "text/plain; charset=utf-8"
+    rescue LogTooLarge
+      render plain: "Build log exceeds #{LOG_BYTES_MAX / 1.megabyte} MB; download directly: #{log_uri}",
+             status: :payload_too_large, content_type: "text/plain; charset=utf-8"
+    rescue LogFetchError => e
+      render plain: "Could not fetch log (#{e.message}). Direct URL: #{log_uri}",
+             status: :bad_gateway, content_type: "text/plain; charset=utf-8"
+    end
+  end
+
   # API call to allow asynchronous loading of nearby commits
   def nearby_commits
     branch = Branch.includes(:head).named(CGI.unescape(params[:branch]))
@@ -186,6 +238,48 @@ class CommitsController < ApplicationController
   end
 
   private
+
+  # Custom signal types for the build-log proxy so the action can
+  # turn each failure mode into the right status/body without
+  # leaking implementation details.
+  class LogNotFound   < StandardError; end
+  class LogTooLarge   < StandardError; end
+  class LogFetchError < StandardError; end
+
+  def fetch_log(uri)
+    require "net/http"
+
+    Net::HTTP.start(uri.host, uri.port,
+                    use_ssl: uri.scheme == "https",
+                    open_timeout: LOG_OPEN_TIMEOUT,
+                    read_timeout: LOG_READ_TIMEOUT) do |http|
+      request = Net::HTTP::Get.new(uri.request_uri)
+      http.request(request) do |response|
+        case response
+        when Net::HTTPNotFound
+          raise LogNotFound
+        when Net::HTTPSuccess
+          # Stream the body and cap by bytes so a many-MB log doesn't
+          # balloon memory. The whole capped body still lands in a
+          # single String — fine for the typical few-KB build log.
+          buffer = +""
+          response.read_body do |chunk|
+            buffer << chunk
+            raise LogTooLarge if buffer.bytesize > LOG_BYTES_MAX
+          end
+          return buffer
+        else
+          raise LogFetchError, "upstream returned #{response.code}"
+        end
+      end
+    end
+  rescue LogNotFound, LogTooLarge
+    raise
+  rescue Net::OpenTimeout, Net::ReadTimeout => e
+    raise LogFetchError, "timeout (#{e.class.name.demodulize})"
+  rescue StandardError => e
+    raise LogFetchError, e.message
+  end
 
   # Parse the `before=` URL parameter for cursor pagination.
   #
