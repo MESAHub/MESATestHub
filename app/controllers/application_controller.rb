@@ -95,7 +95,7 @@ class ApplicationController < ActionController::Base
       icon: "home"
     }
     
-    render template: "errors/not_found", status: :not_found, layout: "application"
+    render template: "errors/not_found", status: :not_found, layout: "modern"
   end
 
   helper_method :current_user

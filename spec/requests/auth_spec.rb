@@ -1,6 +1,17 @@
 require 'rails_helper'
 
 RSpec.describe 'Authentication flow', type: :request do
+  describe 'GET /login' do
+    it 'renders the modern (Phase 4) layout' do
+      get '/login'
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('mesa-modern')
+      expect(response.body).to include('Log in to MESA Test Hub')
+      expect(response.body).to match(/data-controller=['"]theme['"]/)
+    end
+  end
+
   describe 'POST /sessions' do
     let!(:user) { create(:user, password: 'correct-horse', password_confirmation: 'correct-horse') }
 

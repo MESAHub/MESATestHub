@@ -78,4 +78,19 @@ RSpec.describe 'Page renders', type: :request do
       expect(response).to have_http_status(:ok)
     end
   end
+
+  describe 'render_404 (modern layout)' do
+    # Confirms the Tailwind/Hotwire layout boots cleanly during Phase 4.
+    # test_case_commits#show falls into render_404 when the SHA misses,
+    # which renders errors/not_found inside layouts/modern.html.haml.
+    it 'renders the modern layout for a missing test_case_commit' do
+      get "/main/commits/deadbeef0000/test_cases/#{test_case.module}/#{test_case.name}"
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.body).to include('mesa-modern')
+      expect(response.body).to include('Page not found')
+      expect(response.body).to include('tailwind')
+      expect(response.body).to match(/data-controller=['"]theme['"]/)
+    end
+  end
 end

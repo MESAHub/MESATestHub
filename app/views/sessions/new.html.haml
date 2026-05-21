@@ -1,10 +1,26 @@
-.row
-  .col
-    %h1 Log In
-=bootstrap_form_tag url: sessions_path do |f|
-  .form-row
-    .field.col= f.text_field :email
-  .form-row
-    .field.col= f.password_field :password
-  .form-row
-    .actions=f.submit "Log In"
+- content_for :title, "Log in"
+
+.mx-auto.flex.max-w-md.flex-col.gap-6
+  .rounded-lg.border.border-border.bg-bg-elev.p-8{ style: "box-shadow: var(--shadow-card-md);" }
+    .mb-6.flex.flex-col.items-center.gap-3
+      = mesa_mark(style: "width: 36px; height: 36px; color: var(--color-brand);")
+      %h1.text-xl.font-semibold.tracking-tight.text-fg Log in to MESA Test Hub
+      %p.text-xs.text-fg-muted
+        Sign in with the email tied to your computer accounts.
+
+    = form_with url: sessions_path, method: :post, class: "space-y-4", data: { turbo: false } do |f|
+      .space-y-1.5
+        = f.label :email, "Email", class: "mesa-label"
+        = f.email_field :email, autocomplete: "username", autofocus: true, required: true,
+                                class: "mesa-input"
+
+      .space-y-1.5
+        = f.label :password, "Password", class: "mesa-label"
+        = f.password_field :password, autocomplete: "current-password", required: true,
+                                      class: "mesa-input"
+
+      .pt-2
+        = f.submit "Log in", class: "mesa-btn mesa-btn-primary mesa-btn-block"
+
+    .mt-6.border-t.border-border-subtle.pt-4.text-center.text-xs.text-fg-muted
+      New accounts can only be created by an admin.

@@ -28,6 +28,18 @@ Rails.application.routes.draw do
   get '/computers/:computer/submissions/:id', to: 'submissions#show',
     as: 'computer_submission'
 
+  # Phase 4 modern-layout preview surface. Must mount BEFORE the
+  # `/:branch/commits` catch-all below, otherwise the path constraint
+  # `branch: /.*/` swallows `dev/preview/commits` with branch="dev/preview".
+  # Dev/test only — see DevPreviewController.
+  if Rails.env.development? || Rails.env.test?
+    get 'dev/preview', to: 'dev_preview#index', as: 'dev_preview'
+    get 'dev/preview/not_found', to: 'dev_preview#not_found',
+        as: 'dev_preview_not_found'
+    get 'dev/preview/commits', to: 'dev_preview#commits',
+        as: 'dev_preview_commits'
+  end
+
   # for viewing data for one test case and one commit
   get '/:branch/commits/:sha/test_cases/:module/:test_case',
     to: 'test_case_commits#show', as:'test_case_commit',
