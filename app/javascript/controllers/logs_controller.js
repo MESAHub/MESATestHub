@@ -24,6 +24,7 @@ export default class extends Controller {
   ]
   static values = {
     urlTemplate: String,
+    statusUrlTemplate: String,
     defaultComputer: String,
     activeTab: String,
     shortSha: String
@@ -32,15 +33,14 @@ export default class extends Controller {
   connect() {
     this._loaded = false
     this._loading = false
+    this._available = null
     this._currentComputer = this.defaultComputerValue
     this._onTabsChange = this._handleTabsChange.bind(this)
     document.addEventListener("tabs:change", this._onTabsChange)
-    // If the page loaded directly into the Logs tab (server-side
-    // default-tab logic or a `?tab=logs` deep link), kick the fetch
-    // off now — there's no tabs:change to wait for.
-    if (this.activeTabValue === "logs" && this.defaultComputerValue) {
-      this._maybeLoadInitial()
-    }
+    // Probe upstream so the tab strip can disable Logs before the
+    // user clicks. Runs unconditionally — the side effect belongs
+    // to the strip, not the active panel.
+    this._probeAvailability()
   }
 
   disconnect() {
@@ -55,8 +55,55 @@ export default class extends Controller {
 
   _maybeLoadInitial() {
     if (this._loaded || this._loading) return
+    if (this._available === false) return
     if (!this.defaultComputerValue) return
     this.loadComputer(this.defaultComputerValue)
+  }
+
+  // Probe the upstream log host (cheaply, server-side cached) and
+  // either leave the tab as-is (logs available) or disable it with
+  // a tooltip explaining why nothing's there. If the page loaded
+  // straight into the Logs tab and the probe says it's empty, we
+  // skip auto-loading; the placeholder copy still reads cleanly.
+  async _probeAvailability() {
+    const name = this.defaultComputerValue
+    if (!name) {
+      this._available = false
+      this._disableLogsTab("No computers have submitted for this commit.")
+      return
+    }
+    if (!this.hasStatusUrlTemplateValue) {
+      // No probe wired up — fall through to the lazy-load path so
+      // the tab still works.
+      this._available = true
+      return
+    }
+    const url = this.statusUrlTemplateValue.replace("__COMPUTER__", encodeURIComponent(name))
+    try {
+      const resp = await fetch(url, { headers: { Accept: "application/json" } })
+      const data = resp.ok ? await resp.json() : { available: false }
+      this._available = !!data.available
+      if (!data.available) {
+        this._disableLogsTab("Build logs aren’t available on the Flatiron host for this commit.")
+        return
+      }
+      // Probe said available; if we're on the Logs tab already,
+      // honor the deferred auto-load now that we know it'll
+      // resolve.
+      if (this.activeTabValue === "logs") this._maybeLoadInitial()
+    } catch (_e) {
+      // Network hiccup — don't penalize the tab; treat as available
+      // and let the eventual fetch surface the real error.
+      this._available = true
+    }
+  }
+
+  _disableLogsTab(reason) {
+    const link = document.querySelector('[data-tabs-target="link"][data-tab="logs"]')
+    if (!link) return
+    link.setAttribute("aria-disabled", "true")
+    link.setAttribute("title", reason)
+    link.classList.add("opacity-50", "cursor-not-allowed")
   }
 
   selectComputer(event) {

@@ -20,6 +20,11 @@ export default class extends Controller {
 
   switch(event) {
     event.preventDefault()
+    // Logs (and any other tab) can flip to aria-disabled at runtime
+    // — e.g., when the logs controller probes upstream and finds
+    // nothing. Honor that here so the click does nothing instead of
+    // navigating to a broken panel.
+    if (event.currentTarget.getAttribute("aria-disabled") === "true") return
     const tab = event.currentTarget.dataset.tab
     if (!tab || tab === this.activeValue) return
     this.activeValue = tab

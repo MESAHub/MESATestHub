@@ -16,6 +16,7 @@
 .rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);",
                                               data: { controller: "logs",
                                                       logs_url_template_value: commit_build_log_path(branch: @selected_branch.name, sha: @commit.short_sha, computer: "__COMPUTER__"),
+                                                      logs_status_url_template_value: commit_build_log_status_path(branch: @selected_branch.name, sha: @commit.short_sha, computer: "__COMPUTER__"),
                                                       logs_default_computer_value: default_name.to_s,
                                                       logs_active_tab_value: @active_tab.to_s,
                                                       logs_short_sha_value: @commit.short_sha } }

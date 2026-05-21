@@ -60,6 +60,14 @@ Rails.application.routes.draw do
       as: 'commit_build_log',
       constraints: { branch: /.*/, sha: /[a-f0-9]+/, computer: /[^\/]+/ }
 
+  # Cheap HEAD-only availability probe for the Logs tab. Tells the
+  # client whether the upstream log exists so the tab can disable
+  # itself before the user wastes a click. Cached server-side.
+  get '/:branch/commits/:sha/build_log_status/:computer',
+      to: 'commits#build_log_status',
+      as: 'commit_build_log_status',
+      constraints: { branch: /.*/, sha: /[a-f0-9]+/, computer: /[^\/]+/ }
+
   # put this after the test case commit matcher since this is more general
   get '/:branch/commits/:sha', to: 'commits#show', as: 'commit', constraints: {branch: /.*/}
   get '/:branch/commits', to: 'commits#index', as: 'commits', constraints: {branch: /.*/}

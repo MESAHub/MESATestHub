@@ -206,6 +206,39 @@ class CommitsController < ApplicationController
     end
   end
 
+  # Lightweight upstream-existence check for the Logs tab. Returns
+  # `{ available: bool }` so the client can disable the tab before
+  # the user spends a click discovering there's no log. Cached for
+  # 10 minutes because completed build logs don't change, and even
+  # in-flight builds rarely upload then disappear.
+  LOG_STATUS_CACHE_TTL = 10.minutes
+
+  def build_log_status
+    sha = params[:sha]
+    commit = Commit.where('sha LIKE ?', "#{sha}%").first
+    return render(json: { available: false, reason: "commit_not_found" }, status: :not_found) unless commit
+
+    computer_name = params[:computer].to_s
+    has_submission = commit.submissions
+                           .joins(:computer)
+                           .where(computers: { name: computer_name })
+                           .exists?
+    unless has_submission
+      return render(json: { available: false, reason: "computer_not_associated" })
+    end
+
+    log_uri = URI.parse(
+      "https://mesa-logs.flatironinstitute.org/" \
+      "#{commit.sha}/#{ERB::Util.url_encode(computer_name)}/build.log"
+    )
+    cache_key = ["build_log_exists", commit.sha, computer_name].join(":")
+    available = Rails.cache.fetch(cache_key, expires_in: LOG_STATUS_CACHE_TTL) do
+      probe_log_url(log_uri)
+    end
+
+    render json: { available: !!available, computer: computer_name }
+  end
+
   # API call to allow asynchronous loading of nearby commits
   def nearby_commits
     branch = Branch.includes(:head).named(CGI.unescape(params[:branch]))
@@ -279,6 +312,23 @@ class CommitsController < ApplicationController
     raise LogFetchError, "timeout (#{e.class.name.demodulize})"
   rescue StandardError => e
     raise LogFetchError, e.message
+  end
+
+  # Single HEAD probe for build_log_status. Returns true iff
+  # upstream returns 2xx. Swallows timeouts and other network
+  # errors as "not available" — the worst case is a disabled tab
+  # the user could enable by reloading after the upstream recovers.
+  def probe_log_url(uri)
+    require "net/http"
+    Net::HTTP.start(uri.host, uri.port,
+                    use_ssl: uri.scheme == "https",
+                    open_timeout: LOG_OPEN_TIMEOUT,
+                    read_timeout: LOG_OPEN_TIMEOUT) do |http|
+      response = http.request(Net::HTTP::Head.new(uri.request_uri))
+      response.is_a?(Net::HTTPSuccess)
+    end
+  rescue StandardError
+    false
   end
 
   # Parse the `before=` URL parameter for cursor pagination.
