@@ -294,7 +294,7 @@ module CommitState
     rows.compact.sort_by do |r|
       [
         _test_sort_rank(r[:overall]),
-        r[:test_case]&.module.to_s,
+        _module_sort_rank(r[:test_case]&.module),
         r[:test_case]&.name.to_s
       ]
     end
@@ -463,5 +463,14 @@ module CommitState
     # answer yet" — so they cluster together in the Tests-tab list
     # rather than getting hidden after the all-pass section.
     { fail: 0, mixed: 1, pending: 2, not_run: 3, flagged: 4, pass: 5 }.fetch(overall, 6)
+  end
+
+  # Sort tests by `TestCase.modules` order — star → binary → astero
+  # at time of writing. Sourcing the ranking from `TestCase.modules`
+  # (rather than e.g. inverting an alphabetical compare) means the
+  # order survives if MESA adds a new module like `eos` that
+  # doesn't sit at the end of the alphabet.
+  def _module_sort_rank(mod_name)
+    TestCase.modules.index(mod_name.to_s) || TestCase.modules.size
   end
 end

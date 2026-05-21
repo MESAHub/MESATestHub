@@ -363,6 +363,22 @@ RSpec.describe 'commit state aggregation' do
       overalls = commit.reload.per_test_summary.map { |r| r[:overall] }
       expect(overalls.first).to eq(:fail)
     end
+
+    it 'orders tests within the same status by TestCase.modules (star, binary, astero)' do
+      # All passing; sort within :pass should follow the module
+      # ranking rather than alphabetical order on the module name.
+      [test_case_a, test_case_b, test_case_c].each do |tc|
+        [rusty, popeye].each { |c| instance(test_case: tc, computer: c, passed: true) }
+      end
+
+      passing_rows = commit.reload.per_test_summary.select { |r| r[:overall] == :pass }
+      modules = passing_rows.map { |r| r[:test_case].module }
+      # The three fixtures are: irradiated_planet (binary),
+      # 1_5M_with_diffusion (star), pisn (star). With star-first
+      # ordering the star tests should come before binary.
+      expect(modules.take(2)).to eq(%w[star star])
+      expect(modules.last).to eq("binary")
+    end
   end
 
   describe '#cells_changed_since' do
