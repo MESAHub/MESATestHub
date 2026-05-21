@@ -52,27 +52,35 @@
         = mesa_icon(:copy, size: 13)
         %span{ data: { copy_button_target: "label" } } Copy SHA
 
-  -# Stat row: builds / failing / mixed / pending / fpe+checksum / recent sparkline
+  -# Stat row + focused 5-station subway map. Stats live in the left
+  -# half (compressed); the map takes the right half so the current
+  -# commit's neighborhood is legible. FPE / ≠ stat is skipped when
+  -# zero (the pill row above already surfaces those flags when they
+  -# fire, and an always-zero tile is noise).
+  - fpe_count = flags[:fpe].to_i + flags[:checksum].to_i
+  - stats_columns = fpe_count.positive? ? "grid-cols-5" : "grid-cols-4"
   .mt-5.pt-4.border-t.border-border-subtle
-    .grid.gap-6{ class: "grid-cols-2 sm:grid-cols-3 md:grid-cols-[1fr_1fr_1fr_1fr_1fr_minmax(220px,2fr)]" }
-      = stat_block(label: "Builds",
-                   value: "#{state[:build][:built_computer_ids].size} / #{state[:build][:built_computer_ids].size + state[:build][:failed_build_computer_ids].size}",
-                   color: state[:build][:status] == :all_fail ? "text-buildfail" : (state[:build][:status] == :some_fail ? "text-warning" : "text-success"))
-      = stat_block(label: "Tests failing",
-                   value: tests[:uniform_failing_tests],
-                   color: tests[:uniform_failing_tests].positive? ? "text-danger" : "text-fg-subtle")
-      = stat_block(label: "Mixed",
-                   value: tests[:mixed_tests],
-                   color: tests[:mixed_tests].positive? ? "text-warning" : "text-fg-subtle")
-      = stat_block(label: "Pending",
-                   value: tests[:pending_tests],
-                   color: tests[:pending_tests].positive? ? "text-info" : "text-fg-subtle")
-      = stat_block(label: "FPE / ≠",
-                   value: flags[:fpe].to_i + flags[:checksum].to_i,
-                   color: (flags[:fpe].to_i + flags[:checksum].to_i).positive? ? "text-warning" : "text-fg-subtle")
+    .grid.gap-6{ class: "grid-cols-1 md:grid-cols-2" }
+      .grid.gap-3{ class: stats_columns }
+        = stat_block(label: "Builds",
+                     value: "#{state[:build][:built_computer_ids].size} / #{state[:build][:built_computer_ids].size + state[:build][:failed_build_computer_ids].size}",
+                     color: state[:build][:status] == :all_fail ? "text-buildfail" : (state[:build][:status] == :some_fail ? "text-warning" : "text-success"))
+        = stat_block(label: "Failing",
+                     value: tests[:uniform_failing_tests],
+                     color: tests[:uniform_failing_tests].positive? ? "text-danger" : "text-fg-subtle")
+        = stat_block(label: "Mixed",
+                     value: tests[:mixed_tests],
+                     color: tests[:mixed_tests].positive? ? "text-warning" : "text-fg-subtle")
+        = stat_block(label: "Pending",
+                     value: tests[:pending_tests],
+                     color: tests[:pending_tests].positive? ? "text-info" : "text-fg-subtle")
+        - if fpe_count.positive?
+          = stat_block(label: "FPE / ≠",
+                       value: fpe_count,
+                       color: "text-warning")
       .min-w-0
-        %span.mesa-label.mb-1 Recent · last 12
-        = render "commits/hero_sparkline", sparkline_data: @sparkline_data, focused_sha: @commit.sha
+        %span.mesa-label.mb-1 Recent commits
+        = render "commits/hero_subway_map", window: @hero_window, focused_sha: @commit.sha
 
   -# Full SHA footer.
   .mt-4.pt-3.border-t.border-border-subtle.flex.items-baseline.gap-3

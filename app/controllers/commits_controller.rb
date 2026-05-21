@@ -27,7 +27,7 @@ class CommitsController < ApplicationController
     @per_computer    = @commit.per_computer_summary
     @per_test        = @commit.per_test_summary
     @neighbors       = @selected_branch.commit_neighbors(@commit)
-    @sparkline_data  = @selected_branch.sparkline_data(limit: 12)
+    @hero_window     = @selected_branch.focused_commit_window(@commit, size: 5)
 
     @last_clean_commit = @selected_branch.last_clean_commit_before(@commit)
     @diff_rows         = @commit.cells_changed_since(@last_clean_commit)

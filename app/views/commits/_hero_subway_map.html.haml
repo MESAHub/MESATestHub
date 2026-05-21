@@ -1,0 +1,82 @@
+-# Compact 5-station subway map for the commit detail hero. Centers
+-# on the focused commit, with that station enlarged and ringed in
+-# the brand color so the user sees "you are here" at a glance.
+-# Adjacent stations link to their commits. Hover-popovers are
+-# deliberately not included — the breadcrumb's prev/next buttons
+-# already cover one-hop navigation, and the larger subway map on
+-# the index page is where exploration belongs.
+-#
+-# Locals:
+-#   window:      Array of Commit, newest-first (output of
+-#                `Branch#focused_commit_window`). May be shorter
+-#                than 5 on stubby branches.
+-#   focused_sha: full SHA of the commit to mark as "current."
+
+- count = window.size
+- if count.zero?
+  %p.text-fg-subtle{ class: "text-[11px]" } no recent activity
+- else
+  - build_colors = { all_ok: "var(--color-success)", some_fail: "var(--color-warning)", all_fail: "var(--color-buildfail)", unknown: "var(--color-skipped)" }
+  - tests_colors = { all_pass: "var(--color-success)", mixed: "var(--color-warning)", fail: "var(--color-danger)", pending_partial: "var(--color-info)", pending: "var(--color-skipped)", not_run: "var(--color-skipped)" }
+  - station_spacing = 64
+  - pad_x = 26
+  - panel_h = 64
+  - center_y = 26
+  - # Standard station radii.
+  - outer_r = 9
+  - inner_r = 6
+  - core_r  = 4
+  - # Focused-station radii — about 1.5x to read as "you are here."
+  - f_outer_r = 13
+  - f_inner_r = 9
+  - f_core_r  = 6
+  - f_ring_r  = 16
+  - width = pad_x * 2 + station_spacing * [count - 1, 0].max
+
+  %svg{ viewBox: "0 0 #{width} #{panel_h}",
+        preserveAspectRatio: "xMinYMid meet",
+        role: "img",
+        "aria-label": "Recent #{count} commits, current outlined",
+        class: "block",
+        style: "max-width: 100%; height: #{panel_h}px;" }
+    %defs
+      %marker#hero-subway-arrow{ viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "6", markerHeight: "6", orient: "auto-start-reverse", fill: "var(--color-border-strong)" }
+        %path{ d: "M 0 0 L 10 5 L 0 10 z" }
+    - if count > 1
+      %line{ x1: pad_x, y1: center_y,
+             x2: pad_x + station_spacing * (count - 1) + 10,
+             y2: center_y,
+             stroke: "var(--color-border-strong)",
+             "stroke-width": 2,
+             "marker-end": "url(#hero-subway-arrow)" }
+    - window.each_with_index do |commit, i|
+      - state = commit.commit_state
+      - x = pad_x + station_spacing * i
+      - ring_color = tests_colors[state[:tests][:status]] || tests_colors[:not_run]
+      - core_color = build_colors[state[:build][:status]] || build_colors[:unknown]
+      - focused = (commit.sha == focused_sha)
+      - r_outer = focused ? f_outer_r : outer_r
+      - r_inner = focused ? f_inner_r : inner_r
+      - r_core  = focused ? f_core_r  : core_r
+      %g
+        - if focused
+          %circle{ cx: x, cy: center_y, r: f_ring_r,
+                   fill: "none",
+                   stroke: "var(--color-brand)",
+                   "stroke-width": 1.75 }
+          %circle{ cx: x, cy: center_y, r: r_outer, fill: ring_color }
+          %circle{ cx: x, cy: center_y, r: r_inner, fill: "var(--color-bg-elev)" }
+          %circle{ cx: x, cy: center_y, r: r_core,  fill: core_color }
+          %title= "#{commit.short_sha} · current · build #{state[:build][:status]} · tests #{state[:tests][:status]}"
+        - else
+          %a{ href: commit_path(branch: @selected_branch.name, sha: commit.short_sha) }
+            %circle{ cx: x, cy: center_y, r: r_outer, fill: ring_color }
+            %circle{ cx: x, cy: center_y, r: r_inner, fill: "var(--color-bg-elev)" }
+            %circle{ cx: x, cy: center_y, r: r_core,  fill: core_color }
+            %title= "#{commit.short_sha} · build #{state[:build][:status]} · tests #{state[:tests][:status]}"
+        %text{ x: x, y: panel_h - 4,
+               "text-anchor": "middle",
+               "font-family": "var(--font-mono)",
+               "font-size": "10",
+               fill: focused ? "var(--color-fg)" : "var(--color-fg-subtle)" }
+          = commit.short_sha

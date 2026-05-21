@@ -293,6 +293,47 @@ class Branch < ApplicationRecord
     end
   end
 
+  # Window of up to `size` commits on this branch centered on
+  # `focused_commit`, returned newest-first. Used by the commit
+  # detail hero's mini subway map so the user sees the focused
+  # commit in context with its neighbors.
+  #
+  # If `focused_commit` is at or near the head/tail, the missing
+  # side's slots fill from the other side so the window keeps a
+  # consistent visual length. (Branch may simply be shorter than
+  # `size` in total, in which case the returned array is too.)
+  def focused_commit_window(focused_commit, size: 5)
+    half = (size - 1) / 2
+
+    newer = ordered_commits
+              .where('commits.commit_time > ?', focused_commit.commit_time)
+              .reorder('commits.commit_time ASC')
+              .limit(half)
+              .to_a
+    older = ordered_commits
+              .where('commits.commit_time < ?', focused_commit.commit_time)
+              .limit(half)
+              .to_a
+
+    # Compensate when the focused commit is near an end of the
+    # branch — pull extra from the side that still has commits.
+    deficit = (size - 1) - newer.size - older.size
+    if deficit > 0 && newer.size < half
+      older = ordered_commits
+                .where('commits.commit_time < ?', focused_commit.commit_time)
+                .limit(half + deficit)
+                .to_a
+    elsif deficit > 0 && older.size < half
+      newer = ordered_commits
+                .where('commits.commit_time > ?', focused_commit.commit_time)
+                .reorder('commits.commit_time ASC')
+                .limit(half + deficit)
+                .to_a
+    end
+
+    newer.reverse + [focused_commit] + older
+  end
+
   # Build the sparkline payload used in the commits list and commit
   # detail hero. Walks the branch's `ordered_commits` newest-first and
   # returns the last N commits packaged with the categorical states the

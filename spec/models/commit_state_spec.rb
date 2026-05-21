@@ -451,6 +451,50 @@ RSpec.describe Branch, type: :model do
     end
   end
 
+  describe '#focused_commit_window' do
+    let(:branch) { create(:branch, name: 'main') }
+    # Five commits, newest-first: c0 (newest) → c4 (oldest).
+    let(:commits) do
+      list = 5.times.map do |i|
+        c = create(:commit, commit_time: i.days.ago)
+        BranchMembership.create!(branch: branch, commit: c)
+        c
+      end
+      branch.update!(head: list.first)
+      list.each_cons(2) do |newer, older|
+        CommitRelation.create!(parent: older, child: newer, parent_index: 0)
+      end
+      list
+    end
+
+    it 'centers the window with two newer and two older when the focused commit is in the middle' do
+      window = branch.focused_commit_window(commits[2], size: 5)
+      expect(window.map(&:short_sha)).to eq(commits.map(&:short_sha))
+    end
+
+    it 'pulls extra older commits when the focused commit is the head' do
+      window = branch.focused_commit_window(commits[0], size: 5)
+      expect(window.first).to eq(commits[0])
+      expect(window.size).to eq(5)
+      expect(window).to eq(commits) # head + 4 older
+    end
+
+    it 'pulls extra newer commits when the focused commit is the oldest' do
+      window = branch.focused_commit_window(commits.last, size: 5)
+      expect(window.last).to eq(commits.last)
+      expect(window.size).to eq(5)
+      expect(window).to eq(commits) # 4 newer + oldest
+    end
+
+    it 'returns just the focused commit when the branch has only one' do
+      lone_branch = create(:branch, name: 'lone')
+      c = create(:commit, commit_time: Time.current)
+      BranchMembership.create!(branch: lone_branch, commit: c)
+      lone_branch.update!(head: c)
+      expect(lone_branch.focused_commit_window(c)).to eq([c])
+    end
+  end
+
   describe '#last_clean_commit_before' do
     let(:branch) { create(:branch, name: 'main') }
     let(:user) { create(:user) }
