@@ -80,14 +80,16 @@ module CommitsHelper
   end
 
   # Renders the test-status pill: All passing / N failing / N mixed /
-  # Incomplete / Untested.
+  # Pending / Untested.
   #
   # Mapping note: `:pending` (TCCs exist, no submissions) and
   # `:not_run` (no test data at all) both render as gray "Untested"
   # since the codebase doesn't model a "promised but not yet
   # submitted" distinction. Blue is reserved for `:pending_partial`
-  # — some test cases have passing submissions, others are still
-  # waiting — which is genuinely actionable ("a run is mid-flight").
+  # — some test cases have passing submissions, others haven't
+  # reported — which is genuinely actionable. The word stays
+  # "Pending" because we don't actually know whether the run is in
+  # flight, queued, or lost; "Pending" is the honest framing.
   def test_status_pill(state, size: :md)
     base = pill_classes(size)
     case state[:tests][:status]
@@ -105,7 +107,7 @@ module CommitsHelper
       end
     when :pending_partial
       content_tag(:span, class: "#{base} bg-info-soft text-info-soft-text") do
-        safe_join([mesa_icon(:clock, size: 11), "Incomplete"], " ")
+        safe_join([mesa_icon(:clock, size: 11), "Pending"], " ")
       end
     else
       content_tag(:span, class: "#{base} bg-success-soft text-success-soft-text") do
