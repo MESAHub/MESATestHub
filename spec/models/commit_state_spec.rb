@@ -234,6 +234,19 @@ RSpec.describe 'commit state aggregation' do
       expect(state[:tests][:status]).to eq(:not_run)
     end
 
+    it 'counts tests with no built-computer results as pending in the hero stat row' do
+      # Every computer attempted to build and failed; the commit *has*
+      # TCCs (so we know which tests to run) but no built computer has
+      # any cell with a status. Those tests should count toward
+      # `pending_tests` so the hero's "Pending" tile flags them as
+      # missing, rather than being silently dropped.
+      all_computers.each { |c| submit(computer: c, compiled: false) }
+      [test_case_a, test_case_b, test_case_c].each { |tc| tcc_for(tc) }
+
+      state = commit.reload.commit_state
+      expect(state[:tests][:pending_tests]).to eq(3)
+    end
+
     it '8e7c1b3 — passing with two full-inlist runs flagged' do
       all_computers.each { |c| submit(computer: c) }
       [test_case_a, test_case_b, test_case_c].each do |tc|
@@ -326,6 +339,20 @@ RSpec.describe 'commit state aggregation' do
       instance(test_case: test_case_a, computer: popeye, passed: true)
       row = commit.reload.per_test_summary.find { |r| r[:test_case] == test_case_a }
       expect(row[:overall]).to eq(:flagged)
+    end
+
+    it 'classifies a test with no built-computer results as :not_run' do
+      # Override the `before` block: every submission failed to
+      # compile, so the matrix's filter-to-built leaves the row
+      # empty. Without this clause `per_test_summary` used to fall
+      # through to `:pass` and the Tests tab rendered the row green.
+      Submission.where(commit: commit).delete_all
+      submit(computer: rusty, compiled: false)
+      submit(computer: popeye, compiled: false)
+      tcc_for(test_case_a)
+
+      row = commit.reload.per_test_summary.find { |r| r[:test_case] == test_case_a }
+      expect(row[:overall]).to eq(:not_run)
     end
 
     it 'sorts failing tests above passing ones' do

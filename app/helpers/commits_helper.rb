@@ -251,6 +251,7 @@ module CommitsHelper
 
   # Compact one-line summary for a per-test row in the Tests tab.
   def summary_for_test(row)
+    return "not run" if row[:overall] == :not_run
     counts = row[:counts]
     return "#{counts[:fail]} fail" if counts[:fail] > 0 && counts[:pass] == 0
     return "#{counts[:fail]} fail · #{counts[:pass]} pass" if counts[:fail].positive?

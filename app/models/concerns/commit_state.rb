@@ -110,8 +110,15 @@ module CommitState
       passes = row.count   { |_id, cell| cell[:status] == :pass }
       fails  = row.count   { |_id, cell| cell[:status] == :fail }
       ran = passes + fails
+      # "Never run" — no built-computer cell has reported any result.
+      # Treat the same as pending so the hero's stat row + the Tests
+      # tab reflect that the test is *missing* a result, not passing.
+      # Happens when no computer compiled (so the matrix filter to
+      # built_ids leaves the row empty) or when a built computer
+      # hasn't gotten around to submitting test data yet.
+      not_run = (pendings + passes + fails).zero?
 
-      pending_tests += 1 if pendings.positive?
+      pending_tests += 1 if pendings.positive? || not_run
 
       if fails.positive? && passes.positive?
         mixed_tests += 1
@@ -260,8 +267,14 @@ module CommitState
       end
       ran = counts[:pass] + counts[:fail]
 
+      # A built-computer row that has no pass/fail/pending counts at
+      # all means the test was never run on any computer that
+      # compiled — render as :not_run so the Tests tab shows a gray
+      # dot instead of misleading green.
       overall =
-        if counts[:fail].positive? && counts[:pass].positive? then :mixed
+        if built_cells.empty? || (counts[:pass] + counts[:fail] + counts[:pending]).zero?
+          :not_run
+        elsif counts[:fail].positive? && counts[:pass].positive? then :mixed
         elsif counts[:fail].positive? && counts[:fail] == ran then :fail
         elsif counts[:pending].positive? then :pending
         elsif (counts[:fpe] + counts[:checksum]).positive? then :flagged
@@ -446,6 +459,9 @@ module CommitState
   end
 
   def _test_sort_rank(overall)
-    { fail: 0, mixed: 1, pending: 2, flagged: 3, pass: 4 }.fetch(overall, 5)
+    # :not_run sits next to :pending — both mean "we don't have an
+    # answer yet" — so they cluster together in the Tests-tab list
+    # rather than getting hidden after the all-pass section.
+    { fail: 0, mixed: 1, pending: 2, not_run: 3, flagged: 4, pass: 5 }.fetch(overall, 6)
   end
 end
