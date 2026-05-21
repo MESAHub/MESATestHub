@@ -260,6 +260,54 @@ module CommitsHelper
     "#{counts[:pass]} ok"
   end
 
+  # Categories a single per_test_summary row belongs to. A row can
+  # carry multiple — a passing-with-checksum-mismatch row appears
+  # under both "checksums" and (depending on flags) maybe "fpe" —
+  # so the Tests tab's filter chips work as a multi-tag system
+  # rather than a strict partition.
+  #
+  # Categories:
+  #   failing   — `:fail` (uniform failure across built computers)
+  #   mixed     — `:mixed` (passes on some, fails on others)
+  #   pending   — `:pending` (runs in progress)
+  #   checksums — passing rows with a bit-for-bit divergence
+  #               (`counts[:checksum] > 0`), after the existing
+  #               run_optional / fine-resolution exclusions
+  #   fpe       — passing rows with an FPE flag
+  #   passing   — `:pass` (clean pass, no flags)
+  #   untested  — `:not_run` (no built-computer ever reported)
+  def test_row_categories(row)
+    cats = case row[:overall]
+           when :fail    then ["failing"]
+           when :mixed   then ["mixed"]
+           when :pending then ["pending"]
+           when :pass    then ["passing"]
+           when :not_run then ["untested"]
+           else []
+           end
+    counts = row[:counts] || {}
+    # `:flagged` plus the explicit checksum/fpe counts populate the
+    # narrower category tags. Even a row classified as `:fail` /
+    # `:mixed` can carry flag tags so the chips behave consistently
+    # ("Checksums" includes every row with a checksum divergence,
+    # regardless of overall state).
+    cats << "checksums" if counts[:checksum].to_i.positive?
+    cats << "fpe"       if counts[:fpe].to_i.positive?
+    cats
+  end
+
+  # Compute per-category row counts for the Tests-tab filter
+  # chips. The "all" bucket is the total row count; every other
+  # bucket is the number of rows that contain that category tag.
+  def tests_filter_counts(per_test)
+    counts = Hash.new(0)
+    counts["all"] = per_test.size
+    per_test.each do |row|
+      test_row_categories(row).each { |cat| counts[cat] += 1 }
+    end
+    counts
+  end
+
   # Dot color for a per-test summary row. The design treats :flagged
   # the same as :mixed for the indicator color (a passing-but-flagged
   # test is amber, not green) — different from :pass.

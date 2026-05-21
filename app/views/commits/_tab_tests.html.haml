@@ -1,20 +1,56 @@
--# Tests tab — per-test rows with mini computer ribbon. Substep
--# coming in a follow-up; for now render the per_test_summary as a
--# compact list so the page is functional.
-.rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);" }
-  .px-4.py-2.border-b.border-border-subtle.text-fg-subtle.text-xs
-    = pluralize(@per_test.size, "test case")
-    on this commit. Full search + ribbon coming in a follow-up substep.
+-# Tests tab — full per-test list with status-based filter chips at
+-# the top. The chips are single-select; default is "All". Hiding
+-# happens client-side via the `tests-filter` Stimulus controller,
+-# which keys off `data-categories` on each row. Row categorization
+-# is in `CommitsHelper#test_row_categories`.
+-#
+-# Empty rows: chips with a zero count are dropped from the row
+-# so the toolbar doesn't get bloated with disabled filters.
+- filter_counts = tests_filter_counts(@per_test)
+- # Order matches the "interesting → boring" priority used elsewhere.
+- chip_specs = [["failing", "Failing", "bg-danger"], ["mixed", "Mixed", "bg-warning"], ["pending", "Pending", "bg-info"], ["checksums", "Checksums", "bg-warning"], ["fpe", "FPE", "bg-warning"], ["passing", "Passing", "bg-success"], ["untested", "Untested", "bg-skipped"]]
+- visible_chips = chip_specs.select { |id, _label, _dot| filter_counts[id].positive? }
+
+.rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);",
+                                              data: { controller: "tests-filter",
+                                                      tests_filter_active_value: "all" } }
+  .flex.flex-wrap.items-center.gap-2.px-4.py-3.border-b.border-border-subtle
+    %span.text-fg-muted.text-xs.mr-1
+      = pluralize(@per_test.size, "test case")
+      on this commit
+    -# "All" chip is always present.
+    %button{ type: "button",
+             "aria-pressed": "true",
+             class: "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium cursor-pointer transition-colors border-brand bg-brand-soft text-brand-soft-text",
+             data: { tests_filter_target: "chip",
+                     filter: "all",
+                     action: "click->tests-filter#select" } }
+      %span All
+      %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= filter_counts["all"]
+    - visible_chips.each do |id, label, dot|
+      %button{ type: "button",
+               "aria-pressed": "false",
+               class: "inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-elev px-2 py-1 text-xs font-medium cursor-pointer transition-colors text-fg-muted hover:bg-bg-muted",
+               data: { tests_filter_target: "chip",
+                       filter: id,
+                       action: "click->tests-filter#select" } }
+        %span{ class: "inline-block h-1.5 w-1.5 rounded-full #{dot}" }
+        %span= label
+        %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= filter_counts[id]
+
   - if @per_test.empty?
     .px-4.py-10.text-center.text-fg-subtle.text-sm No tests reported for this commit.
   - else
     %ul.divide-y.divide-border-subtle
       - @per_test.each do |row|
-        %li.flex.items-center.gap-3.px-4.py-2
-          %span.inline-block.h-2.w-2.rounded-full.shrink-0{ class: status_dot_class_for_test(row[:overall]) }
+        - categories = test_row_categories(row)
+        %li.flex.items-center.gap-3.px-4.py-2{ data: { tests_filter_target: "row", categories: categories.join(" ") } }
+          %span{ class: "inline-block h-2 w-2 rounded-full shrink-0 #{status_dot_class_for_test(row[:overall])}" }
           .flex-1.min-w-0
             %span.font-mono.text-fg.truncate{ class: "text-[12px]" }= row[:test_case]&.name
             %span.text-fg-subtle.ml-1{ class: "text-[11px]" }
               = surround '(', ')' do
                 = row[:test_case]&.module
           %span.text-fg-muted.font-mono.tabular-nums{ class: "text-[11px]" }= summary_for_test(row)
+    .px-4.py-8.text-center.text-fg-subtle.text-sm{ hidden: true, data: { tests_filter_target: "empty" } }
+      No tests in this category.
