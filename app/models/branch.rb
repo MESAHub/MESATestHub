@@ -48,8 +48,10 @@ class Branch < ApplicationRecord
     SQL
   end
 
-  private
-
+  # Raw SQL for the recursive CTE that finds every commit reachable from
+  # this branch's head. Public so callers can wrap it in their own
+  # subquery — the commits index, for example, layers cursor-pagination
+  # WHERE clauses on top to get the "newer than" lookahead it needs.
   def reachable_commits_sql
     return 'SELECT * FROM commits WHERE 1 = 0' unless head_id
 
@@ -66,8 +68,6 @@ class Branch < ApplicationRecord
         JOIN reachable ON commits.id = reachable.id
     SQL
   end
-
-  public
 
   ###############################################
   # PHASE 3.5 RECONCILE-WITH-GITHUB ENTRY POINT #
@@ -255,6 +255,28 @@ class Branch < ApplicationRecord
 
   def self.older(weeks: 4)
     Branch.where('updated_at <= ?', weeks.weeks.ago).order(:name)
+  end
+
+  # Build the sparkline payload used in the commits list and commit
+  # detail hero. Walks the branch's `ordered_commits` newest-first and
+  # returns the last N commits packaged with the categorical states the
+  # sparkline cells render: build status + tests status (see
+  # CommitState#commit_state for the vocabulary).
+  #
+  # Yes, this is N+1 in commit_state — each commit's helpers touch its
+  # submissions and test_case_commits. Profile and batch once the
+  # sparkline is wired into actual views. For now 12 commits is well
+  # under the threshold worth pre-optimizing.
+  def sparkline_data(limit: 12)
+    ordered_commits.limit(limit).map do |commit|
+      state = commit.commit_state
+      {
+        commit: commit,
+        sha: commit.short_sha,
+        build_status: state[:build][:status],
+        tests_status: state[:tests][:status]
+      }
+    end
   end
 
   # Return test_case_commits for the same test case on commits near
