@@ -11,9 +11,14 @@
 - chip_specs = [["failing", "Failing", "bg-danger"], ["mixed", "Mixed", "bg-warning"], ["pending", "Pending", "bg-info"], ["checksums", "Checksums", "bg-warning"], ["fpe", "FPE", "bg-warning"], ["passing", "Passing", "bg-success"], ["untested", "Untested", "bg-skipped"]]
 - visible_chips = chip_specs.select { |id, _label, _dot| filter_counts[id].positive? }
 
+- # Initial active chip. The Stimulus controller's `applyActive`
+- # will sync chip styling on connect, so we don't need to render
+- # the right server-side classes — just hand it the URL-supplied
+- # filter and let JS take it from there. Unknown values are silent.
+- initial_filter = (@active_filter || "all")
 .rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);",
                                               data: { controller: "tests-filter",
-                                                      tests_filter_active_value: "all" } }
+                                                      tests_filter_active_value: initial_filter } }
   .flex.flex-wrap.items-center.gap-2.px-4.py-3.border-b.border-border-subtle
     %span.text-fg-muted.text-xs.mr-1
       = pluralize(@per_test.size, "test case")

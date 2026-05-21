@@ -11,8 +11,7 @@
         failing since last passing commit
         = link_to @last_clean_commit.short_sha,
                  commit_path(branch: @selected_branch.name, sha: @last_clean_commit.short_sha),
-                 class: "font-mono font-semibold px-1.5 py-0.5 rounded no-underline",
-                 style: "background: var(--color-bg-elev); color: var(--color-brand);"
+                 class: "font-mono font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity"
       - if failing_cells.any?
         %p.opacity-80{ class: "text-[11px]" }
           - failing_cells.first(3).each_with_index do |cell, i|
@@ -25,8 +24,8 @@
               = ',' unless i == [failing_cells.size, 3].min - 1
           - if failing_cells.size > 3
             %span.ml-1 + #{failing_cells.size - 3} more
-    %a.mesa-btn.shrink-0{ href: "?tab=diff",
+    %a.mesa-btn.shrink-0{ href: "?tab=tests&filter=failing",
                           style: "padding: 4px 10px; font-size: 12px;",
                           data: { action: "click->tabs#switchFromLink" } }
-      View diff
+      See failing tests
       = mesa_icon(:arrow_right, size: 12)

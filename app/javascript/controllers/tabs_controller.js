@@ -40,6 +40,16 @@ export default class extends Controller {
     this.activeValue = tab
     this.applyActive(tab)
     this.pushUrl(tab)
+
+    // If the link carries a `filter` param (banner shortcut from
+    // "See failing tests", "See mixed tests"), broadcast it so the
+    // target panel's filter controller can apply it. We bubble the
+    // event up to `document` so per-panel listeners can subscribe
+    // anywhere in the tree.
+    const filter = url.searchParams.get("filter")
+    if (filter) {
+      this.dispatch("filter", { detail: { tab, filter }, bubbles: true, prefix: "tabs" })
+    }
   }
 
   applyActive(active) {

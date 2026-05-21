@@ -21,7 +21,7 @@
               = ',' unless i == [mixed_cells.size, 3].min - 1
           - if mixed_cells.size > 3
             %span.ml-1 + #{mixed_cells.size - 3} more
-    %a.mesa-btn.shrink-0{ href: "?tab=tests",
+    %a.mesa-btn.shrink-0{ href: "?tab=tests&filter=mixed",
                           style: "padding: 4px 10px; font-size: 12px;",
                           data: { action: "click->tabs#switchFromLink" } }
       See mixed tests

@@ -39,6 +39,11 @@ class CommitsController < ApplicationController
                   else
                     @default_tab
                   end
+
+    # Tests-tab filter pre-selection. Banner action buttons hand
+    # off via `?filter=<tag>`; the same URL works for direct deep
+    # links. Unknown values fall through to "all" client-side.
+    @active_filter = params[:filter].presence
   end
 
   def index

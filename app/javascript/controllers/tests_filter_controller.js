@@ -17,6 +17,25 @@ export default class extends Controller {
 
   connect() {
     this.applyActive(this.activeValue)
+    // Banner shortcuts ("See mixed tests", "See failing tests")
+    // route through the tabs controller, which broadcasts a
+    // `tabs:filter` event after switching panels. Pick that up so
+    // landing on the Tests tab from a banner button lands on the
+    // right pre-applied chip rather than the default "All".
+    this._onTabsFilter = this._handleTabsFilter.bind(this)
+    document.addEventListener("tabs:filter", this._onTabsFilter)
+  }
+
+  disconnect() {
+    document.removeEventListener("tabs:filter", this._onTabsFilter)
+  }
+
+  _handleTabsFilter(event) {
+    if (!event.detail) return
+    if (event.detail.tab !== "tests") return
+    if (!event.detail.filter) return
+    this.activeValue = event.detail.filter
+    this.applyActive(event.detail.filter)
   }
 
   select(event) {
