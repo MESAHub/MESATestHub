@@ -166,6 +166,169 @@ module CommitState
     }
   end
 
+  # Which tab to land on by default when a user opens the commit detail
+  # page. Build issues steer them to Computers; test failures or mixed
+  # results steer them to Tests; everything else lands on Summary. The
+  # design re-applies this whenever the SHA changes, so the controller
+  # picks here rather than expecting client-side logic.
+  def default_detail_tab(state: nil)
+    state ||= commit_state
+    case state[:build][:status]
+    when :all_fail, :some_fail
+      :computers
+    else
+      if state[:tests][:has_uniform_fail] || state[:tests][:has_mixed]
+        :tests
+      else
+        :summary
+      end
+    end
+  end
+
+  # Per-computer aggregate over the test×computer matrix. Returns one
+  # hash per computer that submitted anything for this commit, sorted
+  # worst-first so problem computers float to the top of the
+  # Computers tab and the Summary sidebar.
+  #
+  #   { computer:, computer_id:, built:, state:,
+  #     counts: { pass:, fail:, pending:, skip:, fpe:, checksum:, inlists_full: } }
+  #
+  # `state` is the worst-first symbol the row should render under:
+  # :build_fail / :fail / :pending / :mixed (flagged-but-passing) /
+  # :all_pass.
+  def per_computer_summary
+    matrix = test_computer_matrix
+    built_ids, failed_ids = _build_membership
+    computers_by_id = submissions.includes(computer: :user)
+                                 .map(&:computer).uniq.index_by(&:id)
+
+    rows = (built_ids + failed_ids).uniq.map do |computer_id|
+      counts = { pass: 0, fail: 0, pending: 0, skip: 0,
+                 fpe: 0, checksum: 0, inlists_full: 0 }
+
+      matrix.each_value do |row|
+        cell = row[computer_id]
+        next unless cell
+        counts[cell[:status]] += 1 if counts.key?(cell[:status])
+        cell[:flags].each { |kind, on| counts[kind] += 1 if on }
+      end
+
+      built = built_ids.include?(computer_id)
+      state =
+        if !built then :build_fail
+        elsif counts[:fail].positive? then :fail
+        elsif counts[:pending].positive? then :pending
+        elsif counts[:fpe].positive? || counts[:checksum].positive? then :mixed
+        else :all_pass
+        end
+
+      {
+        computer: computers_by_id[computer_id],
+        computer_id: computer_id,
+        built: built,
+        state: state,
+        counts: counts
+      }
+    end
+
+    rows.sort_by { |r| [_computer_sort_rank(r[:state]), r[:computer]&.name.to_s] }
+  end
+
+  # Per-test aggregate over the test×computer matrix. Returns one hash
+  # per test_case_commit, with the worst-first overall token, a row of
+  # cells aligned by computer_id, and small counts. Feeds the Tests
+  # tab's test-by-test rows.
+  #
+  #   { test_case:, test_case_commit:, overall:,
+  #     cells_by_computer: { computer_id => cell }, counts: { pass:, fail:, ... } }
+  #
+  # `overall` ∈ { :fail, :mixed, :pending, :flagged, :pass } — :flagged
+  # means everything passed but at least one cell carries an fpe or
+  # checksum flag. :flagged renders under the warning color (same as
+  # :mixed) in the design.
+  def per_test_summary
+    matrix = test_computer_matrix
+    built_ids, _ = _build_membership
+    tccs_by_test = test_case_commits.includes(:test_case).index_by(&:test_case_id)
+
+    rows = matrix.map do |test_id, row_cells|
+      built_cells = row_cells.select { |cid, _| built_ids.include?(cid) }
+      counts = { pass: 0, fail: 0, pending: 0, fpe: 0, checksum: 0, inlists_full: 0 }
+      built_cells.each_value do |cell|
+        counts[cell[:status]] += 1 if counts.key?(cell[:status])
+        cell[:flags].each { |kind, on| counts[kind] += 1 if on }
+      end
+      ran = counts[:pass] + counts[:fail]
+
+      overall =
+        if counts[:fail].positive? && counts[:pass].positive? then :mixed
+        elsif counts[:fail].positive? && counts[:fail] == ran then :fail
+        elsif counts[:pending].positive? then :pending
+        elsif (counts[:fpe] + counts[:checksum]).positive? then :flagged
+        else :pass
+        end
+
+      tcc = tccs_by_test[test_id]
+      {
+        test_case: tcc&.test_case,
+        test_case_commit: tcc,
+        overall: overall,
+        cells_by_computer: row_cells,
+        counts: counts
+      }
+    end
+
+    rows.compact.sort_by do |r|
+      [
+        _test_sort_rank(r[:overall]),
+        r[:test_case]&.module.to_s,
+        r[:test_case]&.name.to_s
+      ]
+    end
+  end
+
+  # Compare this commit's matrix to another commit's matrix and return
+  # the cells whose status got worse — used by the "Diff vs last pass"
+  # tab. Each entry is `{ test_case_id:, computer_id:, change:, flag_kind?: }`
+  # where `change` ∈ { :new_failure, :new_mixed, :new_flag } and
+  # `flag_kind` is :fpe or :checksum when change is :new_flag.
+  #
+  # "New failure" = cell was passing on `other` and is failing here.
+  # "New mixed" = cell flipped from passing to mixed (the whole row's
+  # state shifts, but we surface the changed cell).
+  # "New flag" = cell stayed passing but picked up an fpe or checksum
+  # flag (informational `inlists_full` is excluded — it isn't a
+  # regression).
+  def cells_changed_since(other_commit)
+    return [] unless other_commit
+
+    other_matrix = other_commit.test_computer_matrix
+    self_matrix = test_computer_matrix
+
+    rows = []
+    self_matrix.each do |test_id, this_row|
+      prior_row = other_matrix[test_id] || {}
+      this_row.each do |computer_id, cell|
+        prior = prior_row[computer_id]
+        next unless prior && prior[:status] == :pass
+
+        if cell[:status] == :fail
+          rows << { test_case_id: test_id, computer_id: computer_id,
+                    change: :new_failure }
+        elsif cell[:status] == :pass
+          %i[fpe checksum].each do |kind|
+            if cell[:flags][kind] && !prior[:flags][kind]
+              rows << { test_case_id: test_id, computer_id: computer_id,
+                        change: :new_flag, flag_kind: kind }
+            end
+          end
+        end
+      end
+    end
+
+    rows
+  end
+
   # The Tests×Computer cross-tab. Shape:
   #
   #   { test_case_id => { computer_id => { status: <Symbol>, flags: <Hash> } } }
@@ -276,5 +439,13 @@ module CommitState
     end
 
     { status: status, flags: flags }
+  end
+
+  def _computer_sort_rank(state)
+    { build_fail: 0, fail: 1, pending: 2, mixed: 3, all_pass: 4 }.fetch(state, 5)
+  end
+
+  def _test_sort_rank(overall)
+    { fail: 0, mixed: 1, pending: 2, flagged: 3, pass: 4 }.fetch(overall, 5)
   end
 end

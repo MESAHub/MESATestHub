@@ -251,6 +251,147 @@ RSpec.describe 'commit state aggregation' do
       expect(state[:flags][:inlists_full]).to eq(6)
     end
   end
+
+  describe '#default_detail_tab' do
+    it 'opens Computers when a build failed' do
+      submit(computer: rusty, compiled: false)
+      submit(computer: popeye, compiled: true)
+      instance(test_case: test_case_a, computer: popeye, passed: true)
+      expect(commit.reload.default_detail_tab).to eq(:computers)
+    end
+
+    it 'opens Tests when test runs failed but builds are fine' do
+      submit(computer: rusty)
+      submit(computer: popeye)
+      instance(test_case: test_case_a, computer: rusty, passed: false)
+      instance(test_case: test_case_a, computer: popeye, passed: false)
+      expect(commit.reload.default_detail_tab).to eq(:tests)
+    end
+
+    it 'opens Summary when nothing is broken' do
+      build_clean_scenario
+      expect(commit.reload.default_detail_tab).to eq(:summary)
+    end
+  end
+
+  describe '#per_computer_summary' do
+    it 'returns one row per computer, sorted worst-first' do
+      submit(computer: rusty, compiled: false)
+      submit(computer: popeye)
+      submit(computer: derecho)
+      instance(test_case: test_case_a, computer: popeye, passed: false)
+      instance(test_case: test_case_a, computer: derecho, passed: true)
+
+      rows = commit.reload.per_computer_summary
+      expect(rows.map { |r| r[:computer].name }).to eq(%w[rusty popeye derecho])
+      expect(rows.first[:state]).to eq(:build_fail)
+      expect(rows[1][:state]).to eq(:fail)
+      expect(rows.last[:state]).to eq(:all_pass)
+    end
+
+    it 'counts pass/fail/fpe per computer' do
+      submit(computer: popeye)
+      instance(test_case: test_case_a, computer: popeye, passed: true, fpe_checks: true)
+      instance(test_case: test_case_b, computer: popeye, passed: false)
+
+      row = commit.reload.per_computer_summary.find { |r| r[:computer].name == 'popeye' }
+      expect(row[:counts][:pass]).to eq(1)
+      expect(row[:counts][:fail]).to eq(1)
+      expect(row[:counts][:fpe]).to eq(1)
+    end
+  end
+
+  describe '#per_test_summary' do
+    before do
+      submit(computer: rusty)
+      submit(computer: popeye)
+    end
+
+    it 'classifies a uniformly-failing test as :fail' do
+      instance(test_case: test_case_a, computer: rusty, passed: false)
+      instance(test_case: test_case_a, computer: popeye, passed: false)
+      row = commit.reload.per_test_summary.find { |r| r[:test_case] == test_case_a }
+      expect(row[:overall]).to eq(:fail)
+    end
+
+    it 'classifies a mixed-pass/fail test as :mixed' do
+      instance(test_case: test_case_a, computer: rusty, passed: true)
+      instance(test_case: test_case_a, computer: popeye, passed: false)
+      row = commit.reload.per_test_summary.find { |r| r[:test_case] == test_case_a }
+      expect(row[:overall]).to eq(:mixed)
+    end
+
+    it 'classifies a passing-but-flagged test as :flagged' do
+      instance(test_case: test_case_a, computer: rusty, passed: true, fpe_checks: true)
+      instance(test_case: test_case_a, computer: popeye, passed: true)
+      row = commit.reload.per_test_summary.find { |r| r[:test_case] == test_case_a }
+      expect(row[:overall]).to eq(:flagged)
+    end
+
+    it 'sorts failing tests above passing ones' do
+      instance(test_case: test_case_a, computer: rusty, passed: true)
+      instance(test_case: test_case_a, computer: popeye, passed: true)
+      instance(test_case: test_case_b, computer: rusty, passed: false)
+      instance(test_case: test_case_b, computer: popeye, passed: false)
+      overalls = commit.reload.per_test_summary.map { |r| r[:overall] }
+      expect(overalls.first).to eq(:fail)
+    end
+  end
+
+  describe '#cells_changed_since' do
+    let(:other_commit) { create(:commit) }
+
+    def setup_clean_other
+      submit(computer: rusty)
+      submit(computer: popeye)
+      create(:submission, commit: other_commit, computer: rusty, compiled: true)
+      create(:submission, commit: other_commit, computer: popeye, compiled: true)
+      [test_case_a, test_case_b].each do |tc|
+        other_tcc = create(:test_case_commit, commit: other_commit, test_case: tc)
+        [rusty, popeye].each do |comp|
+          other_sub = Submission.find_by(commit: other_commit, computer: comp)
+          create(:test_instance, commit: other_commit, computer: comp,
+                 test_case: tc, test_case_commit: other_tcc, submission: other_sub,
+                 passed: true)
+        end
+      end
+    end
+
+    it 'returns no rows when nothing regressed' do
+      setup_clean_other
+      [test_case_a, test_case_b].each do |tc|
+        [rusty, popeye].each { |c| instance(test_case: tc, computer: c, passed: true) }
+      end
+      diff = commit.reload.cells_changed_since(other_commit.reload)
+      expect(diff).to eq([])
+    end
+
+    it 'flags newly-failing cells as :new_failure' do
+      setup_clean_other
+      instance(test_case: test_case_a, computer: rusty, passed: false)
+      instance(test_case: test_case_a, computer: popeye, passed: true)
+      diff = commit.reload.cells_changed_since(other_commit.reload)
+      expect(diff).to include(
+        hash_including(test_case_id: test_case_a.id, computer_id: rusty.id,
+                       change: :new_failure)
+      )
+    end
+
+    it 'flags newly-FPE cells as :new_flag' do
+      setup_clean_other
+      instance(test_case: test_case_a, computer: rusty, passed: true, fpe_checks: true)
+      instance(test_case: test_case_a, computer: popeye, passed: true)
+      diff = commit.reload.cells_changed_since(other_commit.reload)
+      expect(diff).to include(
+        hash_including(change: :new_flag, flag_kind: :fpe,
+                       test_case_id: test_case_a.id, computer_id: rusty.id)
+      )
+    end
+
+    it 'returns [] when the other commit is nil' do
+      expect(commit.cells_changed_since(nil)).to eq([])
+    end
+  end
 end
 
 RSpec.describe Branch, type: :model do
@@ -271,6 +412,78 @@ RSpec.describe Branch, type: :model do
       expect(data.size).to eq(2)
       expect(data.first[:sha]).to eq(commits[0].short_sha)
       expect(data.first).to include(:build_status, :tests_status, :commit)
+    end
+  end
+
+  describe '#commit_neighbors' do
+    let(:branch) { create(:branch, name: 'main') }
+    let(:commits) do
+      3.times.map do |i|
+        c = create(:commit, commit_time: i.days.ago)
+        BranchMembership.create!(branch: branch, commit: c)
+        c
+      end.tap do |list|
+        branch.update!(head: list.first)
+        CommitRelation.create!(parent: list[1], child: list[0], parent_index: 0)
+        CommitRelation.create!(parent: list[2], child: list[1], parent_index: 0)
+      end
+    end
+
+    it 'returns the immediate older and newer commits' do
+      newest, middle, oldest = commits
+      neighbors = branch.commit_neighbors(middle)
+      expect(neighbors[:older]).to eq(oldest)
+      expect(neighbors[:newer]).to eq(newest)
+    end
+
+    it 'returns nil for the older slot at the oldest commit' do
+      _, _, oldest = commits
+      neighbors = branch.commit_neighbors(oldest)
+      expect(neighbors[:older]).to be_nil
+      expect(neighbors[:newer]).not_to be_nil
+    end
+
+    it 'returns nil for the newer slot at the head commit' do
+      newest, = commits
+      neighbors = branch.commit_neighbors(newest)
+      expect(neighbors[:newer]).to be_nil
+      expect(neighbors[:older]).not_to be_nil
+    end
+  end
+
+  describe '#last_clean_commit_before' do
+    let(:branch) { create(:branch, name: 'main') }
+    let(:user) { create(:user) }
+    let(:rusty) { create(:computer, name: 'rusty', user: user) }
+    let!(:test_case) { create(:test_case, name: 'irradiated_planet', module: 'binary') }
+
+    def commit_with_state(time:, all_pass:)
+      c = create(:commit, commit_time: time)
+      BranchMembership.create!(branch: branch, commit: c)
+      sub = create(:submission, commit: c, computer: rusty, compiled: true)
+      tcc = create(:test_case_commit, commit: c, test_case: test_case)
+      create(:test_instance, commit: c, computer: rusty, test_case: test_case,
+             test_case_commit: tcc, submission: sub, passed: all_pass)
+      c
+    end
+
+    it 'returns the most recent older commit that is all-built and all-pass' do
+      newest = commit_with_state(time: 0.days.ago, all_pass: false)
+      middle = commit_with_state(time: 1.day.ago,  all_pass: false)
+      oldest = commit_with_state(time: 2.days.ago, all_pass: true)
+      branch.update!(head: newest)
+      CommitRelation.create!(parent: middle, child: newest, parent_index: 0)
+      CommitRelation.create!(parent: oldest, child: middle, parent_index: 0)
+
+      expect(branch.last_clean_commit_before(newest)).to eq(oldest)
+    end
+
+    it 'returns nil when no older commit is clean' do
+      newest = commit_with_state(time: 0.days.ago, all_pass: false)
+      older  = commit_with_state(time: 1.day.ago,  all_pass: false)
+      branch.update!(head: newest)
+      CommitRelation.create!(parent: older, child: newest, parent_index: 0)
+      expect(branch.last_clean_commit_before(newest)).to be_nil
     end
   end
 end

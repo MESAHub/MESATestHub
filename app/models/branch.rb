@@ -257,6 +257,42 @@ class Branch < ApplicationRecord
     Branch.where('updated_at <= ?', weeks.weeks.ago).order(:name)
   end
 
+  # Adjacent commits on this branch by commit_time. Older = the most
+  # recent commit with `commit_time < commit.commit_time`. Newer = the
+  # least-recent commit with `commit_time > commit.commit_time`. Either
+  # can be nil at the ends of the branch. Returns `{older:, newer:}`.
+  def commit_neighbors(commit)
+    older = ordered_commits.where('commits.commit_time < ?', commit.commit_time)
+                           .first
+    newer = ordered_commits.where('commits.commit_time > ?', commit.commit_time)
+                           .reorder('commits.commit_time ASC')
+                           .first
+    { older: older, newer: newer }
+  end
+
+  # Walk older commits on this branch and return the first one whose
+  # state is "fully clean" — every computer compiled and every test
+  # passed. Used as the comparison anchor for the commit detail's
+  # "Diff vs last pass" tab.
+  #
+  # Bounded by `depth` because the per-commit aggregation
+  # (`commit_state`) is itself a couple of queries; an unbounded walk
+  # on a very-stale branch would be expensive. If no clean commit
+  # turns up within `depth`, returns nil and the diff tab gets
+  # disabled in the view.
+  def last_clean_commit_before(commit, depth: 25)
+    candidates = ordered_commits
+                   .where('commits.commit_time < ?', commit.commit_time)
+                   .limit(depth)
+                   .to_a
+
+    candidates.find do |c|
+      state = c.commit_state
+      state[:build][:status] == :all_ok &&
+        state[:tests][:status] == :all_pass
+    end
+  end
+
   # Build the sparkline payload used in the commits list and commit
   # detail hero. Walks the branch's `ordered_commits` newest-first and
   # returns the last N commits packaged with the categorical states the
