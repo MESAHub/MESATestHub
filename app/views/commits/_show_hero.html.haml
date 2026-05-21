@@ -27,7 +27,17 @@
             = mesa_icon(:plus, size: 11)
             #{flags[:inlists_full]} full inlists
 
+      -# Commit message: first line as the headline, plus a
+      -# disclosure-style expander for the body when there's more
+      -# than a one-liner. The `<details>` element keeps the hero
+      -# compact by default and uses zero JS for the toggle.
+      - message_body = @commit.message.to_s.split("\n", 2)[1]&.strip.presence
       %h1.text-xl.font-semibold.tracking-tight.text-fg= @commit.message_first_line(120)
+      - if message_body
+        %details.text-fg-muted{ class: "text-[12px]" }
+          %summary.cursor-pointer.text-fg-subtle.hover:text-fg.transition-colors.select-none.inline-flex.items-center.gap-1{ class: "text-[11px]" }
+            Show full message
+          %div.mt-2.whitespace-pre-wrap.font-mono.text-fg{ class: "text-[12px]" }= message_body
 
       .flex.flex-wrap.items-center.gap-x-3.gap-y-1.text-fg-muted{ class: "text-[12px]" }
         .flex.items-center.gap-1.5
