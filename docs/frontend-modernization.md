@@ -433,10 +433,16 @@ commit semantics. Dark mode toggle persists across navigations.
 
 The biggest page. Reference: `03-` through `08-prototype.png`.
 
-**Status: scaffolding landed (2026-05-21)**, with the page structure,
-helpers, and minimal-but-functional content for every tab in place.
-Substep follow-ups will polish the heavier panels (matrix, Tests
-ribbon, log streaming).
+**Status: mostly landed (2026-05-22)**. Scaffolding (2026-05-21)
+established structure, helpers, and skeleton tabs. The follow-up
+work in the same week filled out the matrix, the Tests-tab filter
+chips, the in-page log proxy + lazy load + availability probe,
+the per-segment subway-map arrows, the soft-color banner fills
+with cross-panel filter handoffs, and the test-classification
+rule that calls "pass + pending neighbors" passing (not pending).
+What remains is Tests-tab search + per-row computer ribbon,
+Computers-tab card polish, and a few small Diff-tab tweaks —
+itemized at the end of this section.
 
 Helpers added in advance of the view work (with specs):
 - `Branch#commit_neighbors(commit)` — `{ older:, newer: }` by
@@ -460,9 +466,20 @@ Departures from the original handoff:
   than via Turbo Frames. All five panels render on the initial
   request and the `tabs_controller.js` swaps `hidden` on click,
   also updating `?tab=<id>` via `history.replaceState` so the
-  URL stays bookmarkable. Reason: matrix and per-computer data
-  are cheap enough to render once; turbo-frame partial loads
-  would double the helper work and complicate the URL story.
+  URL stays bookmarkable. The show page also opts out of Turbo
+  Drive's snapshot cache via
+  `<meta name="turbo-cache-control" content="no-cache">`; the
+  `replaceState` desyncs Turbo's URL tracking enough that
+  browser-back from the index would otherwise leave URL and body
+  out of sync.
+- **Cross-panel handoffs use a single `tabs:request` event.**
+  `switchFromLink` parses every non-`tab` URL param off the
+  clicked link's href into `detail.params` and dispatches; panel
+  controllers (filter chips, logs picker) decode whichever keys
+  they care about. Banner "See failing tests" packs
+  `?tab=tests&filter=failing`; a Computers-tab failed-build card
+  packs `?tab=logs&computer=rusty`. The same URL works as a
+  direct deep link.
 - **`Diff vs last pass` lookback is capped at 25 older commits.**
   The walk's per-commit cost is "build a matrix" which is itself
   a couple of queries, so an unbounded walk on a stale branch
@@ -471,31 +488,58 @@ Departures from the original handoff:
 - **"Files changed" line in the hero meta is dropped** because
   the codebase has no `files_changed` column — the prototype's
   number came from a mock. PR number is parsed from the commit
-  message's trailing `(#NNN)` rather than from a column.
-- **Banners' action buttons (See computers / View diff / See
-  mixed tests) re-use the same Stimulus controller via
-  `data-action="click->tabs#switchFromLink"`** rather than
-  having their own dispatch. The `?tab=` query string is the
-  single source of truth.
-- **Logs tab is a per-computer link-out to
-  `mesa-logs.flatironinstitute.org`** rather than embedded log
-  rendering. The CORS-blocked HEAD-probe pattern from the
-  legacy view is deferred until the Railway domain repoints.
+  message's trailing `(#NNN)`. The hero shows a `<details>`
+  disclosure for any commit-message body so multi-paragraph
+  PR-merge descriptions stay accessible without dominating the
+  hero.
+- **Logs tab is embedded via a server-side proxy** at
+  `GET /:branch/commits/:sha/build_log/:computer` (5 MB cap,
+  short timeouts, validates the computer actually submitted to
+  the commit). A sibling `build_log_status/:computer` does a
+  HEAD probe — cached for 10 minutes — so the Logs tab can
+  disable itself with a tooltip when no upstream log exists.
+  The picker is a row of state-dot-prefixed mono buttons plus
+  a `download` link in the corner.
+- **Subway map: per-segment arrowheads + 5-station focused
+  variant.** The index and hero subway maps both drop their
+  end-cap arrowhead in favor of one small left-pointing triangle
+  per segment between stations. The hero's `_hero_subway_map`
+  partial centers a 5-station window on the focused commit,
+  enlarging that station and ringing it in the brand color;
+  popovers reuse the index page's `subway-map` controller.
+- **Banner cards use a soft-tone fill instead of a left accent.**
+  All five (`build_fail`, `build_partial`, `failing`, `mixed`,
+  `pending`) use `var(--color-X-soft)` + `var(--color-X)`
+  border + `var(--color-X-soft-text)` text. The Failing banner's
+  last-passing-commit SHA is an underlined inline link
+  inheriting the danger color rather than a clashing brand-blue
+  pill. The "Pending" banner uses the literal word "pending"
+  because we don't know whether non-reporting tests are actually
+  running.
+- **Test classification.** A test counts as "passing" if any
+  computer ran it and reported a pass, AND nothing failed, AND
+  nothing reported a checksum mismatch. Pending neighbors don't
+  downgrade — the Summary matrix's cell-aware filter still
+  surfaces those rows so the user can see *which* computers
+  haven't reported, but the hero stats and Tests-tab filters
+  treat them as passing. `:pending` only fires when no computer
+  has reported a pass at all.
 
-Substep follow-ups (pending):
-- **Summary tab:** the actual Test × Computer matrix component
-  with the cell-encoding table from the handoff
-  (`pass`/`fail`/`pending`/`no_build` with `fpe`/`checksum`/
-  `inlists_full` overlays), plus the MatrixLegend above it.
-  Currently the Summary tab renders a placeholder card with
-  the matrix dimensions and the computers sidebar list.
-- **Tests tab:** search input, status/module filter chips, and
-  per-row mini-computer ribbon. Currently a flat per-test list
-  with status dots and compact summaries.
-- **Computers tab:** SDK info chip, maintained-by line, "last
-  successful build" link for no-build cards. Currently shows
-  the basics with a state-colored border accent.
-- **Logs tab:** in-page log streaming, computer picker dropdown.
+Substep follow-ups (pending — not blocking PR):
+- **Tests tab:** free-text search across test names, module
+  filter dropdown, per-row mini computer ribbon (replacing the
+  current "1 fail · 105 pass" summary text with one small cell
+  per computer).
+- **Computers tab:** SDK info chip on each card, "maintained by
+  <user>" line linking to the owner, "last successful build"
+  link on no-build cards, conditional log link gated on the
+  per-computer probe (today's link is unconditional).
+- **Diff tab:** the cell-icon visualisation from the handoff
+  (matrix cell drawings rather than "pass → fail" text), and a
+  summary line at the top.
+- **Sticky matrix header.** On commits with many failing tests
+  the rotated computer-name header row scrolls out of view.
+  `position: sticky` would keep it pinned.
 
 ### Step 7 — Test on commit (`/:branch/commits/:sha/tests/:module/:test`)
 

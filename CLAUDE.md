@@ -35,26 +35,28 @@ Before doing non-trivial work, read the appropriate doc:
   — plan for the Phase 4 frontend rewrite (Bootstrap+jQuery →
   Tailwind+Turbo+Stimulus, plus port of the design in
   `docs/design_handoff_mesa_testhub/`). Spans multiple sessions on
-  the `frontend-tailwind` branch. **Steps 0–5 have landed plus
-  Step 6 scaffolding** — Tailwind + Turbo + Stimulus + importmap
-  are installed alongside the legacy stack; the 404 page, login,
-  the commits index (`/:branch/commits`), and the commit detail
-  page (`/:branch/commits/:sha`) all render through the modern
-  layout; `Commit#commit_state` / `#test_computer_matrix` /
-  `#per_computer_summary` / `#per_test_summary` /
-  `#cells_changed_since` / `#default_detail_tab` /
-  `Branch#sparkline_data` / `Branch#commit_neighbors` /
-  `Branch#last_clean_commit_before` /
-  `TestCaseCommit#instances_for_display` aggregation helpers live
-  in
+  the `frontend-tailwind` branch. **Steps 0–6 are mostly landed** —
+  Tailwind + Turbo + Stimulus + importmap are installed alongside
+  the legacy stack; the 404 page, login, the commits index
+  (`/:branch/commits`), and the commit detail page
+  (`/:branch/commits/:sha`) all render through the modern layout
+  with hero, banners, tab strip, Summary matrix, Tests-tab filter
+  chips, Computers cards (basic), Diff vs last pass, and an
+  embedded server-side-proxied Logs tab with availability probe.
+  Aggregation helpers in
   [`app/models/concerns/commit_state.rb`](app/models/concerns/commit_state.rb)
-  (and the relevant Branch methods in
-  [`app/models/branch.rb`](app/models/branch.rb)).
-  Step 5 departed from the original handoff in a few ways — see
-  the doc for the details (subway map instead of sparkline, no
-  stat tiles, cursor pagination via a `before=` URL param instead
-  of Kaminari, inline date-picker chip). Step 6 substep follow-ups
-  (full matrix, Tests-tab search/ribbon, log streaming) are next.
+  cover `#commit_state` / `#test_computer_matrix` /
+  `#per_computer_summary` / `#per_test_summary` /
+  `#cells_changed_since` / `#default_detail_tab`; Branch helpers
+  in [`app/models/branch.rb`](app/models/branch.rb) add
+  `#sparkline_data` / `#commit_neighbors` /
+  `#focused_commit_window` / `#last_clean_commit_before`;
+  `TestCaseCommit#instances_for_display` round out the layer.
+  Remaining Step 6 follow-ups (Tests-tab search + ribbon,
+  Computers-tab card polish, Diff-tab cell visualisation, sticky
+  matrix header) and Step 7 (test-on-commit page port) are
+  itemized at the bottom of
+  [`docs/frontend-modernization.md`](docs/frontend-modernization.md).
 
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.
