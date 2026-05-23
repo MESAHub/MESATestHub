@@ -5,36 +5,57 @@
 - else
   - tccs_by_id = @per_test.each_with_object({}) { |row, h| h[row[:test_case]&.id] = row[:test_case] if row[:test_case] }
   - computers_by_id = @per_computer.each_with_object({}) { |row, h| h[row[:computer_id]] = row[:computer] }
+  - summary = diff_summary_line(@diff_rows)
   .rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);" }
-    .px-4.py-3.border-b.border-border-subtle.flex.items-center.justify-between.gap-3
-      .text-sm
-        Comparing
+    .px-4.py-3.border-b.border-border-subtle.flex.items-center.justify-between.gap-3.flex-wrap
+      .text-sm.flex.items-center.gap-2.flex-wrap
+        %span.text-fg-muted Comparing
         = link_to @last_clean_commit.short_sha,
                  commit_path(branch: @selected_branch.name, sha: @last_clean_commit.short_sha),
                  class: "font-mono text-brand no-underline"
-        →
+        = mesa_icon(:arrow_right, size: 12, css: "text-fg-subtle")
         %span.font-mono.text-fg= @commit.short_sha
-      %span.text-fg-muted.tabular-nums{ class: "text-[11px]" }
-        = pluralize(@diff_rows.size, "change")
+      .flex.items-center.gap-3.text-fg-muted.tabular-nums{ class: "text-[11px]" }
+        - if summary
+          %span= summary
+        %span= pluralize(@diff_rows.size, "change")
     - if @diff_rows.empty?
       .px-4.py-8.text-center.text-fg-subtle.text-sm No regressions or new flags.
     - else
+      -# Compact column header strip — matches the prototype's
+      -# uppercase mesa-label vocabulary so the row content reads
+      -# unambiguously even when the per-row visuals are tiny.
+      .grid.gap-3.items-center.px-4.py-2.border-b.border-border-subtle.text-fg-subtle{
+        class: "text-[10px] uppercase tracking-wide font-medium",
+        style: "grid-template-columns: 8px minmax(0, 1.6fr) minmax(0, 1.2fr) auto;" }
+        %span &nbsp;
+        %span Test
+        %span Computer
+        %span.text-right Was → Now
       %ul.divide-y.divide-border-subtle
         - @diff_rows.each do |row|
           - test_case = tccs_by_id[row[:test_case_id]]
           - computer  = computers_by_id[row[:computer_id]]
-          %li.flex.items-center.gap-3.px-4.py-2
-            %span.inline-block.h-2.w-2.rounded-full.shrink-0{ class: row[:change] == :new_failure ? "bg-danger" : "bg-warning" }
-            %span.font-mono.text-fg.flex-1.min-w-0.truncate{ class: "text-[12px]" }= test_case&.name || "test ##{row[:test_case_id]}"
-            %span.font-mono.text-fg-muted.flex-1.min-w-0.truncate{ class: "text-[12px]" }= computer&.name || "computer ##{row[:computer_id]}"
-            %span.text-fg-muted{ class: "text-[11px]" }
-              - case row[:change]
-              - when :new_failure
-                %span.text-success pass
-                →
-                %span.text-danger fail
-              - when :new_flag
-                %span.text-success pass
-                →
-                %span.text-warning
-                  = row[:flag_kind] == :fpe ? "FPE raised" : "checksum ≠"
+          - row_dot = row[:change] == :new_failure ? "bg-danger" : "bg-warning"
+          - target = test_case ? test_case_commit_path(branch: @selected_branch.name, sha: @commit.short_sha, module: test_case.module, test_case: test_case.name) : nil
+          %li
+            - row_class = "grid gap-3 items-center px-4 py-2 hover:bg-bg-muted transition-colors no-underline"
+            - row_style = "grid-template-columns: 8px minmax(0, 1.6fr) minmax(0, 1.2fr) auto;"
+            - if target
+              = link_to target, class: row_class, style: row_style, title: diff_change_label(row) do
+                %span{ class: "inline-block h-2 w-2 rounded-full shrink-0 #{row_dot}" }
+                %span.font-mono.text-fg.truncate{ class: "text-[12px]" }= test_case&.name || "test ##{row[:test_case_id]}"
+                %span.font-mono.text-fg-muted.truncate{ class: "text-[12px]" }= computer&.name || "computer ##{row[:computer_id]}"
+                .flex.items-center.gap-1.justify-end.shrink-0
+                  = render "commits/matrix_cell_visual", cell: diff_before_cell, size: 18, label: "was: pass"
+                  = mesa_icon(:arrow_right, size: 11, css: "text-fg-subtle")
+                  = render "commits/matrix_cell_visual", cell: diff_after_cell(row), size: 18, label: "now: #{diff_change_label(row)}"
+            - else
+              %div{ class: row_class.sub('hover:bg-bg-muted ', '').sub('no-underline', '').strip, style: row_style }
+                %span{ class: "inline-block h-2 w-2 rounded-full shrink-0 #{row_dot}" }
+                %span.font-mono.text-fg.truncate{ class: "text-[12px]" }= "test ##{row[:test_case_id]}"
+                %span.font-mono.text-fg-muted.truncate{ class: "text-[12px]" }= computer&.name || "computer ##{row[:computer_id]}"
+                .flex.items-center.gap-1.justify-end.shrink-0
+                  = render "commits/matrix_cell_visual", cell: diff_before_cell, size: 18, label: "was: pass"
+                  = mesa_icon(:arrow_right, size: 11, css: "text-fg-subtle")
+                  = render "commits/matrix_cell_visual", cell: diff_after_cell(row), size: 18, label: "now: #{diff_change_label(row)}"

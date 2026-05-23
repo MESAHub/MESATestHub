@@ -35,27 +35,56 @@ Before doing non-trivial work, read the appropriate doc:
   — plan for the Phase 4 frontend rewrite (Bootstrap+jQuery →
   Tailwind+Turbo+Stimulus, plus port of the design in
   `docs/design_handoff_mesa_testhub/`). Spans multiple sessions on
-  the `frontend-tailwind` branch. **Steps 0–6 are mostly landed** —
+  the `frontend-tailwind` branch. **Steps 0–6 are landed** —
   Tailwind + Turbo + Stimulus + importmap are installed alongside
   the legacy stack; the 404 page, login, the commits index
   (`/:branch/commits`), and the commit detail page
-  (`/:branch/commits/:sha`) all render through the modern layout
-  with hero, banners, tab strip, Summary matrix, Tests-tab filter
-  chips, Computers cards (basic), Diff vs last pass, and an
-  embedded server-side-proxied Logs tab with availability probe.
+  (`/:branch/commits/:sha`) all render through the modern layout.
+  Commit detail has four tabs (Summary / Computers / Diff vs
+  last pass / Build logs) — the original Tests tab was folded
+  into Summary when review flagged it as redundant with the
+  matrix. The merged Summary panel hosts a chip + module
+  dropdown + free-text-search toolbar over the full Tests ×
+  Computers matrix (sealed sticky band with right-aligned
+  legend; horizontal scroll on narrow viewports synced via
+  JS), and clicking any cell opens a popover with that
+  (test, computer)'s failure mode, checksum grouping, SDK,
+  runtime, and submission count, rendered from a JSON blob
+  embedded in the page (no per-click database query). Clean
+  cells get a minimal stub popover instead of navigating away,
+  so click behavior is consistent. On `xl+` the popover renders
+  into a docked right rail (sticky, with per-computer mini
+  summary as its inactive state); below xl it falls back to a
+  floating panel anchored to the clicked cell. Computers cards carry a maintainer link,
+  SDK chip, probe-gated log links, and a last-successful-build
+  link on no-build cards. Diff vs last pass uses the matrix
+  cell encoding (before / after drawings) with a grouped
+  change-counts summary line. The Logs tab proxies upstream
+  build logs server-side with an availability probe.
   Aggregation helpers in
   [`app/models/concerns/commit_state.rb`](app/models/concerns/commit_state.rb)
-  cover `#commit_state` / `#test_computer_matrix` /
-  `#per_computer_summary` / `#per_test_summary` /
-  `#cells_changed_since` / `#default_detail_tab`; Branch helpers
-  in [`app/models/branch.rb`](app/models/branch.rb) add
+  cover `#commit_state` / `#test_computer_matrix` (memoized
+  per-instance) / `#per_computer_summary` (includes per-computer
+  submissions) / `#per_test_summary` / `#cells_changed_since` /
+  `#default_detail_tab` / `#last_successful_build_commit_for` /
+  `#cell_popover_data`; Branch helpers in
+  [`app/models/branch.rb`](app/models/branch.rb) add
   `#sparkline_data` / `#commit_neighbors` /
   `#focused_commit_window` / `#last_clean_commit_before`;
   `TestCaseCommit#instances_for_display` round out the layer.
-  Remaining Step 6 follow-ups (Tests-tab search + ribbon,
-  Computers-tab card polish, Diff-tab cell visualisation, sticky
-  matrix header) and Step 7 (test-on-commit page port) are
-  itemized at the bottom of
+  Matrix cell visuals live in a shared
+  [`_matrix_cell_visual`](app/views/commits/_matrix_cell_visual.html.haml)
+  partial used by the Summary matrix, Diff tab, and Tests-tab
+  ribbon. Stimulus controllers driving the page:
+  `tabs_controller.js`, `matrix_filter_controller.js`,
+  `matrix_scroll_controller.js` (header↔body horizontal scroll
+  sync), `popover_controller.js`, `dropdown_controller.js`,
+  `logs_controller.js`, `computer_card_controller.js`,
+  `subway_map_controller.js`, `pan_map_controller.js`,
+  `calendar_controller.js`, `theme_controller.js`,
+  `copy_button_controller.js`. Step 7 (test-on-commit page
+  port) is the next outstanding chunk and is itemized at the
+  bottom of
   [`docs/frontend-modernization.md`](docs/frontend-modernization.md).
 
 When changes invalidate the plan, update the relevant doc in the same commit

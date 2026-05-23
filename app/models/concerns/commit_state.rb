@@ -189,11 +189,11 @@ module CommitState
     when :all_fail, :some_fail
       :computers
     else
-      if state[:tests][:has_uniform_fail] || state[:tests][:has_mixed]
-        :tests
-      else
-        :summary
-      end
+      # Test-side trouble (uniform fail, mixed, or pending) lands on
+      # Summary — the matrix toolbar's worst-first default chip
+      # (`default_matrix_filter`) takes the user straight to the
+      # right slice of rows.
+      :summary
     end
   end
 
@@ -211,8 +211,9 @@ module CommitState
   def per_computer_summary
     matrix = test_computer_matrix
     built_ids, failed_ids = _build_membership
-    computers_by_id = submissions.includes(computer: :user)
-                                 .map(&:computer).uniq.index_by(&:id)
+    all_subs = submissions.includes(computer: :user).to_a
+    computers_by_id = all_subs.map(&:computer).uniq.index_by(&:id)
+    subs_by_computer = all_subs.group_by(&:computer_id)
 
     rows = (built_ids + failed_ids).uniq.map do |computer_id|
       counts = { pass: 0, fail: 0, pending: 0, skip: 0,
@@ -239,11 +240,27 @@ module CommitState
         computer_id: computer_id,
         built: built,
         state: state,
-        counts: counts
+        counts: counts,
+        submissions: subs_by_computer[computer_id] || []
       }
     end
 
     rows.sort_by { |r| [_computer_sort_rank(r[:state]), r[:computer]&.name.to_s] }
+  end
+
+  # Most recent earlier commit on which `computer` successfully
+  # compiled. Used by the Computers tab to surface "last green build"
+  # for a card whose build failed on this commit. Cross-branch by
+  # design — what the user wants is "last time this computer compiled
+  # anything," which is informational regardless of branch lineage.
+  # Single LIMIT-1 query against the indexed `submissions.computer_id`.
+  def last_successful_build_commit_for(computer)
+    Submission.joins(:commit)
+              .where(computer_id: computer.id, compiled: true)
+              .where('commits.commit_time < ?', commit_time)
+              .order('commits.commit_time DESC')
+              .limit(1)
+              .first&.commit
   end
 
   # Per-test aggregate over the test×computer matrix. Returns one hash
@@ -371,30 +388,86 @@ module CommitState
   #   * compiled → :pending (test scheduled, just not back yet)
   #   * !compiled → :no_build
   # If no submissions exist, the matrix has no row for that computer.
+  # The commit-detail controller calls per_computer_summary,
+  # per_test_summary, commit_state, and cell_popover_data on every
+  # request, and each of those hits test_computer_matrix internally.
+  # Memoizing on the instance pays for itself many times over for
+  # the one HTTP request and is dropped when the instance goes out
+  # of scope, so there's no cross-request staleness risk.
   def test_computer_matrix
-    tccs = test_case_commits.includes(:test_case, :test_instances).to_a
-    submissions_by_computer = submissions.group_by(&:computer_id)
-    computer_ids = submissions_by_computer.keys
+    @_test_computer_matrix ||= _build_test_computer_matrix
+  end
 
-    test_ids = tccs.map(&:test_case_id)
+  # Popover-data hash keyed by `"#{test_id}-#{computer_id}"`. Every
+  # cell that has a test_case + a real submission gets an entry — the
+  # rail-anchored popover is the consistent click affordance, so even
+  # a clean-pass cell wants a stub popover (test/computer/PASS/SDK +
+  # link to the test page) rather than kicking the user out to a new
+  # URL on click. The richer "interesting" fields (agreement,
+  # checksum_match_*) only render for cells that aren't clean.
+  #
+  # The blob is rendered into a <script type="application/json"> tag
+  # on the commit detail page and read by the popover Stimulus
+  # controller on cell click.
+  #
+  # Per-cell shape (always present):
+  #   test_name, module, computer_name, status, flags
+  #   submission_count                  — # instances for (tcc, computer)
+  #   latest                            — Hash with the most recent
+  #                                       instance's failure_type
+  #                                       (humanized), success_type,
+  #                                       summary_text snippet,
+  #                                       checksum, sdk_version,
+  #                                       runtime_minutes, created_at
+  #
+  # Per-cell shape (only on non-clean cells):
+  #   agreement                         — :single | :unanimous |
+  #                                       :pass_fail_mixed | :checksum_mixed
+  #   checksum_match_count / _total     — only when this cell carries
+  #                                       a checksum flag; how many
+  #                                       built-computers' latest
+  #                                       checksums match this one
+  def cell_popover_data
+    matrix = test_computer_matrix
+    built_ids, _ = _build_membership
+    built_set = built_ids.to_set
+    tccs = _tccs_for_matrix.index_by(&:test_case_id)
+    computers_by_id = submissions.includes(:computer).map(&:computer).uniq.index_by(&:id)
 
-    matrix = {}
-    test_ids.each { |tid| matrix[tid] = {} }
+    data = {}
+    matrix.each do |test_id, row|
+      tcc = tccs[test_id]
+      next unless tcc
+      tc = tcc.test_case
+      next unless tc
 
-    tccs.each do |tcc|
-      instances_by_computer = tcc.test_instances.group_by(&:computer_id)
+      sibling_counts = _checksum_sibling_counts(tcc, built_set)
+      built_total = built_set.size
 
-      computer_ids.each do |cid|
-        matrix[tcc.test_case_id][cid] = _cell_for(
-          tcc: tcc,
-          computer_id: cid,
-          instances: instances_by_computer[cid] || [],
-          submissions: submissions_by_computer[cid] || []
-        )
+      row.each do |computer_id, cell|
+        instances = tcc.test_instances.select { |i| i.computer_id == computer_id }
+        latest = instances.max_by { |i| [i.created_at || Time.at(0), i.id || 0] }
+
+        entry = {
+          test_name: tc.name,
+          module: tc.module,
+          computer_name: computers_by_id[computer_id]&.name,
+          status: cell[:status],
+          flags: cell[:flags],
+          submission_count: instances.size
+        }
+        entry[:latest] = _popover_latest(latest) if latest
+        unless _cell_clean?(cell)
+          entry[:agreement] = _instance_agreement(instances)
+          if cell[:flags][:checksum] && sibling_counts[computer_id]
+            entry[:checksum_match_count] = sibling_counts[computer_id]
+            entry[:checksum_match_total] = built_total
+          end
+        end
+        data["#{test_id}-#{computer_id}"] = entry
       end
     end
-
-    matrix
+    data
   end
 
   private
@@ -435,6 +508,87 @@ module CommitState
     counts
   end
 
+  def _build_test_computer_matrix
+    tccs = _tccs_for_matrix
+    submissions_by_computer = submissions.group_by(&:computer_id)
+    computer_ids = submissions_by_computer.keys
+
+    test_ids = tccs.map(&:test_case_id)
+
+    matrix = {}
+    test_ids.each { |tid| matrix[tid] = {} }
+
+    tccs.each do |tcc|
+      instances_by_computer = tcc.test_instances.group_by(&:computer_id)
+
+      computer_ids.each do |cid|
+        matrix[tcc.test_case_id][cid] = _cell_for(
+          tcc: tcc,
+          computer_id: cid,
+          instances: instances_by_computer[cid] || [],
+          submissions: submissions_by_computer[cid] || []
+        )
+      end
+    end
+
+    matrix
+  end
+
+  # Cached for the lifetime of the Commit instance. Same eager-loaded
+  # association set used by the matrix and popover-data passes.
+  def _tccs_for_matrix
+    @_tccs_for_matrix ||= test_case_commits.includes(:test_case, :test_instances).to_a
+  end
+
+  # A cell is "clean" (skip popover) iff it passed with no flags.
+  def _cell_clean?(cell)
+    cell[:status] == :pass && (cell[:flags] || {}).values.none? { |v| v }
+  end
+
+  # For each computer (with a passing instance whose checksum is set),
+  # how many *other* built computers share that checksum. Used by the
+  # popover to surface checksum grouping without rendering the full
+  # table.
+  def _checksum_sibling_counts(tcc, built_set)
+    per_computer = {}
+    tcc.test_instances.each do |i|
+      next unless i.passed
+      next if i.checksum.blank?
+      next unless built_set.include?(i.computer_id)
+      cur = per_computer[i.computer_id]
+      newer = cur.nil? || ((i.created_at || Time.at(0)) >= (cur.created_at || Time.at(0)))
+      per_computer[i.computer_id] = i if newer
+    end
+    return {} if per_computer.empty?
+    counts = per_computer.values.map(&:checksum).tally
+    per_computer.transform_values { |inst| counts[inst.checksum] || 0 }
+  end
+
+  def _instance_agreement(instances)
+    return :single if instances.size <= 1
+    passes = instances.count(&:passed)
+    fails = instances.size - passes
+    return :pass_fail_mixed if passes.positive? && fails.positive?
+    checksums = instances.select(&:passed).map(&:checksum).compact.uniq
+    return :checksum_mixed if checksums.size > 1
+    :unanimous
+  end
+
+  def _popover_latest(instance)
+    summary = instance.summary_text.to_s.strip
+    summary = summary[0, 400] + (summary.length > 400 ? "…" : "") if summary.length > 400
+    {
+      passed: instance.passed,
+      success_type: instance.success_type && TestInstance.success_types[instance.success_type],
+      failure_type: instance.failure_type && TestInstance.failure_types[instance.failure_type],
+      summary_text: summary.presence,
+      checksum: instance.checksum,
+      sdk_version: instance.sdk_version,
+      runtime_minutes: instance.runtime_minutes,
+      created_at: instance.created_at&.iso8601
+    }.compact
+  end
+
   def _cell_for(tcc:, computer_id:, instances:, submissions:)
     base_flags = { fpe: false, checksum: false, inlists_full: false }
 
@@ -456,12 +610,15 @@ module CommitState
       else :fail # mixed at instance level still surfaces as :fail in the matrix
       end
 
+    # `inlists_full` and `fpe` describe how the test was *run*, not
+    # whether it ended in a pass — a failing test that ran the full
+    # inlist set still carries that signal. `checksum` only makes
+    # sense when at least one instance produced a checksum (so we
+    # gate it on a passing instance below).
     flags = base_flags.dup
-    if status == :pass
-      flags[:inlists_full] = instances.any? { |i| i.run_optional }
-      flags[:fpe] = instances.any? { |i| i.fpe_checks }
-      flags[:checksum] = tcc.checksum_count.to_i > 1
-    end
+    flags[:inlists_full] = instances.any? { |i| i.run_optional }
+    flags[:fpe]          = instances.any? { |i| i.fpe_checks }
+    flags[:checksum]     = passed.positive? && tcc.checksum_count.to_i > 1
 
     { status: status, flags: flags }
   end

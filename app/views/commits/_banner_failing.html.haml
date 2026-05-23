@@ -24,7 +24,7 @@
               = ',' unless i == [failing_cells.size, 3].min - 1
           - if failing_cells.size > 3
             %span.ml-1 + #{failing_cells.size - 3} more
-    %a.mesa-btn.shrink-0{ href: "?tab=tests&filter=failing",
+    %a.mesa-btn.shrink-0{ href: "?tab=summary&filter=failing",
                           style: "padding: 4px 10px; font-size: 12px;",
                           data: { action: "click->tabs#switchFromLink" } }
       See failing tests

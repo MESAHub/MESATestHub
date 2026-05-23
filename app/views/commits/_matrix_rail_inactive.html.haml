@@ -1,0 +1,22 @@
+-# Initial / inactive state for the docked matrix rail. Shows a
+-# per-computer mini summary (worst-first) plus a hint that
+-# tells the user the rail will fill with details on cell click.
+-#
+-# Locals:
+-#   per_computer: output of `Commit#per_computer_summary`.
+.px-4.py-3.border-b.border-border-subtle
+  %div.text-fg-subtle.uppercase.tracking-wide{ class: "text-[10px]" } Cell details
+  %p.text-fg-muted.mt-1{ class: "text-[12px]" }
+    Click any matrix cell to see its failure mode, checksum, runtime, and
+    submission detail here.
+- if per_computer.any?
+  .px-4.py-3
+    .text-fg-subtle.uppercase.tracking-wide.mb-2{ class: "text-[10px]" } Computers
+    %ul.divide-y.divide-border-subtle
+      - per_computer.each do |row|
+        %li.py-1.5.flex.items-center.justify-between.gap-2
+          .flex.items-center.gap-2.min-w-0
+            %span{ class: "inline-block h-2 w-2 rounded-full shrink-0 #{status_dot_class_for_computer(row[:state])}" }
+            %span.font-mono.text-fg.truncate{ class: "text-[12px]" }
+              = row[:computer]&.name || "computer ##{row[:computer_id]}"
+          %span.font-mono.text-fg-muted.shrink-0{ class: "text-[11px]" }= summary_for_computer(row)

@@ -21,6 +21,6 @@
   -# Tab panels — only the active one is shown. Stimulus toggles the
   -# `hidden` attribute on each panel when the user clicks a tab,
   -# and updates `?tab=...` on the URL so the panel is bookmarkable.
-  - %i[summary tests computers diff logs].each do |tab|
+  - %i[summary computers diff logs].each do |tab|
     %section{ data: { tabs_target: "panel", tab: tab }, hidden: (tab != @active_tab) }
       = render "commits/tab_#{tab}"

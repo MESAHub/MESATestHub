@@ -226,11 +226,28 @@ module CommitsHelper
         glyph_color: "var(--color-info-soft-text)",
         label: "pending" }
     when :fail
-      { kind: :solid,
-        bg: "var(--color-danger)",
-        glyph: :x,
-        glyph_color: "white",
-        label: "fail" }
+      label_parts = ["fail"]
+      label_parts << "FPE" if flags[:fpe]
+      label_parts << "full inlists" if flags[:inlists_full]
+      label = label_parts.join(" · ")
+      # Failing cells can still carry "this was a full-inlist run"
+      # or "FPE checks were enabled" signals — the test was *run*
+      # under those conditions even though it ended in a fail. The
+      # corner badge surfaces that; the main glyph stays the X
+      # since the headline result is still a failure.
+      corner = if flags[:inlists_full] then :plus
+               elsif flags[:fpe] then :wrench
+               end
+      attrs = { kind: :solid,
+                bg: "var(--color-danger)",
+                glyph: :x,
+                glyph_color: "white",
+                label: label }
+      if corner
+        attrs[:corner] = corner
+        attrs[:corner_bg] = "var(--color-info)"
+      end
+      attrs
     when :pass
       label_parts = ["pass"]
       label_parts << "FPE" if flags[:fpe]
@@ -323,7 +340,36 @@ module CommitsHelper
     # regardless of overall state).
     cats << "checksums" if counts[:checksum].to_i.positive?
     cats << "fpe"       if counts[:fpe].to_i.positive?
-    cats
+    # Pending acts as a cross-cutting tag too — a row with one
+    # failure plus several unreported computers belongs under
+    # "Pending" as well as "Failing", so the chip surfaces
+    # everything still in flight regardless of its dominant state.
+    cats << "pending" if counts[:pending].to_i.positive? && row[:overall] != :pending
+    cats.uniq
+  end
+
+  # Choose the most useful chip to land on by default when the user
+  # opens the matrix. Worst-first priority — surface failures before
+  # mixed, mixed before pending, etc. Falls back to "all" only when
+  # the commit is entirely clean, since on a clean commit the wall
+  # of green is the answer the user came for.
+  def default_matrix_filter(per_test)
+    return "all" if per_test.empty?
+    counts = { fail: 0, mixed: 0, pending: 0, checksum: 0, fpe: 0 }
+    per_test.each do |row|
+      counts[:fail]    += 1 if row[:overall] == :fail
+      counts[:mixed]   += 1 if row[:overall] == :mixed
+      counts[:pending] += 1 if (row[:counts] || {})[:pending].to_i.positive? ||
+                               row[:overall] == :pending
+      counts[:checksum] += 1 if (row[:counts] || {})[:checksum].to_i.positive?
+      counts[:fpe]     += 1 if (row[:counts] || {})[:fpe].to_i.positive?
+    end
+    return "failing"   if counts[:fail].positive?
+    return "mixed"     if counts[:mixed].positive?
+    return "pending"   if counts[:pending].positive?
+    return "checksums" if counts[:checksum].positive?
+    return "fpe"       if counts[:fpe].positive?
+    "all"
   end
 
   # Compute per-category row counts for the Tests-tab filter
@@ -384,6 +430,19 @@ module CommitsHelper
     [failed, tone]
   end
 
+  # SDK/compiler chip text for a per-computer card. Returns the
+  # unique non-blank `computer_specification` strings across this
+  # computer's submissions for the commit. Joined with a thin slash
+  # so a single submission renders as one chip and a SDK-vs-compiler
+  # split surfaces as "SDK 24.3.1 mkl / gfortran 13.2".
+  def computer_sdk_label(row)
+    subs = row[:submissions] || []
+    specs = subs.map { |s| s.computer_specification.to_s }.map(&:strip)
+                .reject(&:blank?).uniq
+    return nil if specs.empty?
+    specs.join(" / ")
+  end
+
   # CSS color token name (sans `--color-` prefix) keyed to a per-row
   # state symbol. Used by the Computers tab's card-border accent.
   def computer_state_color(state)
@@ -408,6 +467,56 @@ module CommitsHelper
     flag_parts << "#{counts[:checksum]} ≠" if counts[:checksum].positive?
     return flag_parts.join(" · ") if flag_parts.any?
     "#{counts[:pass]} ok"
+  end
+
+  # Synthetic before/after cells for the Diff tab. The before cell is
+  # always a clean pass (since `cells_changed_since` filters to rows
+  # whose prior state was a passing cell). The after cell mirrors the
+  # actual change so the visual matches the matrix cell encoding used
+  # everywhere else in the page.
+  def diff_before_cell
+    { status: :pass, flags: { fpe: false, checksum: false, inlists_full: false } }
+  end
+
+  def diff_after_cell(row)
+    base = { fpe: false, checksum: false, inlists_full: false }
+    case row[:change]
+    when :new_failure
+      { status: :fail, flags: base }
+    when :new_flag
+      flags = base.merge(row[:flag_kind] => true)
+      { status: :pass, flags: flags }
+    else
+      { status: :pass, flags: base }
+    end
+  end
+
+  # Short text label for an after-cell's status change. Mirrors the
+  # cell encoding so the row reads even without the visual (e.g. when
+  # the cell drawings get clipped on narrow viewports).
+  def diff_change_label(row)
+    case row[:change]
+    when :new_failure then "now failing"
+    when :new_flag
+      row[:flag_kind] == :fpe ? "FPE raised" : "checksum ≠"
+    else "changed"
+    end
+  end
+
+  # Grouped count line for the diff tab header. Returns a short
+  # human-readable summary of what kinds of changes the diff contains
+  # (e.g. "3 new failures · 1 new FPE flag"). Empty rows return nil.
+  def diff_summary_line(rows)
+    return nil if rows.blank?
+    failures = rows.count { |r| r[:change] == :new_failure }
+    fpe      = rows.count { |r| r[:change] == :new_flag && r[:flag_kind] == :fpe }
+    checks   = rows.count { |r| r[:change] == :new_flag && r[:flag_kind] == :checksum }
+
+    parts = []
+    parts << pluralize(failures, "new failure") if failures.positive?
+    parts << pluralize(fpe, "new FPE flag") if fpe.positive?
+    parts << "#{checks} new checksum #{checks == 1 ? 'mismatch' : 'mismatches'}" if checks.positive?
+    parts.join(" · ").presence
   end
 
   # Initials avatar for a commit author. Hue is deterministically

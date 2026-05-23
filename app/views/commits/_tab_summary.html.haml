@@ -1,25 +1,30 @@
--# Summary tab. Two-column grid at lg+: filtered Test × Computer
--# matrix on the left, computers sidebar on the right. The matrix
--# filters to only failing/mixed/pending/flagged tests so the
--# user's attention lands on what's actually broken; the unfiltered
--# list lives on the Tests tab.
-.grid.gap-4{ class: "grid-cols-1 lg:grid-cols-[1fr_320px]" }
-  .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+-# Summary tab — matrix + docked detail rail.
+-# On xl+ viewports the layout is two columns: matrix on the left,
+-# a sticky detail rail on the right that absorbs the empty space
+-# wide screens would otherwise leave. Below xl the rail
+-# (`hidden xl:block`) collapses out and the matrix gets full
+-# width; the popover controller falls back to its floating panel
+-# on those viewports automatically.
+-#
+-# The `popover` controller lives here (not on the matrix panel)
+-# because its `dockedContent` target sits in the rail — both
+-# matrix cells (triggers) and the rail (target) must be inside
+-# the controller's scope. `matrix-filter` + `matrix-scroll` stay
+-# on the matrix panel where their targets live.
+-#
+-# `items-stretch` (default) — NOT `items-start` — lets the rail
+-# column grow to the height of the matrix column, giving the
+-# sticky inner panel room to pin against. With items-start, the
+-# rail wrapper sits at its content height (~400px) and sticky
+-# has nothing to track, so the rail scrolls off-screen on tall
+-# matrices.
+.xl:flex.xl:gap-4{ data: { controller: "popover" } }
+  .xl:flex-1.xl:min-w-0
     = render "commits/matrix",
              per_test: @per_test,
              per_computer: @per_computer,
+             popover_data: @popover_data,
              branch: @selected_branch,
-             sha: @commit.short_sha
-  .space-y-4
-    .rounded-lg.border.border-border.bg-bg-elev.p-4{ style: "box-shadow: var(--shadow-card-sm);" }
-      %h3.font-semibold.text-fg.mb-2.flex.items-center.gap-2
-        Computers
-        %span.text-fg-subtle.tabular-nums{ class: "text-[11px]" }= "(#{@per_computer.size})"
-      %ul.divide-y.divide-border-subtle
-        - @per_computer.each do |row|
-          %li.py-2.flex.items-center.justify-between.gap-2
-            .flex.items-center.gap-2.min-w-0
-              %span{ class: "inline-block h-2 w-2 rounded-full shrink-0 #{status_dot_class_for_computer(row[:state])}" }
-              %span.font-mono.text-fg.truncate{ class: "text-[12px]" }
-                = row[:computer]&.name || "computer ##{row[:computer_id]}"
-            %span.font-mono.text-fg-muted.shrink-0{ class: "text-[11px]" }= summary_for_computer(row)
+             sha: @commit.short_sha,
+             active_filter: @active_filter
+  = render "commits/matrix_rail", per_computer: @per_computer

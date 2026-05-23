@@ -433,16 +433,17 @@ commit semantics. Dark mode toggle persists across navigations.
 
 The biggest page. Reference: `03-` through `08-prototype.png`.
 
-**Status: mostly landed (2026-05-22)**. Scaffolding (2026-05-21)
-established structure, helpers, and skeleton tabs. The follow-up
-work in the same week filled out the matrix, the Tests-tab filter
-chips, the in-page log proxy + lazy load + availability probe,
-the per-segment subway-map arrows, the soft-color banner fills
-with cross-panel filter handoffs, and the test-classification
-rule that calls "pass + pending neighbors" passing (not pending).
-What remains is Tests-tab search + per-row computer ribbon,
-Computers-tab card polish, and a few small Diff-tab tweaks —
-itemized at the end of this section.
+**Status: landed (2026-05-22)**. Scaffolding (2026-05-21) established
+structure, helpers, and skeleton tabs; subsequent passes filled
+out the matrix, the in-page log proxy + lazy load + availability
+probe, the per-segment subway-map arrows, the soft-color banner
+fills with cross-panel filter handoffs, the test-classification
+rule that calls "pass + pending neighbors" passing (not pending),
+and the four substep follow-ups (Tests-tab search + ribbon,
+Computers-card polish, Diff-tab cell visualisation, sticky matrix
+header). The Tests tab itself was subsequently folded into
+Summary (see "Summary/Tests merge" below) so the matrix is now
+the single primary lens for test-side state.
 
 Helpers added in advance of the view work (with specs):
 - `Branch#commit_neighbors(commit)` — `{ older:, newer: }` by
@@ -477,9 +478,10 @@ Departures from the original handoff:
   clicked link's href into `detail.params` and dispatches; panel
   controllers (filter chips, logs picker) decode whichever keys
   they care about. Banner "See failing tests" packs
-  `?tab=tests&filter=failing`; a Computers-tab failed-build card
-  packs `?tab=logs&computer=rusty`. The same URL works as a
-  direct deep link.
+  `?tab=summary&filter=failing`; a Computers-tab failed-build
+  card packs `?tab=logs&computer=rusty`. The same URL works as a
+  direct deep link, and legacy `?tab=tests` URLs route to
+  Summary in the controller so old bookmarks keep working.
 - **`Diff vs last pass` lookback is capped at 25 older commits.**
   The walk's per-commit cost is "build a matrix" which is itself
   a couple of queries, so an unbounded walk on a stale branch
@@ -519,27 +521,228 @@ Departures from the original handoff:
 - **Test classification.** A test counts as "passing" if any
   computer ran it and reported a pass, AND nothing failed, AND
   nothing reported a checksum mismatch. Pending neighbors don't
-  downgrade — the Summary matrix's cell-aware filter still
-  surfaces those rows so the user can see *which* computers
-  haven't reported, but the hero stats and Tests-tab filters
-  treat them as passing. `:pending` only fires when no computer
-  has reported a pass at all.
+  downgrade — the Summary matrix's chip filter still surfaces
+  those rows so the user can see *which* computers haven't
+  reported, but the hero stats and Summary chip filters treat
+  them as passing. `:pending` only fires when no computer has
+  reported a pass at all.
 
-Substep follow-ups (pending — not blocking PR):
-- **Tests tab:** free-text search across test names, module
-  filter dropdown, per-row mini computer ribbon (replacing the
-  current "1 fail · 105 pass" summary text with one small cell
-  per computer).
-- **Computers tab:** SDK info chip on each card, "maintained by
-  <user>" line linking to the owner, "last successful build"
-  link on no-build cards, conditional log link gated on the
-  per-computer probe (today's link is unconditional).
-- **Diff tab:** the cell-icon visualisation from the handoff
-  (matrix cell drawings rather than "pass → fail" text), and a
-  summary line at the top.
-- **Sticky matrix header.** On commits with many failing tests
-  the rotated computer-name header row scrolls out of view.
-  `position: sticky` would keep it pinned.
+Substep follow-ups landed 2026-05-22:
+- **Tests tab:** the `tests-filter` Stimulus controller now layers
+  three AND-wise filters — chip (status/flag category), module
+  dropdown (star / binary / astero), and free-text search across
+  test names. Modules with zero rows on the current commit are
+  dropped from the dropdown; the dropdown itself is suppressed
+  when only a single module is present. Each row is now an `<a>`
+  to the test-on-commit page, and the trailing "1 fail · 105 pass"
+  text is replaced by a row of 14-px mini matrix cells — one per
+  computer, in the same worst-first order as the Summary matrix
+  columns. The summary text moves into the row's
+  `aria-label`/`title` so screen-reader + hover users still get
+  the digest.
+- **Computers tab:** cards now carry a "maintained by <user>"
+  line linking to the user page, a mono SDK/compiler chip
+  (sourced from `Submission#computer_specification` and
+  deduplicated across this commit's submissions), an OS pill, a
+  "Last successful build: <sha>" link on no-build cards (backed
+  by the new `Commit#last_successful_build_commit_for(computer)`
+  query — single LIMIT 1 against the indexed submissions table),
+  and a probe-gated log link. A new
+  `computer_card_controller.js` Stimulus controller fires
+  `GET /:branch/commits/:sha/build_log_status/:computer` on
+  connect and hides the "logs ↗" / "build logs ↗" link in favor
+  of a muted "no log uploaded" placeholder when the upstream
+  probe says nothing's there (10-minute server-side cache shared
+  with the Logs tab's own probe).
+- **Diff tab:** the "pass → fail" / "FPE raised" text was
+  replaced with two 18-px matrix-cell drawings (before / after)
+  separated by an arrow icon, matching the cell encoding used on
+  the Summary matrix and the new Tests-tab ribbon. A summary
+  line at the top of the panel reads
+  "N new failures · M new FPE flags · K new checksum mismatches"
+  (only the non-zero parts are joined). Each row is also an
+  `<a>` to the affected test-on-commit page.
+- **Sticky matrix header:** the rotated computer-name header row
+  in `_matrix.html.haml` now uses `position: sticky; top: 0;`
+  with a `bg-bg-elev` background and `z-index: 10`. The wrapping
+  `overflow-x-auto` was removed because it promotes overflow-y
+  to `auto` and traps sticky positioning inside the wrapper; on
+  the rare commit wide enough to overflow the panel column, the
+  document itself scrolls horizontally instead. Matrix cell
+  visuals were factored into a shared
+  `_matrix_cell_visual.html.haml` partial so the Summary matrix,
+  Diff tab, and Tests-tab ribbon all render through the same
+  encoding helper (`matrix_cell_attrs`).
+
+Summary/Tests merge landed 2026-05-22:
+
+The Tests tab was doing nearly the same job as the Summary matrix
+at a coarser granularity — same data, same chips, just aggregated
+by test row instead of cell. Maintainer review flagged it as
+redundant, and the per-row "ribbon" added on the Tests tab to
+show per-computer status was effectively a slimmer matrix. The
+merge turns Summary into the single primary lens.
+
+- **One tab, three filter axes.** The chip / module dropdown /
+  search toolbar that briefly lived on the Tests tab moved onto
+  the matrix panel itself. The Stimulus controller was renamed
+  `tests-filter` → `matrix-filter`. All rows render (not just
+  "interesting" ones); the controller hides them via `hidden`
+  on a `display: contents` row wrapper, which removes the
+  wrapped grid items from layout cleanly without breaking the
+  column alignment.
+- **Worst-first default chip.** `default_matrix_filter(per_test)`
+  picks `failing` → `mixed` → `pending` → `checksums` → `fpe` →
+  `all`, mirroring the worst-first logic of
+  `default_detail_tab`. On a clean commit the chip lands on
+  "All" so the user sees the wall of green as confirmation
+  rather than an empty filter result.
+- **Cell-aware pending.** `test_row_categories` now adds
+  `"pending"` to any row carrying pending cells, even when the
+  row's overall state is `:fail` or `:mixed`. Clicking the
+  "Pending" chip surfaces every still-in-flight situation, not
+  just rows where everything is pending.
+- **Cell click → popover.** Cells became `<button>` triggers
+  (`_matrix_cell_trigger.html.haml`) that open an in-page
+  popover with the cell's failure mode, summary text snippet,
+  checksum + grouping note, SDK, runtime, and submission count.
+  The popover has both a header X button and a footer
+  "Close" / "Clear selection" text button — two ways to dismiss
+  for touch and keyboard users. Hover-grow (`scale-125`,
+  cursor-zoom-in) is preserved only for "interesting" cells so
+  the affordance still communicates which cells carry rich
+  content; clean cells stay calm on hover. Cell triggers carry
+  `touch-action: manipulation` to skip the 300ms double-tap
+  delay on mobile. Floating popover positioning is dynamic —
+  flips to the cell's left if it'd overflow right of viewport,
+  clamps top to stay in view.
+- **Embedded popover JSON.** `Commit#cell_popover_data` builds a
+  hash keyed by `"#{test_id}-#{computer_id}"` covering every
+  cell. The "interesting" cells (anything non-clean-pass) carry
+  the full payload: `failure_type` (humanized via
+  `TestInstance.failure_types`), `summary_text` snippet,
+  `checksum`, `sdk_version`, `runtime_minutes`,
+  `submission_count`, `agreement` (`:single` / `:unanimous` /
+  `:pass_fail_mixed` / `:checksum_mixed`), and for
+  checksum-flagged cells `checksum_match_count` /
+  `checksum_match_total` from `_checksum_sibling_counts`. Clean
+  cells get a minimal stub (test/computer/PASS/SDK/runtime/link)
+  so click behavior is consistent — every cell opens a popover,
+  no surprise navigation. The hash is rendered into a single
+  `<script type="application/json">` block at the bottom of the
+  matrix; the popover controller parses it once on connect and
+  caches the resulting map. No per-popover database query.
+- **Memoized matrix.** Before this work the controller called
+  `commit_state`, `test_computer_matrix`, `per_computer_summary`,
+  `per_test_summary`, and `cell_popover_data` — each of which
+  triggered `_build_test_computer_matrix` from scratch. The
+  matrix is now memoized on the `Commit` instance via
+  `@_test_computer_matrix`, dropped when the request ends. Same
+  applies to the eager-loaded `_tccs_for_matrix` array.
+- **Tab strip dropped the Tests entry.** Four tabs now
+  (Summary / Computers / Diff vs last pass / Build logs).
+  `default_detail_tab` no longer returns `:tests`; build trouble
+  still routes to Computers, everything else to Summary.
+  The Computers sidebar that used to flank the Summary matrix
+  was dropped — per-computer detail lives on the Computers tab
+  with more depth, and the matrix's column headers already give
+  a worst-first scan of which computers are in trouble.
+- **Banner deep-links updated.** "See failing tests" /
+  "See mixed tests" buttons now emit `?tab=summary&filter=…`
+  instead of `?tab=tests&…`. Legacy `?tab=tests` URLs route to
+  Summary in the controller, preserving any `?filter=` param
+  so existing bookmarks keep working.
+- **Test name in row label is a link.** The
+  `module/test_name` column on the left of each matrix row
+  links to the test-on-commit page (no computer filter). The
+  popover footer link is the per-(test, computer) link.
+
+Matrix layout refinements (also 2026-05-22 / 23):
+
+- **Sealed sticky header band.** The rotated column-name header
+  and the legend live in one solid `position: sticky; top: 0;
+  z-20; bg-bg-elev` block *outside* the body grid. That seals
+  the 4px gaps between header cells and the corner badges that
+  used to peek through (`top: -2px` on `:inlists_full` plus
+  pucks). The header band uses `overflow-x: clip` rather than
+  `auto/hidden` so it doesn't establish a scroll container —
+  which would trap vertical sticky inside the band — and its
+  inner row gets `width: max-content` so the column headers can
+  exceed the band's visible width and be translated horizontally
+  to follow body scroll.
+- **Legend right-aligned to the matrix's right edge.** The
+  legend container's `max-width` is pinned to the matrix's
+  natural width (`240 + 26 × N` where N = computers), keeping
+  the legend's right edge flush with the rightmost column
+  header rather than floating off in the panel's empty right
+  region.
+- **Horizontal scroll, vertical sticky preserved.** The body
+  grid sits in a `overflow-x: auto` wrapper so on narrow
+  viewports the matrix scrolls within the panel instead of
+  pushing the document into horizontal scroll.
+  `matrix_scroll_controller.js` listens for the body's `scroll`
+  event and applies `transform: translateX(-scrollLeft)` to the
+  sticky band's inner header row, keeping column headers
+  aligned with the cells visible below. The sticky band stays
+  outside the scroll container so its vertical sticky still
+  pins to the viewport.
+
+Docked detail rail (Step 6 polish, 2026-05-23):
+
+The right portion of the Summary panel was empty whitespace on
+wide screens. A docked rail now absorbs it and turns it into
+useful surface for the popover.
+
+- **`xl:flex` layout.** `_tab_summary.html.haml` wraps the
+  matrix + rail in a flex container that splits matrix-on-left,
+  rail-on-right at `xl+` (1280px). Below xl, the rail
+  (`.hidden.xl:block.xl:w-80.xl:shrink-0`) collapses out and
+  the matrix gets full width. The `popover` Stimulus controller
+  lives on this wrapper (not on the matrix panel) so its
+  `dockedContent` target sits inside its scope alongside the
+  matrix cell triggers. `matrix-filter` + `matrix-scroll` stay
+  on the matrix panel where their targets live.
+- **Sticky rail, no `items-start`.** The flex wrapper uses
+  default `items-stretch` so the rail column grows to match the
+  matrix column's height. That gives the sticky inner panel
+  (`position: sticky; top: 16px`) room to track against — with
+  `items-start` the rail column sat at its content height and
+  sticky had nothing to pin to, so it scrolled off-screen on
+  tall matrices.
+- **Inactive vs active state.** `_matrix_rail_inactive` (per-
+  computer mini summary with worst-first dot + name + status
+  text + a "Click any matrix cell" hint) renders server-side
+  into the rail. The popover controller stashes this HTML in
+  `connect()` and restores it on `close()`. When a cell is
+  clicked, the same JS that builds the floating popover content
+  swaps the rail's `innerHTML`. Clicks on other cells just
+  re-render the rail (no jumping popover); clicks outside the
+  rail are ignored in docked mode to avoid wiping a selection
+  the user is still reading.
+- **Routing rule.** `popover#open` checks
+  `dockedContentTarget.offsetParent` — non-null at `xl+` (rail
+  visible), null below (rail collapsed). When docked, content
+  goes to the rail and the floating panel is left hidden; the
+  X / footer-button label switches from "Close" to "Clear
+  selection" to match the rail's "stays visible after clear"
+  mental model.
+
+### Step 6 known followups (not blocking)
+
+- **Header nav overflow on narrow viewports.** ~~Pre-existing
+  issue in `layouts/modern.html.haml` — the top navigation bar
+  doesn't collapse gracefully below ~640px and pushes the
+  document into horizontal scroll even when the page body
+  itself fits.~~ Resolved: the inline nav now collapses to a
+  hamburger + slide-down panel below 880px (the lowest width
+  where the four nav links + Admin + theme + user + Log out
+  fit on a single line). The hamburger reuses
+  `dropdown_controller`, which was extended to sync
+  `aria-expanded` on an optional `trigger` target. The three
+  existing dropdowns (branch picker, date picker, matrix
+  module dropdown) were retrofitted to use that target, so
+  their `aria-expanded` now reflects open state for assistive
+  tech instead of being stuck at `"false"`.
 
 ### Step 7 — Test on commit (`/:branch/commits/:sha/tests/:module/:test`)
 

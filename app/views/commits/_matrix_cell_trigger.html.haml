@@ -1,0 +1,47 @@
+-# Matrix cell wrapped in a popover trigger. Every cell — including
+-# clean passes — opens a popover now that the docked rail makes
+-# the popover the consistent click affordance. Clean-pass cells
+-# get a minimal stub popover (test/computer/PASS/SDK + link);
+-# interesting cells get the rich detail.
+-#
+-# Hover-grow + zoom cursor still differentiates "noteworthy, click
+-# for detail" cells (fail/mixed/pending/flagged) from clean passes
+-# — clean cells stay calm on hover so the matrix's visual noise
+-# stays proportional to the actual signal.
+-#
+-# Locals:
+-#   cell:         hash from `Commit#test_computer_matrix`.
+-#   test_case:    TestCase row.
+-#   computer:     Computer row.
+-#   branch:       branch the commit lives on.
+-#   sha:          short SHA of the commit.
+-#   popover_data: full popover blob — looked up by key for the
+-#                 hover-grow affordance decision and the fallback
+-#                 href (used only as a defensive escape hatch if
+-#                 the JSON entry is missing for some reason).
+
+- attrs = matrix_cell_attrs(cell)
+- key = "#{test_case.id}-#{computer.id}"
+- is_interesting = cell && (cell[:status] != :pass || (cell[:flags] || {}).values.any? { |v| v })
+- fallback_href = test_case_commit_path(branch: branch.name, sha: sha, module: test_case.module, test_case: test_case.name)
+- cell_label = "#{test_case.module}/#{test_case.name} on #{computer.name} — #{attrs[:label]}"
+
+- trigger_class = "relative block rounded-sm p-0 border-0 hover:opacity-80 transition-transform duration-100"
+- trigger_class += is_interesting ? " cursor-zoom-in hover:scale-125 hover:z-10" : " cursor-pointer"
+
+-# `touch-action: manipulation` suppresses the 300ms double-tap-to-
+-# zoom delay on mobile browsers — taps fire the click handler
+-# immediately so the popover opens snappily on touch devices.
+%button{
+  type: "button",
+  title: cell_label,
+  "aria-label": cell_label,
+  style: "width: 22px; height: 22px; touch-action: manipulation;",
+  class: trigger_class,
+  data: {
+    popover_target: "cell",
+    popover_key: key,
+    popover_fallback_href: fallback_href,
+    action: "click->popover#open"
+  } }
+  = render "commits/matrix_cell_visual", cell: cell, label: cell_label

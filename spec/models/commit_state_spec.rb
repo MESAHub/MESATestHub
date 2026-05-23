@@ -273,12 +273,12 @@ RSpec.describe 'commit state aggregation' do
       expect(commit.reload.default_detail_tab).to eq(:computers)
     end
 
-    it 'opens Tests when test runs failed but builds are fine' do
+    it 'opens Summary when builds are fine — the merged matrix tab carries the test view' do
       submit(computer: rusty)
       submit(computer: popeye)
       instance(test_case: test_case_a, computer: rusty, passed: false)
       instance(test_case: test_case_a, computer: popeye, passed: false)
-      expect(commit.reload.default_detail_tab).to eq(:tests)
+      expect(commit.reload.default_detail_tab).to eq(:summary)
     end
 
     it 'opens Summary when nothing is broken' do

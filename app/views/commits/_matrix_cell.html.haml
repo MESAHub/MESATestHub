@@ -1,7 +1,8 @@
--# One cell in the Test × Computer matrix. Renders a 22×22 colored
--# block plus optional centered glyph and corner badge, per the
--# design handoff's encoding table. Wraps in an `<a>` so clicking
--# jumps to the test-on-commit page focused on this computer.
+-# One cell in the Test × Computer matrix. Wraps the visual cell
+-# (rendered by `_matrix_cell_visual`) in a link to the test-on-commit
+-# page focused on this computer. The visual partial is reused
+-# unwrapped in places like the Diff tab where the row itself is the
+-# link target.
 -#
 -# Locals:
 -#   cell:      hash from `Commit#test_computer_matrix` with
@@ -11,19 +12,12 @@
 -#   branch:    Branch the commit lives on (for routing).
 -#   sha:       Short SHA of the commit (for routing).
 
-- attrs = matrix_cell_attrs(cell)
-- bg_style = attrs[:kind] == :striped ? "background: repeating-linear-gradient(45deg, #{attrs[:bg]} 0 4px, #{attrs[:stripe]} 4px 8px);" : "background: #{attrs[:bg]};"
 - link_target = test_case_commit_path(branch: branch.name, sha: sha, module: test_case.module, test_case: test_case.name)
+- attrs = matrix_cell_attrs(cell)
+- cell_label = "#{test_case.module}/#{test_case.name} on #{computer.name} — #{attrs[:label]}"
 
 = link_to link_target,
-         title: "#{test_case.module}/#{test_case.name} on #{computer.name} — #{attrs[:label]}",
-         class: "relative block rounded-sm hover:opacity-80 transition-opacity",
-         style: "#{bg_style} width: 22px; height: 22px;" do
-  - if attrs[:glyph]
-    %span.absolute.inset-0.flex.items-center.justify-center{ style: "color: #{attrs[:glyph_color]};" }
-      = mesa_icon(attrs[:glyph], size: 12)
-  - if attrs[:corner]
-    %span.absolute.flex.items-center.justify-center{
-      style: "top: -2px; right: -2px; width: 11px; height: 11px; border-radius: 50%; background: #{attrs[:corner_bg]}; color: white;"
-    }
-      = mesa_icon(attrs[:corner], size: 7)
+         title: cell_label,
+         class: "block hover:opacity-80 transition-opacity",
+         style: "width: 22px; height: 22px;" do
+  = render "commits/matrix_cell_visual", cell: cell, label: cell_label

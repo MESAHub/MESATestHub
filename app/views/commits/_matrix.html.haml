@@ -1,74 +1,224 @@
--# Test × Computer matrix for the Summary tab. Filters to
--# "interesting" rows only — failing, mixed, pending, or flagged
--# tests — since on commits with 100+ test cases the all-green
--# rows would dwarf the few that actually need attention. The
--# legend above shows every cell kind, and the user can switch to
--# the Tests tab for the unfiltered list.
+-# Merged Summary matrix — the chip toolbar / module filter / search
+-# that used to live on the Tests tab now ride on top of the matrix
+-# itself, and every test row is rendered (not just "interesting"
+-# ones). The Stimulus `matrix-filter` controller AND-applies the
+-# three filter axes by toggling `hidden` on each row wrapper (a
+-# `display: contents` div so the wrapped grid items still
+-# participate in the parent grid). The `popover` controller opens
+-# a detail panel above the clicked cell.
 -#
 -# Locals:
--#   per_test:     output of `Commit#per_test_summary` (sorted
--#                 worst-first).
--#   per_computer: output of `Commit#per_computer_summary` (sorted
--#                 worst-first).
--#   branch:       Branch the commit lives on (for cell links).
--#   sha:          Short SHA of the commit (for cell links).
+-#   per_test:      output of `Commit#per_test_summary` (sorted
+-#                  worst-first). Renders all rows; chip filtering
+-#                  applied client-side.
+-#   per_computer:  output of `Commit#per_computer_summary`.
+-#   popover_data:  output of `Commit#cell_popover_data` — sparse
+-#                  hash keyed by "#{test_id}-#{computer_id}" with
+-#                  failure/checksum detail for non-clean cells.
+-#   branch:        Branch the commit lives on.
+-#   sha:           Short SHA of the commit.
+-#   active_filter: Initial chip filter (from URL or default).
 
-- # Cell-aware filter: a row is "interesting" if any of its
-- # built-computer cells is not a clean pass (anything failing,
-- # pending, or carrying an fpe/checksum/inlists_full flag).
-- # Driving off the matrix instead of `row[:overall]` matters now
-- # that pass-with-pending-neighbors classifies as :pass — we
-- # still want to surface those rows so the user can see *which*
-- # cells didn't report. The triage lives in CommitsHelper because
-- # HAML can't carry multi-line case/if dispatch in a `- ...`
-- # block.
-- built_computer_ids = per_computer.select { |r| r[:built] }.map { |r| r[:computer_id] }
-- interesting, clean_count, not_run_count = matrix_partition(per_test, built_computer_ids)
+- filter_counts = tests_filter_counts(per_test)
+- chip_specs = [["failing", "Failing", "bg-danger"], ["mixed", "Mixed", "bg-warning"], ["pending", "Pending", "bg-info"], ["checksums", "Checksums", "bg-warning"], ["fpe", "FPE", "bg-warning"], ["passing", "Passing", "bg-success"], ["untested", "Untested", "bg-skipped"]]
+- visible_chips = chip_specs.select { |id, _label, _dot| filter_counts[id].to_i.positive? }
+- initial_filter = active_filter.presence || default_matrix_filter(per_test)
+- module_counts = per_test.each_with_object(Hash.new(0)) { |row, h| h[row[:test_case]&.module] += 1 if row[:test_case]&.module }
+- visible_modules = ::TestCase.modules.select { |m| module_counts[m].positive? }
 - computers = per_computer.map { |r| r[:computer] }.compact
 
-%h3.font-semibold.text-fg.flex.items-center.gap-2 Test × Computer matrix
-%p.text-fg-muted.text-sm.mt-1.mb-3
-  Tests with failures, mixed results, pending submissions, or flags.
-  - hide_parts = []
-  - hide_parts << "#{clean_count} clean" if clean_count.positive?
-  - hide_parts << "#{not_run_count} not yet run" if not_run_count.positive?
-  - if hide_parts.any?
-    %span.text-fg-subtle
-      = "Hiding #{hide_parts.join(' and ')}."
+-# `popover` controller lives on the parent wrapper in
+-# `_tab_summary` so it can reach the docked rail target. Here we
+-# only carry the matrix-local controllers.
+.rounded-lg.border.border-border.bg-bg-elev.relative{ style: "box-shadow: var(--shadow-card-sm);",
+                                              data: { controller: "matrix-filter matrix-scroll",
+                                                      matrix_filter_active_value: initial_filter,
+                                                      matrix_filter_module_value: "all",
+                                                      matrix_filter_query_value: "" } }
 
-= render "commits/matrix_legend"
+  -# Toolbar — chips on the left, module dropdown + search on the right.
+  .flex.flex-wrap.items-center.gap-2.px-4.py-3.border-b.border-border-subtle
+    %span.text-fg-muted.text-xs.mr-1
+      = pluralize(per_test.size, "test case")
+      ·
+      = pluralize(computers.size, "computer")
+    -# Chips.
+    %button{ type: "button",
+             "aria-pressed": (initial_filter == "all").to_s,
+             class: "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium cursor-pointer transition-colors #{initial_filter == 'all' ? 'border-brand bg-brand-soft text-brand-soft-text' : 'border-border bg-bg-elev text-fg-muted hover:bg-bg-muted'}",
+             data: { matrix_filter_target: "chip",
+                     filter: "all",
+                     action: "click->matrix-filter#select" } }
+      %span All
+      %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= filter_counts["all"]
+    - visible_chips.each do |id, label, dot|
+      - on = (initial_filter == id)
+      %button{ type: "button",
+               "aria-pressed": on.to_s,
+               class: "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium cursor-pointer transition-colors #{on ? 'border-brand bg-brand-soft text-brand-soft-text' : 'border-border bg-bg-elev text-fg-muted hover:bg-bg-muted'}",
+               data: { matrix_filter_target: "chip",
+                       filter: id,
+                       action: "click->matrix-filter#select" } }
+        %span{ class: "inline-block h-1.5 w-1.5 rounded-full #{dot}" }
+        %span= label
+        %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= filter_counts[id]
 
-- if computers.empty?
-  .mt-4.rounded-md.border.border-border-subtle.bg-bg-subtle.px-4.py-6.text-center.text-fg-muted.text-sm
-    No computers have submitted results for this commit yet.
-- elsif interesting.empty? && clean_count.positive?
-  .mt-4.rounded-md.border.border-border-subtle.bg-bg-subtle.px-4.py-6.text-center.text-fg-muted.text-sm
-    All reported tests are passing on every computer. Nothing to investigate here.
-- elsif interesting.empty?
-  .mt-4.rounded-md.border.border-border-subtle.bg-bg-subtle.px-4.py-6.text-center.text-fg-muted.text-sm
-    No test results yet — every test is still pending or blocked by a build failure.
-- else
-  .mt-4.overflow-x-auto
-    .grid.gap-1{ style: "grid-template-columns: minmax(160px, 1fr) repeat(#{computers.size}, 22px); align-items: end;" }
-      -# Header row: empty corner cell + vertical computer labels.
-      %span &nbsp;
-      - computers.each do |c|
-        %span.font-mono.text-fg-subtle.justify-self-center{
-          class: "text-[10px]",
-          style: "writing-mode: vertical-rl; transform: rotate(180deg); height: 80px; line-height: 22px;",
-          title: c.name }
-          = c.name
-      -# Body rows: test label + one cell per computer.
-      - interesting.each do |row|
-        - test_case = row[:test_case]
-        - next unless test_case
-        .min-w-0.font-mono.text-fg{ class: "text-[11px]" }
-          %span.text-fg-subtle= "#{test_case.module}/"
-          %span.truncate.inline-block.align-middle{ style: "max-width: 240px;" }= test_case.name
-        - computers.each do |c|
-          = render "commits/matrix_cell",
-                   cell: row[:cells_by_computer][c.id],
-                   test_case: test_case,
-                   computer: c,
-                   branch: branch,
-                   sha: sha
+    .grow
+
+    - if visible_modules.size > 1
+      .relative{ data: { controller: "dropdown" } }
+        %button.inline-flex.items-center.gap-1.5.rounded-md.border.border-border.bg-bg-elev.px-2.py-1.text-xs.font-medium.text-fg-muted.cursor-pointer.transition-colors.hover:bg-bg-muted{
+          type: "button",
+          "aria-haspopup": "listbox",
+          "aria-label": "Filter by module",
+          data: { matrix_filter_target: "moduleButton", dropdown_target: "trigger", action: "click->dropdown#toggle" } }
+          %span Module:
+          %span.font-mono.text-fg{ data: { matrix_filter_target: "moduleLabel" } } All modules
+          = mesa_icon(:chevron, size: 10)
+        %div.absolute.right-0.mt-1.rounded-md.border.border-border.bg-bg-elev.py-1.shadow-md.z-20{
+          hidden: true,
+          role: "listbox",
+          style: "min-width: 160px;",
+          data: { dropdown_target: "menu" } }
+          %button{ type: "button",
+                   role: "option",
+                   "aria-selected": "true",
+                   class: "flex w-full items-center justify-between gap-3 px-3 py-1.5 text-xs text-fg hover:bg-bg-muted",
+                   data: { matrix_filter_target: "moduleItem",
+                           module: "all",
+                           action: "click->matrix-filter#selectModule" } }
+            %span All modules
+            %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= filter_counts["all"]
+          - visible_modules.each do |mod|
+            %button{ type: "button",
+                     role: "option",
+                     "aria-selected": "false",
+                     class: "flex w-full items-center justify-between gap-3 px-3 py-1.5 text-xs text-fg hover:bg-bg-muted",
+                     data: { matrix_filter_target: "moduleItem",
+                             module: mod,
+                             action: "click->matrix-filter#selectModule" } }
+              %span.font-mono= mod
+              %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= module_counts[mod]
+
+    .relative
+      %span.absolute.inset-y-0.left-0.flex.items-center.pl-2.text-fg-subtle{ "aria-hidden": "true" }
+        = mesa_icon(:search, size: 12)
+      %input{ type: "search",
+              placeholder: "Search tests…",
+              "aria-label": "Search test names",
+              class: "rounded-md border border-border bg-bg-elev pl-7 pr-2 py-1 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-brand",
+              style: "width: 160px;",
+              data: { matrix_filter_target: "search",
+                      action: "input->matrix-filter#search" } }
+
+  -# Matrix body.
+  - if computers.empty?
+    .px-4.py-10.text-center.text-fg-muted.text-sm
+      No computers have submitted results for this commit yet.
+  - elsif per_test.empty?
+    .px-4.py-10.text-center.text-fg-muted.text-sm
+      No tests reported for this commit.
+  - else
+    -# Test-name column is a fixed width so the body grid and the
+    -# sticky header band share the same column layout without any
+    -# `1fr` re-resolution issues.
+    - col_template = "240px repeat(#{computers.size}, 22px)"
+    -# Matrix natural width — 240px test-name col + N × 22px
+    -# computer cols + N × 4px gaps (gap-1). Used both to cap the
+    -# legend at the matrix's right edge and to let the body grid
+    -# overflow into its own horizontal scroll container on narrow
+    -# viewports.
+    - matrix_width = 240 + 26 * computers.size
+    -# Sticky header band — solid block that pins at `top: 0` and
+    -# covers the panel width with bg-bg-elev so matrix cells and
+    -# their corner badges slide cleanly *behind* it when scrolled.
+    -# `overflow-x: clip` lets the inner row be wider than the band
+    -# (so it can be translateX'd in lockstep with body scroll) WITHOUT
+    -# turning the band into a scroll container — which would trap
+    -# vertical sticky positioning. Inside the band:
+    -#   row 1: legend, right-aligned within `matrix_width` so its
+    -#          right edge meets the rightmost column header rather
+    -#          than the panel's far edge.
+    -#   row 2: rotated column-name headers, in a row that JS shifts
+    -#          horizontally to follow the body's scrollLeft.
+    .sticky.z-20.bg-bg-elev.border-b.border-border-subtle{ style: "top: 0; overflow-x: clip;" }
+      .px-4
+        -# max-width pinned to the matrix's natural width so the
+        -# legend's right edge sits exactly at the rightmost column
+        -# header rather than the panel's far right.
+        .py-2.flex.justify-end{ style: "max-width: #{matrix_width}px;" }
+          = render "commits/matrix_legend"
+      .pb-2{ data: { matrix_scroll_target: "headerInner" }, style: "width: max-content; will-change: transform;" }
+        .px-4
+          .grid.gap-1{ style: "grid-template-columns: #{col_template}; align-items: end;" }
+            %span{ style: "height: 90px;" } &nbsp;
+            - computers.each do |c|
+              -# Long computer names (e.g. cannon_conroy_intel) would
+              -# otherwise overflow the 90px header band. Truncate to a
+              -# max display length with an ellipsis; the full name
+              -# stays in `title` for hover.
+              - display_name = c.name.length > 14 ? "#{c.name[0, 13]}…" : c.name
+              %span.font-mono.text-fg-subtle.justify-self-center.overflow-hidden{
+                class: "text-[10px]",
+                style: "writing-mode: vertical-rl; transform: rotate(180deg); height: 90px; line-height: 22px;",
+                title: c.name }
+                = display_name
+    -# Matrix body — overflow-x: auto so the body scrolls
+    -# horizontally within the panel on narrow viewports instead
+    -# of pushing the document into horizontal scroll. The
+    -# `matrix-scroll` controller listens for scroll events here
+    -# and shifts the sticky header's inner row to match.
+    .py-3{ data: { matrix_scroll_target: "body", action: "scroll->matrix-scroll#sync" }, style: "overflow-x: auto;" }
+      .px-4{ style: "width: max-content;" }
+        .grid.gap-1{ style: "grid-template-columns: #{col_template};" }
+          - per_test.each do |row|
+            - test_case = row[:test_case]
+            - next unless test_case
+            - categories = test_row_categories(row)
+            %div.contents{ data: { matrix_filter_target: "row",
+                                    categories: categories.join(" "),
+                                    module: test_case.module.to_s,
+                                    test_name: test_case.name.to_s.downcase } }
+              .min-w-0.font-mono.text-fg.flex.items-center.gap-1.5{ class: "text-[11px]" }
+                -# Per-row overall status dot — restored from the old
+                -# Tests view so users get the row's at-a-glance state
+                -# without scanning the cells.
+                %span{ class: "inline-block h-2 w-2 rounded-full shrink-0 #{status_dot_class_for_test(row[:overall])}",
+                       title: "Overall: #{row[:overall]}" }
+                %span.text-fg-subtle.shrink-0= "#{test_case.module}/"
+                = link_to test_case.name,
+                         test_case_commit_path(branch: branch.name, sha: sha, module: test_case.module, test_case: test_case.name),
+                         class: "truncate inline-block text-fg hover:text-brand no-underline",
+                         style: "max-width: 220px;",
+                         title: "View #{test_case.module}/#{test_case.name} on this commit"
+              - computers.each do |c|
+                = render "commits/matrix_cell_trigger",
+                         cell: row[:cells_by_computer][c.id],
+                         test_case: test_case,
+                         computer: c,
+                         branch: branch,
+                         sha: sha,
+                         popover_data: popover_data
+
+  -# Empty state when filters knock everything out. The Stimulus
+  -# controller toggles `hidden` here.
+  .px-4.py-8.text-center.text-fg-subtle.text-sm{ hidden: true, data: { matrix_filter_target: "empty" } }
+    No tests match the current filters.
+
+  -# Popover panel — single instance, populated dynamically by the
+  -# `popover` Stimulus controller on cell click. Positioned via
+  -# inline `style` updates relative to the panel container.
+  %div.absolute.z-30.rounded-lg.border.border-border.bg-bg-elev.shadow-lg.text-fg{
+    hidden: true,
+    role: "dialog",
+    "aria-modal": "false",
+    style: "width: 320px; box-shadow: var(--shadow-card-lg, 0 12px 28px rgba(0,0,0,.18));",
+    data: { popover_target: "panel" } }
+    %div{ data: { popover_target: "content" } }
+
+  -# Embedded popover data blob. The controller reads this on
+  -# connect and caches it as a JS Map keyed by cell key. Skipping
+  -# clean cells keeps the payload small (1000-cell matrices
+  -# typically have <500 interesting entries).
+  %script{ type: "application/json", data: { popover_target: "data" } }
+    != popover_data.to_json

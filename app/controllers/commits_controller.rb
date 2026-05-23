@@ -26,6 +26,7 @@ class CommitsController < ApplicationController
     @matrix          = @commit.test_computer_matrix
     @per_computer    = @commit.per_computer_summary
     @per_test        = @commit.per_test_summary
+    @popover_data    = @commit.cell_popover_data
     @neighbors       = @selected_branch.commit_neighbors(@commit)
     @hero_window     = @selected_branch.focused_commit_window(@commit, size: 5)
 
@@ -34,15 +35,21 @@ class CommitsController < ApplicationController
 
     @default_tab = @commit.default_detail_tab(state: @commit_state)
     requested = params[:tab].to_s.to_sym
-    @active_tab = if %i[summary tests computers diff logs].include?(requested)
+    # Legacy `?tab=tests` redirects to the merged Summary panel,
+    # carrying any `?filter=` chip override through. Banner action
+    # buttons + bookmarks from the brief lifetime of the Tests tab
+    # still land on the right chip.
+    requested = :summary if requested == :tests
+    @active_tab = if %i[summary computers diff logs].include?(requested)
                     requested
                   else
                     @default_tab
                   end
 
-    # Tests-tab filter pre-selection. Banner action buttons hand
+    # Matrix filter chip pre-selection. Banner action buttons hand
     # off via `?filter=<tag>`; the same URL works for direct deep
-    # links. Unknown values fall through to "all" client-side.
+    # links. Unknown values fall through to the worst-first default
+    # picked in the view (`default_matrix_filter`).
     @active_filter = params[:filter].presence
   end
 

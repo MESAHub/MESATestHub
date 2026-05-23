@@ -1,0 +1,22 @@
+-# Docked detail rail for the Summary matrix. On xl+ viewports
+-# this sits to the right of the matrix and absorbs what would
+-# otherwise be wasted whitespace. Clicking a matrix cell renders
+-# the same content the floating popover would show — but anchored
+-# here, so the user can compare cells without the popover jumping
+-# around the viewport. Clearing the selection restores a
+-# per-computer mini summary + a hint.
+-#
+-# Visibility: `hidden xl:block` matches the wrapper's `xl:flex`
+-# in `_tab_summary` — the rail only appears at xl (1280px+) where
+-# the matrix leaves enough room. Below xl, this entire element
+-# collapses out and the popover falls back to its floating mode
+-# automatically (the controller checks `offsetParent`).
+-#
+-# Locals:
+-#   per_computer: passed through to the inactive-state partial.
+.hidden.xl:block.xl:w-80.xl:shrink-0
+  .sticky{ style: "top: 16px;" }
+    .rounded-lg.border.border-border.bg-bg-elev.overflow-hidden.text-fg{
+      style: "box-shadow: var(--shadow-card-sm); max-height: calc(100vh - 32px); overflow-y: auto;" }
+      %div{ data: { popover_target: "dockedContent" } }
+        = render "commits/matrix_rail_inactive", per_computer: per_computer

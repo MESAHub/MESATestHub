@@ -2,14 +2,16 @@
 -# bottom border. Clicks toggle panels via the `tabs` Stimulus
 -# controller and update ?tab= on the URL so a specific tab is
 -# bookmarkable. Badges per the prototype:
--#   Tests: first nonzero of (uniform_failing, mixed, fpe+checksum)
+-#   Summary: first nonzero of (uniform_failing, mixed, fpe+checksum)
+-#            — surfaces the test-side severity now that Tests folded
+-#            into the matrix panel
 -#   Computers: failed_build count, buildfail-toned when all failed
 -#   Diff: disabled (opacity-50, no click) when there's no last-clean
 -#         commit to compare against.
-- tests_badge = tests_tab_badge(@commit_state)
-- comp_badge  = computers_tab_badge(@commit_state)
+- summary_badge = tests_tab_badge(@commit_state)
+- comp_badge    = computers_tab_badge(@commit_state)
 - diff_disabled = @last_clean_commit.nil?
-- tab_specs = [[:summary, "Summary", nil], [:tests, "Tests", tests_badge], [:computers, "Computers", comp_badge], [:diff, "Diff vs last pass", nil], [:logs, "Logs", nil]]
+- tab_specs = [[:summary, "Summary", summary_badge], [:computers, "Computers", comp_badge], [:diff, "Diff vs last pass", nil], [:logs, "Build logs", nil]]
 
 %nav.flex.gap-1.border-b.border-border-subtle{ role: "tablist", "aria-label": "Commit detail" }
   - tab_specs.each do |id, label, badge|
