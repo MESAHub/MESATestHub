@@ -1,0 +1,19 @@
+-# Breadcrumb: ← <sha> / module/test path. The back arrow points
+-# one level up — to the commit, where every test for this sha
+-# lives. The continuum is: commit → commits index; test case on
+-# commit → commit → commits index. No "Commits" entry here; the
+-# user pops up one level at a time.
+-#
+-# The legacy older/newer arrows were removed in favor of the
+-# subway map in the headline — adjacent stations cover the same
+-# walk with status color, popovers, and short SHAs at a glance.
+%nav.flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+  = link_to commit_path(branch: @selected_branch.name, sha: @commit.short_sha),
+           class: "inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-bg-muted hover:text-fg no-underline",
+           title: "All tests on #{@commit.short_sha}" do
+    = mesa_icon(:arrow_left, size: 14)
+    %span.font-mono.tabular-nums= @commit.short_sha
+  %span.text-fg-subtle /
+  %span.font-mono.text-fg
+    %span.text-fg-subtle= "#{@test_case.module}/"
+    = @test_case.name

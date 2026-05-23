@@ -256,7 +256,7 @@ export default class extends Controller {
     }
 
     const href = cell.dataset.popoverFallbackHref || "#"
-    const footerLink = `<a href="${this._esc(href)}" class="text-brand text-[11px] no-underline hover:opacity-80">View full instance details →</a>`
+    const footerLink = `<a href="${this._esc(href)}" class="text-brand text-[11px] no-underline hover:opacity-80">View full test case details →</a>`
     const flagRow = flagPills.length
       ? `<div class="px-3 py-2 flex flex-wrap gap-1 border-b border-border-subtle bg-bg-subtle">${flagPills.join("")}</div>`
       : ""

@@ -1,0 +1,111 @@
+-# Instances panel — toolbar (count + search + status filter +
+-# column picker) on top, table below.
+-#
+-# Two Stimulus controllers wrap the panel:
+-#
+-#   instance-filter — owns the search input + status segment. Hides
+-#                     rows that don't match either axis. Empty state
+-#                     when both knock everything out.
+-#   column-picker   — owns the columns dropdown + preset chips. Hides
+-#                     <th> and <td> for inactive columns. Persists the
+-#                     active set to localStorage so a user's column
+-#                     pick survives navigations.
+
+- instance_count = @instance_rows.size
+- counts = { "pass" => 0, "fail" => 0, "pending" => 0 }
+- @instance_rows.each do |row|
+  - counts[instance_status_tag(row)] = counts.fetch(instance_status_tag(row), 0) + 1
+- default_cols_csv = TestCaseCommitsHelper::INSTANCE_COLUMN_PRESETS["default"].join(" ")
+- preset_keys = TestCaseCommitsHelper::INSTANCE_COLUMN_PRESETS.keys
+- preset_map = TestCaseCommitsHelper::INSTANCE_COLUMN_PRESETS.transform_values { |ids| ids.join(" ") }
+
+.rounded-lg.border.border-border.bg-bg-elev.relative{ style: "box-shadow: var(--shadow-card-sm);",
+                                              data: { controller: "instance-filter column-picker",
+                                                      instance_filter_status_value: "all",
+                                                      instance_filter_query_value: "",
+                                                      column_picker_active_value: default_cols_csv,
+                                                      column_picker_default_value: default_cols_csv,
+                                                      column_picker_storage_key_value: "mesa.test_on_commit.columns.v1",
+                                                      column_picker_presets_value: preset_map.to_json } }
+
+  -# Toolbar.
+  .flex.flex-wrap.items-center.gap-2.px-4.py-3.border-b.border-border-subtle
+    %strong.text-fg.text-sm
+      = pluralize(instance_count, "instance")
+
+    -# Search input.
+    .relative
+      %span.absolute.inset-y-0.left-0.flex.items-center.pl-2.text-fg-subtle{ "aria-hidden": "true" }
+        = mesa_icon(:search, size: 12)
+      %input{ type: "search",
+              placeholder: "Filter by computer or checksum…",
+              "aria-label": "Filter instances",
+              class: "rounded-md border border-border bg-bg-elev pl-7 pr-2 py-1 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-brand",
+              style: "width: 240px;",
+              data: { instance_filter_target: "search",
+                      action: "input->instance-filter#search" } }
+
+    -# Status segmented control.
+    - status_specs = [["all", "All", instance_count, nil], ["fail", "Failing", counts["fail"], "bg-danger"], ["pass", "Pass", counts["pass"], "bg-success"], ["pending", "Pending", counts["pending"], "bg-info"]]
+    .inline-flex.rounded-md.border.border-border.bg-bg-elev.p-0.5.gap-0.5
+      - status_specs.each do |id, label, count, dot|
+        - on = (id == "all")
+        %button{ type: "button",
+                 "aria-pressed": on.to_s,
+                 class: "inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs font-medium cursor-pointer transition-colors #{on ? 'bg-brand-soft text-brand-soft-text' : 'text-fg-muted hover:bg-bg-muted'}",
+                 data: { instance_filter_target: "statusChip",
+                         status: id,
+                         action: "click->instance-filter#selectStatus" } }
+          - if dot
+            %span{ class: "inline-block h-1.5 w-1.5 rounded-full #{dot}" }
+          %span= label
+          %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= count
+
+    .grow
+
+    -# Column picker dropdown.
+    .relative{ data: { controller: "dropdown" } }
+      %button.inline-flex.items-center.gap-1.5.rounded-md.border.border-border.bg-bg-elev.px-2.py-1.text-xs.font-medium.text-fg-muted.cursor-pointer.transition-colors.hover:bg-bg-muted{
+        type: "button",
+        "aria-haspopup": "true",
+        "aria-label": "Pick visible columns",
+        data: { dropdown_target: "trigger", action: "click->dropdown#toggle" } }
+        = mesa_icon(:eye_off, size: 11)
+        %span Columns
+        %span.text-fg-subtle{ class: "text-[10px]", data: { column_picker_target: "count" } }
+          = "#{TestCaseCommitsHelper::INSTANCE_COLUMN_PRESETS['default'].size}/#{TestCaseCommitsHelper::INSTANCE_COLUMNS.size}"
+        = mesa_icon(:chevron, size: 10)
+      = render "test_case_commits/column_picker", preset_keys: preset_keys
+
+  -# Inline icon legend. The status column carries three small
+  -# glyphs (wrench / ≠ / +) whose meaning isn't obvious without a
+  -# key. Renders unconditionally so users learn the vocabulary even
+  -# on commits where the flags happen not to fire today.
+  .px-4.py-2.border-b.border-border-subtle.flex.flex-wrap.items-center.gap-x-4.gap-y-1.text-fg-muted{ class: "text-[11px]" }
+    %span.text-fg-subtle.uppercase.tracking-wide Icons
+    .flex.items-center.gap-1
+      %span.text-warning-soft-text
+        = mesa_icon(:wrench, size: 11)
+      %span FPE checks
+    .flex.items-center.gap-1
+      %span.text-warning-soft-text
+        = mesa_icon(:neq, size: 11)
+      %span checksum mismatch
+    .flex.items-center.gap-1
+      %span.text-info-soft-text
+        = mesa_icon(:plus, size: 11)
+      %span ran all inlists
+
+  -# Table. The wrapper is the horizontal-scroll container; padding
+  -# at the bottom keeps overlay scrollbars (macOS Big Sur+) from
+  -# obscuring the last row when the column set exceeds the viewport.
+  - if @instance_rows.empty?
+    .px-4.py-10.text-center.text-fg-muted.text-sm
+      No instances have been submitted for this test case on this commit.
+  - else
+    %div{ class: "overflow-x-auto pb-3" }
+      = render "test_case_commits/instances_table"
+
+  -# Empty state when filters knock everything out.
+  .px-4.py-8.text-center.text-fg-subtle.text-sm{ hidden: true, data: { instance_filter_target: "empty" } }
+    No instances match the current filters.

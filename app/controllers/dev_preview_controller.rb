@@ -21,9 +21,15 @@ class DevPreviewController < ApplicationController
   end
 
   # Sign in transparently as the first user in the dev DB and bounce
-  # to the real commits index. Lets us preview migrated pages in the
-  # browser without entering credentials each time. Restricted to
-  # dev/test by the route guard, so this can't run in production.
+  # to the real commits index (or whatever path is passed via
+  # `?return_to=`). Lets us preview migrated pages in the browser
+  # without entering credentials each time. Restricted to dev/test by
+  # the route guard, so this can't run in production.
+  #
+  # `?return_to=` accepts any local path so headless-Chrome smoke
+  # tests can authenticate-then-screenshot in a single navigation.
+  # Defends against open-redirect by requiring the value to start
+  # with `/` and not be a protocol-relative `//foo`.
   def commits
     user = User.first
     if user.nil?
@@ -31,6 +37,11 @@ class DevPreviewController < ApplicationController
       return
     end
     session[:user_id] = user.id
-    redirect_to commits_path(branch: params[:branch] || "main")
+    target = params[:return_to].to_s
+    if target.start_with?("/") && !target.start_with?("//")
+      redirect_to target
+    else
+      redirect_to commits_path(branch: params[:branch] || "main")
+    end
   end
 end

@@ -1,0 +1,99 @@
+-# Headline card. Two tiers separated by a hairline border.
+-#
+-#   Tier 1: status sentence — clickable test pill (opens picker
+-#           for siblings on this commit), "is <status> in <sha>
+-#           with N unique checksum(s).", plus the "Bit-for-bit
+-#           broken" sub-line when there's checksum divergence.
+-#           Full width so the sentence never gets cropped into
+-#           half a card.
+-#   Tier 2: two-column split at `lg+` — commit identity (message,
+-#           expander, author, time) on the LEFT with the GitHub
+-#           action in its top-right; per-test history capsule on
+-#           the RIGHT with the "Full history" action in its
+-#           top-right. Symmetric placement of the two action
+-#           buttons within their columns. Below `lg`, the columns
+-#           stack with the subway underneath the commit identity.
+-#
+-# The legacy "All tests on <sha>" button is gone — the breadcrumb
+-# back arrow plus the in-headline test picker cover that pivot.
+
+.rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+
+  -# Tier 1 — status sentence (+ multi-checksum sub-line).
+  %div{ class: "text-[22px] font-medium leading-snug tracking-tight text-fg" }
+    = render "test_case_commits/test_picker"
+    %span.text-fg-muted{ class: "text-[20px]" }<>
+      = " is "
+    %strong{ class: "font-semibold #{@status_class}" }= @status_word
+    %span.text-fg-muted{ class: "text-[20px]" }<>
+      = " in "
+    = link_to @commit.short_sha,
+             commit_path(branch: @selected_branch.name, sha: @commit.short_sha),
+             class: "font-mono font-semibold text-brand no-underline hover:underline"
+    - if @checksum_n > 0
+      %span.text-fg-muted{ class: "text-[20px]" }<>
+        = " with "
+      %strong{ class: "font-semibold #{@checksum_class}" }
+        = "#{@checksum_word} unique checksum#{'s' unless @checksum_n == 1}."
+
+  - if @checksum_n > 1
+    .mt-3.flex.flex-wrap.items-center.gap-x-2.gap-y-1.text-fg-muted{ class: "text-[12px]" }
+      %span Bit-for-bit reproducibility broken on this commit. Checksums seen:
+      - @unique_checksums.each_with_index do |cs, i|
+        %code.font-mono.text-fg= cs
+        - if i < @unique_checksums.length - 1
+          %span.text-fg-subtle ·
+
+  -# Tier 2 — commit identity (left) + test history (right). Splits
+  -# at `lg` (1024px+); below that, the right column drops under
+  -# the left so the subway map keeps its breathing room. The
+  -# action buttons (GitHub left, Full history right) live in
+  -# each column's header row at top-right for visual symmetry.
+  - message_body = @commit.message.to_s.split("\n", 2)[1]&.strip.presence
+  .mt-4.pt-4.border-t.border-border-subtle.grid.gap-6{ class: "grid-cols-1 lg:grid-cols-2" }
+
+    -# LEFT — commit identity.
+    .min-w-0
+      .flex.items-start.justify-between.gap-3
+        %div.text-fg.min-w-0.flex-1{ class: "text-[13px]" }= @commit.message_first_line(120)
+        - if @commit.github_url
+          .shrink-0
+            = link_to @commit.github_url,
+                     target: "_blank", rel: "noopener",
+                     class: "mesa-btn",
+                     style: "padding: 4px 10px; font-size: 12px;" do
+              = mesa_icon(:github, size: 12)
+              %span GitHub
+      - if message_body
+        %details.mt-1.text-fg-muted{ class: "text-[12px]" }
+          %summary.cursor-pointer.text-fg-subtle.hover:text-fg.transition-colors.select-none.inline-flex.items-center.gap-1{ class: "text-[11px]" }
+            Show full commit message
+          %div.mt-2.whitespace-pre-wrap.font-mono.text-fg{ class: "text-[12px]" }= message_body
+
+      .mt-3.flex.flex-wrap.items-center.gap-x-4.gap-y-1{ class: "text-[12px] text-fg-muted" }
+        .flex.items-center.gap-1.5
+          = commit_avatar(@commit.author, size: 18)
+          %span.text-fg= @commit.author
+        %span.flex.items-center.gap-1
+          = mesa_icon(:clock, size: 11)
+          %span committed #{time_ago_compact(@commit.commit_time)}
+
+    -# RIGHT — per-test history capsule.
+    .min-w-0
+      .flex.items-center.justify-between.gap-3.mb-2
+        %span.mesa-label.min-w-0.truncate
+          = "History of #{@test_case.module}/#{@test_case.name}"
+        .shrink-0
+          = link_to test_case_path(branch: @selected_branch.name,
+                                   module: @test_case.module,
+                                   test_case: @test_case.name),
+                   class: "mesa-btn",
+                   style: "padding: 4px 10px; font-size: 12px;" do
+            = mesa_icon(:clock, size: 12)
+            %span Full history
+      = render "test_case_commits/subway_map",
+               window: @subway_window,
+               tccs_by_commit: @subway_tccs_by_commit,
+               focused_sha: @commit.sha,
+               test_case: @test_case,
+               branch: @selected_branch

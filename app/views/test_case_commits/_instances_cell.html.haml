@@ -1,0 +1,105 @@
+-# Per-(column, row) cell renderer. The column id determines both the
+-# field to look up and the formatting. Centralized here so the table
+-# partial stays a layout sketch and the formatting logic doesn't
+-# sprawl across the 20 column definitions.
+-#
+-# Per-inlist metrics (model_number, star_age, retries, num_retries)
+-# read off the last inlist run for the instance, matching the
+-# legacy view's "last inlist's numbers in the overview row"
+-# behavior.
+
+- inlist = last_inlist(row)
+- case col[:id]
+- when "computer"
+  - if test_instance.computer && test_instance.computer.user
+    = link_to row[:computer_name].to_s,
+             user_computer_path(test_instance.computer.user, test_instance.computer),
+             class: "text-fg hover:text-brand no-underline"
+  - else
+    = row[:computer_name].to_s
+- when "date"
+  = format_time(row[:created_at])
+- when "threads"
+  = row[:threads].nil? ? content_tag(:span, "—", class: "text-fg-subtle") : row[:threads]
+- when "spec"
+  - spec = row[:computer_specification]
+  - if spec.to_s.strip.empty?
+    %span.text-fg-subtle —
+  - else
+    %span.truncate.inline-block{ style: "max-width: 130px;", title: spec }= spec
+- when "runtime"
+  - mins = row[:runtime_minutes]
+  - if mins.nil?
+    %span.text-fg-subtle —
+  - else
+    = format("%.2f m", mins.to_f)
+- when "ram"
+  -# `mem_rn` is stored in KB; convert to MB at display time. Schema
+  -# is a plain integer so a missing value reads as nil rather than 0.
+  - kb = row[:mem_rn]
+  - if kb.nil? || kb.to_i.zero?
+    %span.text-fg-subtle —
+  - else
+    = format("%.0f MB", kb.to_f / 1024.0)
+- when "checksum"
+  - cs = row[:checksum].to_s
+  - if cs.empty?
+    %span.text-fg-subtle —
+  - else
+    -# Color the checksum cell warning-tinted when this row's
+    -# checksum is one of multiple unique checksums for the TCC —
+    -# the visual nudge tells the user where reproducibility
+    -# broke down.
+    - mixed = (@unique_checksums.size > 1) && @unique_checksums.include?(cs)
+    %span{ class: (mixed ? "text-warning-soft-text font-semibold" : "text-fg"),
+           title: cs }
+      = cs.length > 7 ? cs[-7..-1] : cs
+- when "model_number"
+  = (inlist && inlist[:model_number] && inlist[:model_number] != -1) ? inlist[:model_number] : content_tag(:span, "—", class: "text-fg-subtle")
+- when "steps"
+  = row[:steps].nil? ? content_tag(:span, "—", class: "text-fg-subtle") : row[:steps]
+- when "star_age"
+  - age = inlist && inlist[:star_age]
+  - if age.nil? || age.to_f.zero? || age.to_f.negative?
+    %span.text-fg-subtle —
+  - else
+    = format("%.3e", age.to_f)
+- when "cum_retries"
+  = row[:retries].nil? ? content_tag(:span, "—", class: "text-fg-subtle") : row[:retries]
+- when "retries"
+  - v = inlist && inlist[:redos] # `inlist[:retries]` not present; use redos as second-axis retry-ish signal
+  -# Per-inlist retries aren't exposed in `instances_for_display` —
+  -# fall back to an em-dash so the column reads honestly rather than
+  -# silently substituting the cumulative count.
+  %span.text-fg-subtle —
+- when "redos"
+  = row[:redos].nil? ? content_tag(:span, "—", class: "text-fg-subtle") : row[:redos]
+- when "solver_iters"
+  = row[:solver_iterations].nil? ? content_tag(:span, "—", class: "text-fg-subtle") : row[:solver_iterations]
+- when "solver_calls"
+  = row[:solver_calls_made].nil? ? content_tag(:span, "—", class: "text-fg-subtle") : row[:solver_calls_made]
+- when "solver_calls_failed"
+  = row[:solver_calls_failed].nil? ? content_tag(:span, "—", class: "text-fg-subtle") : row[:solver_calls_failed]
+- when "log_rel_e"
+  - v = row[:log_rel_run_E_err]
+  - if v.nil?
+    %span.text-fg-subtle —
+  - else
+    = format("%.2f", v.to_f)
+- when "num_retries"
+  -# Cross-inlist sum of num_retries — useful when the test ran more
+  -# than one inlist (the last-inlist's count alone misses earlier
+  -# work). Nil if no inlists carry the field.
+  - vals = (row[:inlists] || []).map { |il| il[:num_retries] }.compact.reject { |v| v.to_i.negative? }
+  - if vals.empty?
+    %span.text-fg-subtle —
+  - else
+    = vals.sum
+- when "inlist_retries"
+  - v = inlist && inlist[:num_retries]
+  - if v.nil? || v.to_i.negative?
+    %span.text-fg-subtle —
+  - else
+    = v
+- else
+  %span.text-fg-subtle —

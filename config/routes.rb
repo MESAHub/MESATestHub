@@ -40,6 +40,30 @@ Rails.application.routes.draw do
         as: 'dev_preview_commits'
   end
 
+  # Per-test log proxy + HEAD probe. Same pattern as the commit-
+  # level build_log routes below: a narrow allow-list so only logs
+  # for a (commit, computer, test) actually represented in our
+  # submission data are reachable. `:type` is constrained to the
+  # three log files MESA test instances produce — out (stdout),
+  # mk (build), err (stderr). Must mount BEFORE the catch-all
+  # test_case_commit_path that follows.
+  get '/:branch/commits/:sha/test_logs/:module/:test_case/:computer/:type',
+      to: 'test_case_commits#log',
+      as: 'test_case_commit_log',
+      constraints: { branch: /.*/, sha: /[a-f0-9]+/,
+                     test_case: /[^\/]+/, computer: /[^\/]+/ }
+
+  # Cheap HEAD-only "anything-at-all" probe per (commit, computer,
+  # test). Used by the per-row "logs ↗" link to hide itself when
+  # the upstream has nothing for that computer + test, and by the
+  # Logs-tab strip to disable the whole tab when nothing exists
+  # for any computer. Cached server-side.
+  get '/:branch/commits/:sha/test_logs_status/:module/:test_case/:computer',
+      to: 'test_case_commits#log_status',
+      as: 'test_case_commit_log_status',
+      constraints: { branch: /.*/, sha: /[a-f0-9]+/,
+                     test_case: /[^\/]+/, computer: /[^\/]+/ }
+
   # for viewing data for one test case and one commit
   get '/:branch/commits/:sha/test_cases/:module/:test_case',
     to: 'test_case_commits#show', as:'test_case_commit',

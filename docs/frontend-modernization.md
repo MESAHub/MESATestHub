@@ -744,21 +744,272 @@ useful surface for the popover.
   their `aria-expanded` now reflects open state for assistive
   tech instead of being stuck at `"false"`.
 
-### Step 7 — Test on commit (`/:branch/commits/:sha/tests/:module/:test`)
+### Step 7 — Test on commit (`/:branch/commits/:sha/test_cases/:module/:test_case`)
 
 Reference: `09-`, `10-`, `11-prototype.png`.
 
-- Color-coded headline sentence.
-- Compact commit context.
-- Instances table with column picker (Stimulus controller from
-  Step 3).
-- Available columns: 20 total grouped into Run / Output /
-  Convergence. Most columns map to existing `TestInstance` /
-  `InstanceInlist` fields; spec the column → field mapping
-  carefully.
+**Status: landed (2026-05-23)** on `frontend-tailwind`. The page
+now renders through `layouts/modern.html.haml`; the legacy
+Bootstrap markup at `test_case_commits/show.html.haml` is gone,
+replaced by a small skeleton that composes a stack of new
+partials. The page picked up a Summary / Logs tab strip during
+this round (the file list at the bottom of this section
+reflects the final shape, not the initial port).
 
-This page replaces the current `test_case_commits#show` — verify
-the existing route still works.
+Departures from the original handoff:
+
+- **Color-coded headline word + checksum word.** The
+  `_headline.html.haml` partial composes the sentence
+  ```
+  <test> (<module>) is <status> in <sha> with <N> unique checksum(s).
+  ```
+  with status/word colors derived from the test_instance pass/fail
+  mix, and `one|two|three|N` for the checksum count. Multi-checksum
+  rows get the "Bit-for-bit reproducibility broken on this commit.
+  Checksums seen: …" sub-line. The status helper is
+  `TestCaseCommitsHelper#headline_status` and lives next to the
+  column catalog.
+- **Variant column dropped entirely.** The prototype's `out/mk`
+  shorthand mapped to log-file types; an initial port translated
+  it to a schema-flag concatenation (`photo+full+fpe+fine`), but
+  every value it could produce is already encoded in the
+  status-cell icons (wrench for FPE, ≠ for checksum divergence,
+  + for full inlists) and the success_type portion of the status
+  label ("PASS: Photo checksum"). Keeping the column was pure
+  visual duplication and pushed the default set past a
+  one-screen-wide layout. The catalog is now 19 columns instead
+  of 20.
+- **HTML table, not CSS grid.** The instances table is a native
+  `<table>` with sticky header. Each `<th>` and `<td>` carries
+  `data-col="<id>"`; the `column-picker` Stimulus controller
+  toggles `hidden` on cells whose id isn't in the active set,
+  which collapses the column from the table layout entirely
+  (sibling cells reflow into the freed width). Cleaner than the
+  prototype's grid + `display: contents` rows when there are 20
+  toggleable columns and per-column widths to maintain.
+- **Nineteen columns grouped Run / Output / Convergence.**
+  Column catalog lives in
+  [`TestCaseCommitsHelper::INSTANCE_COLUMNS`](app/helpers/test_case_commits_helper.rb)
+  with `INSTANCE_COLUMN_PRESETS` for the four presets (default,
+  performance, convergence, all). The cell renderer is
+  `_instances_cell.html.haml` — one `case col[:id]` dispatch with
+  per-column formatting (`%.2f m` for runtime, `%.3e` for star
+  age, mem_rn-in-KB → MB conversion, em-dash for missing values).
+  Column widths were tuned (status label dropped from 220px to
+  180px; cell horizontal padding from `px-3` to `px-2`) so the
+  default eight-column set fits the 1320px container without
+  horizontal scroll on standard desktop viewports.
+- **localStorage persistence.** The column picker writes the
+  active set to `mesa.test_on_commit.columns.v1` after every
+  change; on the next render the controller hydrates from there
+  before falling back to the server-supplied default. Survives
+  navigation between test cases on the same commit. Replaces the
+  broken cookie-based version flagged in the original Step 3
+  notes.
+- **Per-row search blob.** Each instance row carries
+  `data-row-search="<computer name> <checksum>"` (lowercased
+  server-side). The `instance-filter` controller does a simple
+  `includes()` match against the input value. Cheap O(rows) on
+  every keystroke, fine for the ≤25-instance ceiling these pages
+  typically hit.
+- **Status segmented control.** Three buckets — fail / pass /
+  pending — plus "All". Counts pre-rendered server-side from the
+  `instances_for_display` payload so the chip labels read
+  truthfully even before the controller boots.
+- **Last-inlist semantics for per-inlist metrics.** Model Number,
+  Star Age, and Inlist Retries read off the last inlist run by
+  the instance (ordered by `instance_inlists.order`). Mirrors the
+  legacy view's "last inlist's numbers in the overview row"
+  behavior. The Num Retries column sums `num_retries` across
+  every inlist for the "total retries across the whole run"
+  reading the design's column label implies. The Retries column
+  (per-inlist) is shown as an em-dash for now — the existing
+  `instances_for_display` payload doesn't expose per-inlist
+  retries, only `redos`, so the column reads honestly rather than
+  silently aliasing to the cumulative count from the next column
+  over.
+- **Pivot buttons:** GitHub (top-right of the left column in
+  the headline's bottom tier) and `Full history` (top-right of
+  the right column, in line with "History of star/X").
+  Symmetric placement across the two-column split. The legacy
+  `← All tests on <sha>` button was dropped — the breadcrumb
+  back arrow and the in-headline test picker dropdown already
+  cover that pivot. The legacy older/newer breadcrumb arrows
+  were also removed; the subway map's adjacent stations cover
+  sequential walking with status color + popovers + SHA labels
+  at a glance.
+- **Optional `?computer=` focus highlight.** When the user clicks
+  a matrix cell on the commit detail page that links here, the
+  modern view tints the matching computer's row with `bg-brand-soft`
+  so it's visually obvious which row triggered the navigation.
+  No-op when the param is absent.
+- **Dev-preview shortcut for headless screenshots.**
+  `DevPreviewController#commits` now accepts `?return_to=<path>`
+  so a headless Chrome smoke test can authenticate-then-screenshot
+  in a single navigation. The check rejects protocol-relative
+  values (`//foo`) so it can't become an open redirect.
+
+Subsequent follow-ups landed in the same branch (2026-05-23 ff):
+
+- **Test-picker dropdown in the headline.** The static test
+  name pill became a clickable picker that lists every TCC
+  on this commit, sorted worst-first by status (failing →
+  mixed → checksum-only → passing → untested), then by
+  module (star → binary → astero per `TestCase.modules`),
+  then alphabetically by test name. Each row carries a
+  colored status dot. A typed search filter sits sticky at
+  the top of the dropdown for branches with hundreds of
+  tests. New: `TestCaseCommitsHelper#sorted_commit_tccs`,
+  `#tcc_status_rank`, `#tcc_status_dot_class`, `#tcc_status_token`,
+  `#tcc_status_word`; partial `_test_picker.html.haml`;
+  controller `test_picker_controller.js`.
+- **Test-scoped subway map in the headline's right column.**
+  Sister of the commit-detail hero's `_hero_subway_map` but
+  with single-color stations (one status per commit) instead
+  of the inner/outer ring split commit-show uses for build vs
+  tests. Five stations centered on the focused commit; the
+  anchor is enlarged + brand-ringed. Non-focused stations
+  link to that commit's test-on-commit page and reveal
+  popovers (SHA · age · message · author · this test's
+  status) via the shared `subway_map_controller.js`. Data
+  loaded in the controller via
+  `Branch#focused_commit_window(commit, size: 5)` plus a
+  per-test TCC lookup.
+- **Headline restructure to mirror commit-show's "feel".**
+  Two tiers separated by a hairline: status sentence
+  full-width on top, then a `lg:grid-cols-2` split with
+  commit identity (message + expander + author + time +
+  GitHub button top-right) on the left and the test-history
+  capsule (subway map + Full history button top-right) on
+  the right. Symmetric placement of GitHub and Full history
+  in each column. Below `lg` (1024px), the columns stack
+  with the subway underneath. The legacy "All tests on
+  `<sha>`" button is gone — the breadcrumb back arrow + the
+  test picker cover that pivot.
+- **Tab strip + Logs tab.** The page picked up a Summary /
+  Logs tab strip mirroring commit-show. The Logs tab proxies
+  the three per-test log files (`out.txt`, `mk.txt`,
+  `err.txt`) hosted at the Flatiron logs server via a new
+  `test_case_commits#log` action; a sibling `#log_status`
+  action HEAD-probes all three types per (commit, computer,
+  test) and returns a per-type availability JSON, cached for
+  10 minutes. Per-type 404 messages name the exact missing
+  file and point at sibling types. The proxy machinery
+  (`fetch_log`, `probe_log_url`, error types, byte cap,
+  timeouts, status TTL) was extracted from
+  `CommitsController` into a new
+  [`LogProxy`](app/controllers/concerns/log_proxy.rb)
+  concern that both controllers include. Routes added:
+  `/:branch/commits/:sha/test_logs/:module/:test_case/:computer/:type`
+  and `/test_logs_status/...`. Type validation lives in the
+  controller (`LOG_TYPES`) so the route constraint can stay
+  open enough for URL template substitution.
+- **Per-row "logs ↗" link.** Every instance row in the
+  Summary tab gets a tiny mono link next to the flag icons
+  that jumps to `?tab=logs&computer=<canonical-name>`. The
+  tabs controller's `switchFromLink` action dispatches a
+  `tabs:request` event with the `computer` param; the
+  `test_logs` controller listens and pre-selects that
+  computer (falling back to a sibling log type if the
+  default `out.txt` doesn't exist). Each link's
+  `test_log_row_link_controller.js` does an async HEAD
+  probe on connect and hides the link when no logs exist
+  for that (commit, computer, test). The URL parameter uses
+  the canonical `Computer.name` (not the instance row's
+  `computer_name` which may be a compiler-variant suffix
+  like `bluebear_ifort`) so the cross-panel handoff lands
+  on the right picker button.
+- **Older/newer breadcrumb arrows removed.** The subway
+  map's adjacent stations cover sequential walking with
+  status color + popovers + SHAs at a glance.
+- **Dev-preview shortcut for headless screenshots.**
+  `DevPreviewController#commits` accepts `?return_to=<path>`
+  so a headless Chrome smoke test can authenticate-then-
+  screenshot in a single navigation. The check rejects
+  protocol-relative values (`//foo`) so it can't become an
+  open redirect.
+
+Files added (cumulative):
+
+- `app/controllers/concerns/log_proxy.rb`
+- `app/helpers/test_case_commits_helper.rb`
+- `app/views/test_case_commits/_breadcrumb.html.haml`
+- `app/views/test_case_commits/_headline.html.haml`
+- `app/views/test_case_commits/_test_picker.html.haml`
+- `app/views/test_case_commits/_subway_map.html.haml`
+- `app/views/test_case_commits/_show_tab_strip.html.haml`
+- `app/views/test_case_commits/_tab_summary.html.haml`
+- `app/views/test_case_commits/_tab_logs.html.haml`
+- `app/views/test_case_commits/_instances_panel.html.haml`
+- `app/views/test_case_commits/_instances_table.html.haml`
+- `app/views/test_case_commits/_instances_cell.html.haml`
+- `app/views/test_case_commits/_column_picker.html.haml`
+- `app/javascript/controllers/column_picker_controller.js`
+- `app/javascript/controllers/instance_filter_controller.js`
+- `app/javascript/controllers/test_picker_controller.js`
+- `app/javascript/controllers/test_logs_controller.js`
+- `app/javascript/controllers/test_log_row_link_controller.js`
+
+Files modified:
+
+- `app/controllers/test_case_commits_controller.rb` — sheds the
+  Bootstrap-era `@default_columns` / `@specific_columns` /
+  `@inlist_data` setup; loads `@instance_rows`, `@commit_tccs`,
+  `@subway_window`, `@log_computers`; computes `@status_word` /
+  `@checksum_word` / `@active_tab`; adds `#log` and
+  `#log_status` actions; opts `#show` into `layout "modern"`.
+- `app/controllers/commits_controller.rb` — proxy +
+  probe + error types lifted into the `LogProxy` concern;
+  `#build_log` and `#build_log_status` now thin wrappers
+  that call `LogProxy.fetch_log` / `LogProxy.probe_log_url`.
+- `app/controllers/dev_preview_controller.rb` — `?return_to=`
+  passthrough.
+- `config/routes.rb` — `test_case_commit_log` +
+  `test_case_commit_log_status` routes, mounted before the
+  catch-all `test_case_commit_path`.
+- `app/views/test_case_commits/show.html.haml` — wraps in
+  the tabs controller, renders the tab strip, iterates the
+  panel partials.
+
+Verification: full spec suite green (209 examples, 0
+failures). Headless Chrome screenshots at
+`/main/commits/45f1056/test_cases/star/black_hole` (mixed
+status, 3 instances, 1 checksum) render the new headline,
+subway map, and both Summary and Logs tabs correctly.
+Direct curl-tested the new endpoints: `test_logs_status`
+returns the per-type JSON; `test_logs` returns the friendly
+multi-line 404 message; unknown type returns 400; unknown
+computer returns 404 with a clear "no instances on X"
+message.
+
+#### Step 7 known followups (not blocking)
+
+- **Live-driven JS verification.** Headless Chrome covered the
+  initial render only — no smoke test exercised the column
+  picker dropdown click, status segment click, or search-input
+  filter live. The hooks are all present and mirror existing
+  controller patterns, but the first user-driven interaction in
+  the dev DB is the real test.
+- **Finer-resolution + restart-photo signals.** Removing the
+  variant column means the `resolution_factor < 0.99` and
+  `restart_photo.present?` rows lose their inline indicator
+  (the legacy Bootstrap view rendered a `search-plus` and
+  derived restart info from the `success_type` label). Photo
+  restart still surfaces through `success_type` ("PASS: Photo
+  checksum"), but finer-resolution rows are now indistinguishable
+  from default ones. If users complain, add a fifth status-cell
+  icon for fine resolution; the icon set already handles 4 flag
+  cases cleanly so a fifth fits the visual budget.
+- **Per-inlist retries column.** Either populate
+  `instances_for_display` with `inlist[:retries]` so the
+  per-inlist Retries column can render real values, or drop the
+  column from the preset menu entirely. Currently shown as `—`.
+- **Inlist-pill drill-down.** The legacy view had per-inlist
+  tabs that swapped the entire table for one inlist's data. The
+  modern design doesn't show that pattern, and the matrix lens
+  on commit detail already gives users a "drill into a specific
+  computer's run" path via the popover. Worth revisiting once
+  users complain that the overview row hides per-inlist drift.
 
 ### Step 8 — Wing the rest
 

@@ -94,3 +94,6 @@ MESA TestHub Redesign.zip
 
 /app/assets/builds/*
 !/app/assets/builds/.keep
+
+# Per-developer Claude Code tooling — launch config, local settings.
+/.claude/

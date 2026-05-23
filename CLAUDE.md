@@ -35,11 +35,13 @@ Before doing non-trivial work, read the appropriate doc:
   — plan for the Phase 4 frontend rewrite (Bootstrap+jQuery →
   Tailwind+Turbo+Stimulus, plus port of the design in
   `docs/design_handoff_mesa_testhub/`). Spans multiple sessions on
-  the `frontend-tailwind` branch. **Steps 0–6 are landed** —
+  the `frontend-tailwind` branch. **Steps 0–7 are landed** —
   Tailwind + Turbo + Stimulus + importmap are installed alongside
   the legacy stack; the 404 page, login, the commits index
-  (`/:branch/commits`), and the commit detail page
-  (`/:branch/commits/:sha`) all render through the modern layout.
+  (`/:branch/commits`), the commit detail page
+  (`/:branch/commits/:sha`), and the test-on-commit page
+  (`/:branch/commits/:sha/test_cases/:module/:test_case`) all
+  render through the modern layout.
   Commit detail has four tabs (Summary / Computers / Diff vs
   last pass / Build logs) — the original Tests tab was folded
   into Summary when review flagged it as redundant with the
@@ -82,9 +84,42 @@ Before doing non-trivial work, read the appropriate doc:
   `logs_controller.js`, `computer_card_controller.js`,
   `subway_map_controller.js`, `pan_map_controller.js`,
   `calendar_controller.js`, `theme_controller.js`,
-  `copy_button_controller.js`. Step 7 (test-on-commit page
-  port) is the next outstanding chunk and is itemized at the
-  bottom of
+  `copy_button_controller.js`. The test-on-commit page
+  (`test_case_commits#show`, Step 7) has two tabs: Summary
+  (default, the 19-column instances table with grouped
+  column picker + status-segment + free-text filters +
+  icons legend) and Logs (proxied `out.txt` / `mk.txt` /
+  `err.txt` viewer with computer + type pickers). The
+  column picker's preset map lives in
+  [`TestCaseCommitsHelper`](app/helpers/test_case_commits_helper.rb)
+  and the active set persists to
+  `localStorage["mesa.test_on_commit.columns.v1"]`. The
+  Logs tab calls `test_case_commits#log` to proxy a single
+  file (friendly per-type 404 messages naming the file and
+  pointing at sibling types) and `#log_status` to HEAD-probe
+  all three types per (commit, computer, test) in one round
+  trip (10-minute server-side cache, shared with the per-
+  row "logs ↗" jump link's reveal probe). The proxy
+  machinery (`fetch_log`, `probe_log_url`, the
+  `LogNotFound` / `LogTooLarge` / `LogFetchError` error
+  types, 5 MB byte cap, open/read timeouts) lives in the
+  [`LogProxy`](app/controllers/concerns/log_proxy.rb)
+  concern included by both `TestCaseCommitsController` and
+  `CommitsController`. The headline card has two tiers:
+  full-width status sentence on top — the test pill is a
+  picker dropdown listing every TCC on this commit, sorted
+  worst-first by status, then by module (star → binary →
+  astero per `TestCase.modules`), then alphabetically by
+  name — and below it a `lg:grid-cols-2` split with commit
+  identity (message + expander + author + time + GitHub
+  button top-right) on the left and a test-history capsule
+  (single-color subway map centered + Full history button
+  top-right) on the right. Subway stations link to that
+  commit's test-on-commit page and reveal popovers (SHA ·
+  age · message · author · this test's status) via the
+  shared `subway_map_controller.js`. Step 8 (wing-it for
+  the un-designed pages) is the next outstanding chunk; the
+  page priority list is at the bottom of
   [`docs/frontend-modernization.md`](docs/frontend-modernization.md).
 
 When changes invalidate the plan, update the relevant doc in the same commit

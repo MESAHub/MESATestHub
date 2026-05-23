@@ -1,0 +1,96 @@
+-# Instances table. Native <table> for natural column alignment +
+-# sticky header support without a hand-rolled grid. Every column
+-# carries a `data-col="<id>"` attribute on its <th> and matching
+-# <td>s; the `column-picker` controller toggles `hidden` on each.
+-#
+-# Two columns are always shown:
+-#   - 32px status dot
+-#   - 220px status label (with flag icons)
+-# The remaining 20 columns are user-toggleable.
+
+- columns = TestCaseCommitsHelper::INSTANCE_COLUMNS
+
+%table.w-full.border-collapse.text-sm{ class: "instances-table", data: { column_picker_target: "table" } }
+  %thead.sticky.top-0.bg-bg-subtle.z-10
+    %tr.text-fg-muted{ class: "text-[11px] uppercase tracking-wide" }
+      %th.text-left.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap{ style: "width: 28px;" }
+        %span.sr-only Status
+      %th.text-left.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap{ style: "min-width: 180px;" }
+        Status
+      - columns.each do |col|
+        %th.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap{ class: col[:align] == "right" ? "text-right" : "text-left",
+                                                                  style: "min-width: #{col[:width]}px;",
+                                                                  data: { col: col[:id] } }
+          = col[:label]
+
+  %tbody
+    - @instance_rows.each do |row|
+      - test_instance = @instances.find { |ti| ti.id == row[:id] }
+      - next unless test_instance
+      - search_blob = [row[:computer_name], row[:checksum], row[:restart_checksum]].compact.join(" ").downcase
+      - is_focus = @focus_computer_name && row[:computer_name] == @focus_computer_name
+      - row_class = is_focus ? "bg-brand-soft" : ""
+      %tr.border-b.border-border-subtle{ class: "align-middle hover:bg-bg-subtle/40 #{row_class}",
+                                          data: { instance_filter_target: "row",
+                                                  row_status: instance_status_tag(row),
+                                                  row_search: search_blob } }
+        %td.px-2.py-2{ style: "width: 28px;" }
+          %span{ class: "inline-block h-2 w-2 rounded-full #{instance_dot_class(row)}",
+                 title: row[:status].to_s }
+        %td.px-2.py-2.font-mono{ class: "text-[12px]", style: "min-width: 180px;" }
+          .flex.items-center.gap-1.5.min-w-0
+            %span.truncate{ class: (row[:status] == :fail ? "text-danger-soft-text" : (row[:status] == :pending ? "text-info-soft-text" : "text-success-soft-text")),
+                            title: instance_status_label(test_instance) }
+              = instance_status_label(test_instance)
+            - if row[:flags][:fpe]
+              %span.text-warning-soft-text{ title: "FPE checks" }
+                = mesa_icon(:wrench, size: 11)
+            - if row[:flags][:checksum]
+              %span.text-warning-soft-text{ title: "Checksum mismatch within commit" }
+                = mesa_icon(:neq, size: 11)
+            - if row[:flags][:inlists_full]
+              %span.text-info-soft-text{ title: "Ran full inlist set" }
+                = mesa_icon(:plus, size: 11)
+            -# Logs jump link. Starts visible; the row controller's
+            -# async probe hides it (sets `hidden`) when no upstream
+            -# logs exist for this (commit, computer, test). Click
+            -# routes through the tabs controller's switchFromLink,
+            -# which dispatches `tabs:request` with `computer=<name>`
+            -# — the test_logs controller listens and pre-selects.
+            -#
+            -# Uses the canonical Computer.name (not the
+            -# submission-time `computer_name`, which is the value
+            -# the row displays) so the URL matches the Logs tab's
+            -# picker buttons and the cross-panel handoff lands on
+            -# the right computer.
+            - canonical = test_instance.computer&.name
+            - if canonical.present?
+              - log_href = test_case_commit_path(branch: @selected_branch.name,
+                                                 sha: @commit.short_sha,
+                                                 module: @test_case.module,
+                                                 test_case: @test_case.name,
+                                                 tab: "logs",
+                                                 computer: canonical)
+              - probe_url = test_case_commit_log_status_path(branch: @selected_branch.name,
+                                                             sha: @commit.short_sha,
+                                                             module: @test_case.module,
+                                                             test_case: @test_case.name,
+                                                             computer: canonical)
+              = link_to log_href,
+                       title: "View logs for #{canonical}",
+                       class: "ml-1 inline-flex items-center gap-0.5 text-fg-subtle hover:text-brand no-underline shrink-0",
+                       data: { controller: "test-log-row-link",
+                               test_log_row_link_probe_url_value: probe_url,
+                               action: "click->tabs#switchFromLink" } do
+                %span{ class: "text-[10px]" } logs
+                %span{ class: "text-[10px]" } ↗
+
+        - columns.each do |col|
+          - align_class = col[:align] == "right" ? "text-right" : "text-left"
+          - mono_class = col[:mono] ? "font-mono" : ""
+          %td.px-2.py-2{ class: "#{align_class} #{mono_class} tabular-nums whitespace-nowrap",
+                          data: { col: col[:id] } }
+            = render "test_case_commits/instances_cell",
+                     col: col,
+                     row: row,
+                     test_instance: test_instance
