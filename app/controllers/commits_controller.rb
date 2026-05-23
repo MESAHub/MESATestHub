@@ -1,4 +1,6 @@
 class CommitsController < ApplicationController
+  include LogProxy
+
   skip_before_action :authorize_user, only: :show, if: :root_page?
   before_action :set_commit, only: :show
   layout "modern", only: [:index, :show]
@@ -174,14 +176,8 @@ class CommitsController < ApplicationController
   # fetching an arbitrary file (the computer name must come from a
   # real submission for this commit).
   #
-  # Returns plain text. Capped at LOG_BYTES_MAX so a runaway log
-  # can't OOM the server or hammer the user's browser. Timeouts are
-  # short — if the upstream is slow, we'd rather 504 than hang the
-  # tab.
-  LOG_BYTES_MAX = 5.megabytes
-  LOG_OPEN_TIMEOUT = 5
-  LOG_READ_TIMEOUT = 15
-
+  # Returns plain text. Capped at LogProxy::LOG_BYTES_MAX so a
+  # runaway log can't OOM the server or hammer the user's browser.
   def build_log
     sha = params[:sha]
     commit = Commit.where('sha LIKE ?', "#{sha}%").first
@@ -203,16 +199,16 @@ class CommitsController < ApplicationController
     )
 
     begin
-      body = fetch_log(log_uri)
+      body = LogProxy.fetch_log(log_uri)
       response.headers["Cache-Control"] = "private, max-age=300"
       render plain: body, content_type: "text/plain; charset=utf-8"
-    rescue LogNotFound
+    rescue LogProxy::LogNotFound
       render plain: "Build log not found on Flatiron server.",
              status: :not_found, content_type: "text/plain; charset=utf-8"
-    rescue LogTooLarge
-      render plain: "Build log exceeds #{LOG_BYTES_MAX / 1.megabyte} MB; download directly: #{log_uri}",
+    rescue LogProxy::LogTooLarge
+      render plain: "Build log exceeds #{LogProxy::LOG_BYTES_MAX / 1.megabyte} MB; download directly: #{log_uri}",
              status: :payload_too_large, content_type: "text/plain; charset=utf-8"
-    rescue LogFetchError => e
+    rescue LogProxy::LogFetchError => e
       render plain: "Could not fetch log (#{e.message}). Direct URL: #{log_uri}",
              status: :bad_gateway, content_type: "text/plain; charset=utf-8"
     end
@@ -220,11 +216,8 @@ class CommitsController < ApplicationController
 
   # Lightweight upstream-existence check for the Logs tab. Returns
   # `{ available: bool }` so the client can disable the tab before
-  # the user spends a click discovering there's no log. Cached for
-  # 10 minutes because completed build logs don't change, and even
-  # in-flight builds rarely upload then disappear.
-  LOG_STATUS_CACHE_TTL = 10.minutes
-
+  # the user spends a click discovering there's no log. Server-side
+  # cache TTL lives on the LogProxy concern.
   def build_log_status
     sha = params[:sha]
     commit = Commit.where('sha LIKE ?', "#{sha}%").first
@@ -244,8 +237,8 @@ class CommitsController < ApplicationController
       "#{commit.sha}/#{ERB::Util.url_encode(computer_name)}/build.log"
     )
     cache_key = ["build_log_exists", commit.sha, computer_name].join(":")
-    available = Rails.cache.fetch(cache_key, expires_in: LOG_STATUS_CACHE_TTL) do
-      probe_log_url(log_uri)
+    available = Rails.cache.fetch(cache_key, expires_in: LogProxy::LOG_STATUS_CACHE_TTL) do
+      LogProxy.probe_log_url(log_uri)
     end
 
     render json: { available: !!available, computer: computer_name }
@@ -283,65 +276,6 @@ class CommitsController < ApplicationController
   end
 
   private
-
-  # Custom signal types for the build-log proxy so the action can
-  # turn each failure mode into the right status/body without
-  # leaking implementation details.
-  class LogNotFound   < StandardError; end
-  class LogTooLarge   < StandardError; end
-  class LogFetchError < StandardError; end
-
-  def fetch_log(uri)
-    require "net/http"
-
-    Net::HTTP.start(uri.host, uri.port,
-                    use_ssl: uri.scheme == "https",
-                    open_timeout: LOG_OPEN_TIMEOUT,
-                    read_timeout: LOG_READ_TIMEOUT) do |http|
-      request = Net::HTTP::Get.new(uri.request_uri)
-      http.request(request) do |response|
-        case response
-        when Net::HTTPNotFound
-          raise LogNotFound
-        when Net::HTTPSuccess
-          # Stream the body and cap by bytes so a many-MB log doesn't
-          # balloon memory. The whole capped body still lands in a
-          # single String — fine for the typical few-KB build log.
-          buffer = +""
-          response.read_body do |chunk|
-            buffer << chunk
-            raise LogTooLarge if buffer.bytesize > LOG_BYTES_MAX
-          end
-          return buffer
-        else
-          raise LogFetchError, "upstream returned #{response.code}"
-        end
-      end
-    end
-  rescue LogNotFound, LogTooLarge
-    raise
-  rescue Net::OpenTimeout, Net::ReadTimeout => e
-    raise LogFetchError, "timeout (#{e.class.name.demodulize})"
-  rescue StandardError => e
-    raise LogFetchError, e.message
-  end
-
-  # Single HEAD probe for build_log_status. Returns true iff
-  # upstream returns 2xx. Swallows timeouts and other network
-  # errors as "not available" — the worst case is a disabled tab
-  # the user could enable by reloading after the upstream recovers.
-  def probe_log_url(uri)
-    require "net/http"
-    Net::HTTP.start(uri.host, uri.port,
-                    use_ssl: uri.scheme == "https",
-                    open_timeout: LOG_OPEN_TIMEOUT,
-                    read_timeout: LOG_OPEN_TIMEOUT) do |http|
-      response = http.request(Net::HTTP::Head.new(uri.request_uri))
-      response.is_a?(Net::HTTPSuccess)
-    end
-  rescue StandardError
-    false
-  end
 
   # Parse the `before=` URL parameter for cursor pagination.
   #
