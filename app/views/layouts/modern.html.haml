@@ -37,19 +37,23 @@
   %body.mesa-modern{ data: { controller: "theme" } }
     %a.sr-only.focus:not-sr-only{ href: "#main" } Skip to main content
 
-    %header.border-b.border-border-subtle.bg-bg-elev
-      .mx-auto.flex.items-center.justify-between.px-6{ style: "max-width: var(--container-app); height: var(--spacing-nav-h);" }
+    %header.border-b.border-border-subtle.bg-bg-elev{ data: { controller: "dropdown" } }
+      .mx-auto.flex.items-center.justify-between.gap-3.px-6{ style: "max-width: var(--container-app); height: var(--spacing-nav-h);" }
         %a.flex.items-center.gap-2.text-brand.no-underline{ href: root_path }
           = mesa_mark(style: "width: 22px; height: 22px;")
           %span.text-sm.font-semibold.tracking-tight.text-fg MESA Test Hub
-        %nav.flex.items-center.gap-1
+
+        -# Desktop nav links
+        %nav.hidden.items-center.gap-1{ class: "min-[880px]:flex", "aria-label": "Primary" }
           - if current_user
             %a.text-xs.text-fg-muted.hover:text-fg.px-3.py-1.5.rounded-md.hover:bg-bg-muted.no-underline{ href: commits_path(branch: params[:branch] || "main") } Commits
             %a.text-xs.text-fg-muted.hover:text-fg.px-3.py-1.5.rounded-md.hover:bg-bg-muted.no-underline{ href: search_instances_path } Test Instances
             %a.text-xs.text-fg-muted.hover:text-fg.px-3.py-1.5.rounded-md.hover:bg-bg-muted.no-underline{ href: user_computers_path(current_user) } My Computers
             - if admin?
               %a.text-xs.text-fg-muted.hover:text-fg.px-3.py-1.5.rounded-md.hover:bg-bg-muted.no-underline{ href: admin_path } Admin
-        %div.flex.items-center.gap-2
+
+        -# Desktop right cluster
+        %div.hidden.items-center.gap-2{ class: "min-[880px]:flex" }
           %button.inline-flex.items-center.gap-1.5.rounded-md.border.border-border.bg-bg-elev.px-2.5.py-1.text-xs.text-fg-muted.hover:bg-bg-muted{ type: "button", data: { theme_target: "mode", action: "click->theme#cycle" }, "aria-label": "Cycle theme" }
             %span Theme:
             %span.font-mono{ data: { theme_label: true } } system
@@ -59,6 +63,31 @@
             = link_to "Log out", logout_path, class: "rounded-md border border-border px-2.5 py-1 text-xs text-fg-muted hover:bg-bg-muted no-underline"
           - else
             = link_to "Log in", login_path, class: "rounded-md border border-brand bg-brand px-2.5 py-1 text-xs text-fg-on-brand hover:bg-brand-hover no-underline"
+
+        -# Hamburger (narrow viewports only)
+        %button.inline-flex.items-center.justify-center.rounded-md.border.border-border.bg-bg-elev.p-1.5.text-fg-muted.hover:bg-bg-muted.hover:text-fg.cursor-pointer{ class: "min-[880px]:hidden", type: "button", "aria-label": "Open navigation menu", "aria-haspopup": "true", "aria-expanded": "false", "aria-controls": "mobile-nav-panel", data: { dropdown_target: "trigger", action: "click->dropdown#toggle" } }
+          %svg.h-5.w-5{ xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24", "stroke-width": "2", stroke: "currentColor", "aria-hidden": "true" }
+            %path{ "stroke-linecap": "round", "stroke-linejoin": "round", d: "M4 6h16M4 12h16M4 18h16" }
+
+      -# Mobile nav panel
+      #mobile-nav-panel.border-t.border-border-subtle.bg-bg-elev{ class: "min-[880px]:hidden", hidden: true, data: { dropdown_target: "menu" } }
+        .mx-auto.px-6.py-3{ style: "max-width: var(--container-app);" }
+          %nav.flex.flex-col.gap-1{ "aria-label": "Mobile" }
+            - if current_user
+              %a.block.rounded-md.px-3.py-2.text-sm.text-fg-muted.hover:bg-bg-muted.hover:text-fg.no-underline{ href: commits_path(branch: params[:branch] || "main") } Commits
+              %a.block.rounded-md.px-3.py-2.text-sm.text-fg-muted.hover:bg-bg-muted.hover:text-fg.no-underline{ href: search_instances_path } Test Instances
+              %a.block.rounded-md.px-3.py-2.text-sm.text-fg-muted.hover:bg-bg-muted.hover:text-fg.no-underline{ href: user_computers_path(current_user) } My Computers
+              - if admin?
+                %a.block.rounded-md.px-3.py-2.text-sm.text-fg-muted.hover:bg-bg-muted.hover:text-fg.no-underline{ href: admin_path } Admin
+          .mt-3.flex.flex-col.gap-2.border-t.border-border-subtle.pt-3
+            %button.inline-flex.items-center.justify-between.gap-1.5.rounded-md.border.border-border.bg-bg-elev.px-3.py-2.text-sm.text-fg-muted.hover:bg-bg-muted{ type: "button", data: { theme_target: "mode", action: "click->theme#cycle" }, "aria-label": "Cycle theme" }
+              %span Theme
+              %span.font-mono.text-xs{ data: { theme_label: true } } system
+            - if current_user
+              = link_to current_user.name, user_path(current_user), class: "block rounded-md px-3 py-2 text-sm text-fg hover:bg-bg-muted no-underline"
+              = link_to "Log out", logout_path, class: "block rounded-md border border-border px-3 py-2 text-sm text-center text-fg-muted hover:bg-bg-muted no-underline"
+            - else
+              = link_to "Log in", login_path, class: "block rounded-md border border-brand bg-brand px-3 py-2 text-sm text-center text-fg-on-brand hover:bg-brand-hover no-underline"
 
     %main#main.mx-auto.px-6.py-8{ role: "main", style: "max-width: var(--container-app);" }
       - if flash.any?

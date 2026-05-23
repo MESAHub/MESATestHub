@@ -5,7 +5,7 @@
 - iso_date = selected_time.to_date.iso8601
 - chip_label = selected_time.strftime("%b %-d, %Y")
 .relative.inline-flex{ data: { controller: "dropdown calendar", open: "false", calendar_selected_value: iso_date, calendar_path_value: commits_path(branch: branch.name) } }
-  %button.inline-flex.items-center.gap-2.rounded-md.px-2.5.py-1.text-sm.font-mono.text-brand-soft-text.bg-brand-soft.border.border-brand-soft.cursor-pointer.hover:bg-brand-soft{ type: "button", "aria-haspopup": "dialog", "aria-expanded": "false", "aria-label": "Pick a date", data: { action: "click->dropdown#toggle" } }
+  %button.inline-flex.items-center.gap-2.rounded-md.px-2.5.py-1.text-sm.font-mono.text-brand-soft-text.bg-brand-soft.border.border-brand-soft.cursor-pointer.hover:bg-brand-soft{ type: "button", "aria-haspopup": "dialog", "aria-expanded": "false", "aria-label": "Pick a date", data: { dropdown_target: "trigger", action: "click->dropdown#toggle" } }
     %span.text-brand= mesa_icon(:clock, size: 13)
     %span= chip_label
     %span.text-brand-soft-text= mesa_icon(:chevron, size: 12)

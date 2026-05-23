@@ -3,7 +3,7 @@
 -#   branch:   current Branch
 -#   branches: enumerable of Branch records to show
 .relative.inline-flex{ data: { controller: "dropdown", open: "false" } }
-  %button.inline-flex.items-center.gap-2.rounded-md.px-2.5.py-1.text-sm.font-mono.text-brand-soft-text.bg-brand-soft.hover:bg-brand-soft.border.border-brand-soft.cursor-pointer{ type: "button", "aria-haspopup": "listbox", "aria-expanded": "false", data: { action: "click->dropdown#toggle" } }
+  %button.inline-flex.items-center.gap-2.rounded-md.px-2.5.py-1.text-sm.font-mono.text-brand-soft-text.bg-brand-soft.hover:bg-brand-soft.border.border-brand-soft.cursor-pointer{ type: "button", "aria-haspopup": "listbox", "aria-expanded": "false", data: { dropdown_target: "trigger", action: "click->dropdown#toggle" } }
     %span.text-brand= mesa_icon(:branch, size: 13)
     %span= branch.name
     %span.text-brand-soft-text= mesa_icon(:chevron, size: 12)
