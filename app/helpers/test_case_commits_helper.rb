@@ -129,12 +129,13 @@ module TestCaseCommitsHelper
 
   # Categories used by the segmented status filter. Each row carries
   # one — the controller hides rows whose status doesn't match the
-  # active value.
+  # active value. The data model has no in-flight instance state
+  # (instances are either submitted pass/fail or absent), so this
+  # only emits "pass" or "fail" today.
   def instance_status_tag(row)
     case row[:status]
     when :pass then "pass"
     when :fail then "fail"
-    when :pending then "pending"
     else "other"
     end
   end

@@ -67,11 +67,15 @@
 - when "cum_retries"
   = row[:retries].nil? ? content_tag(:span, "—", class: "text-fg-subtle") : row[:retries]
 - when "retries"
-  - v = inlist && inlist[:redos] # `inlist[:retries]` not present; use redos as second-axis retry-ish signal
-  -# Per-inlist retries aren't exposed in `instances_for_display` —
-  -# fall back to an em-dash so the column reads honestly rather than
-  -# silently substituting the cumulative count.
-  %span.text-fg-subtle —
+  -# Per-inlist retries: `instance_inlists.retries`, sourced off the
+  -# last inlist run for the instance. Distinct from the cumulative
+  -# retry count on `test_instances.retries` (the "Cum. Retries"
+  -# column to the left).
+  - v = inlist && inlist[:retries]
+  - if v.nil? || v.to_i.negative?
+    %span.text-fg-subtle —
+  - else
+    = v
 - when "redos"
   = row[:redos].nil? ? content_tag(:span, "—", class: "text-fg-subtle") : row[:redos]
 - when "solver_iters"

@@ -246,6 +246,7 @@ class TestCaseCommit < ApplicationRecord
           order: ii.order,
           model_number: ii.model_number,
           star_age: ii.star_age,
+          retries: ii.retries,
           num_retries: ii.num_retries,
           solver_iterations: ii.solver_iterations,
           solver_calls_made: ii.solver_calls_made,

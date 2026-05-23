@@ -12,9 +12,10 @@
 -#                     pick survives navigations.
 
 - instance_count = @instance_rows.size
-- counts = { "pass" => 0, "fail" => 0, "pending" => 0 }
+- counts = { "pass" => 0, "fail" => 0 }
 - @instance_rows.each do |row|
-  - counts[instance_status_tag(row)] = counts.fetch(instance_status_tag(row), 0) + 1
+  - tag = instance_status_tag(row)
+  - counts[tag] = counts.fetch(tag, 0) + 1 if counts.key?(tag)
 - default_cols_csv = TestCaseCommitsHelper::INSTANCE_COLUMN_PRESETS["default"].join(" ")
 - preset_keys = TestCaseCommitsHelper::INSTANCE_COLUMN_PRESETS.keys
 - preset_map = TestCaseCommitsHelper::INSTANCE_COLUMN_PRESETS.transform_values { |ids| ids.join(" ") }
@@ -45,8 +46,10 @@
               data: { instance_filter_target: "search",
                       action: "input->instance-filter#search" } }
 
-    -# Status segmented control.
-    - status_specs = [["all", "All", instance_count, nil], ["fail", "Failing", counts["fail"], "bg-danger"], ["pass", "Pass", counts["pass"], "bg-success"], ["pending", "Pending", counts["pending"], "bg-info"]]
+    -# Status segmented control. No "pending" chip — the data model
+    -# has no in-flight instance state (instances are either submitted
+    -# pass/fail or absent), so the chip would always read 0.
+    - status_specs = [["all", "All", instance_count, nil], ["fail", "Failing", counts["fail"], "bg-danger"], ["pass", "Pass", counts["pass"], "bg-success"]]
     .inline-flex.rounded-md.border.border-border.bg-bg-elev.p-0.5.gap-0.5
       - status_specs.each do |id, label, count, dot|
         - on = (id == "all")
