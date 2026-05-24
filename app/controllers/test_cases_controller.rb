@@ -27,6 +27,15 @@ class TestCasesController < ApplicationController
     @window         = @test_case.commit_window(@selected_branch,
                                                anchor_commit: @anchor_commit,
                                                size: @window_size)
+
+    # Trend payload — built only when the Trend tab is active. The
+    # query cost (per-instance iteration plus inlist_data scan) is
+    # avoided when the user is on History or Submissions. The
+    # payload uses the same window entries so all tabs stay in
+    # lockstep with the toolbar.
+    @trend_payload = if @active_tab == :trend
+                       @test_case.trend_payload(@selected_branch, @window[:entries])
+                     end
   end
 
   private

@@ -534,6 +534,152 @@ class TestCase < ApplicationRecord
     }
   end
 
+  # Three perceptually distinct hues for the Trend chart's top-N
+  # config series. Deliberately *not* the status palette (success /
+  # warning / danger / info) so a "passing config's runtime" line
+  # doesn't read as a status-encoded color. Indexed: configs[0]
+  # gets [0], etc.
+  TREND_SERIES_COLORS = ["#5b8def", "#ad55c0", "#2b9b87"].freeze
+
+  # Top-N config tuples to show as separate series on the Trend
+  # chart. The user explicitly chose 3 — few enough to keep the
+  # chart readable, enough to cover the common heavy-testing
+  # computers without forcing aggregation.
+  TREND_TOP_CONFIGS = 3
+
+  DEFAULT_TREND_METRIC = "runtime_minutes".freeze
+
+  # Build the JSON payload for the Trend chart. Consumed by the
+  # uPlot-backed `trend-chart` Stimulus controller via a
+  # `<script type="application/json">` block in the Trend tab.
+  #
+  # Inputs:
+  #   entries  — the same { commit:, tcc:, status: } array from
+  #              #commit_window. We don't re-resolve the window
+  #              here so all tabs stay in lockstep with the toolbar.
+  #   top_n    — defaults to TREND_TOP_CONFIGS (3).
+  #
+  # Output (JSON-ready hash):
+  #
+  #   {
+  #     default_metric: "runtime_minutes",
+  #     metrics: [
+  #       { id:, label:, source: "instance"|"inlist_first"|"inlist_data" }
+  #     ],
+  #     configs: [
+  #       { key:, label:, computer:, threads:, run_optional:, count:, color: }
+  #     ],
+  #     commits: [
+  #       { id:, sha:, t:, time_ago:, message:, status:, href: }
+  #     ],   # oldest first — chart X axis goes left-to-right with time
+  #     series: {
+  #       "<metric_id>" => { "<config_key>" => [val | null, ...] }
+  #     }
+  #   }
+  #
+  # A `null` in a series array means "this (config, commit) pair
+  # has no submitted instance" — uPlot draws a gap. Skipped
+  # instances (success_type='skip') are treated as nulls too; their
+  # runtime/RAM aren't meaningful comparisons.
+  #
+  # Returns a degenerate-but-renderable payload (empty configs,
+  # empty series, but metrics/commits populated) when the window
+  # has no instances. The controller renders an "not enough data"
+  # empty state for that case.
+  def trend_payload(branch, entries, top_n: TREND_TOP_CONFIGS)
+    chrono = entries.reverse  # oldest first for the X axis
+    tccs   = entries.map { |e| e[:tcc] }.compact
+
+    # Count (computer_id, threads, run_optional) tuples across all
+    # non-skipped instances in the window. Memoize a sample
+    # TestInstance per tuple so we can build labels without a
+    # separate Computer lookup.
+    config_counts = Hash.new(0)
+    config_sample = {}
+    tccs.each do |tcc|
+      tcc.test_instances.each do |ti|
+        next if ti.success_type == "skip"
+        next if ti.computer_id.nil?
+        key = [ti.computer_id, ti.omp_num_threads, ti.run_optional]
+        config_counts[key] += 1
+        config_sample[key] ||= ti
+      end
+    end
+
+    top_keys = config_counts.sort_by { |_, c| -c }.first(top_n).map(&:first)
+    configs = top_keys.each_with_index.map do |key, idx|
+      sample = config_sample[key]
+      cname  = sample.computer&.name || "computer ##{key[0]}"
+      threads = key[1] || "?"
+      mode    = key[2] ? "full" : "partial"
+      {
+        key:          _trend_config_key(key),
+        label:        "#{cname} · #{threads}t · #{mode}",
+        computer:     cname,
+        threads:      key[1],
+        run_optional: key[2],
+        count:        config_counts[key],
+        color:        TREND_SERIES_COLORS[idx % TREND_SERIES_COLORS.size]
+      }
+    end
+
+    commits_payload = chrono.map do |entry|
+      c = entry[:commit]
+      {
+        id:       c.id,
+        sha:      c.short_sha,
+        t:        c.commit_time.to_i,
+        time_ago: nil, # filled by view (helper-only context)
+        message:  c.message_first_line(80),
+        status:   entry[:status]
+      }
+    end
+
+    metrics = _trend_metric_specs(tccs)
+
+    # Bucket every non-skip instance once: { config_key =>
+    # { commit_id => latest_instance } }. Later loops over metrics
+    # read from this index without re-scanning TCCs.
+    bucket = top_keys.each_with_object({}) { |k, h| h[_trend_config_key(k)] = {} }
+    chrono.each do |entry|
+      tcc = entry[:tcc]
+      next unless tcc
+      tcc.test_instances.each do |ti|
+        next if ti.success_type == "skip"
+        next if ti.computer_id.nil?
+        key = [ti.computer_id, ti.omp_num_threads, ti.run_optional]
+        next unless top_keys.include?(key)
+        ck = _trend_config_key(key)
+        # If multiple instances for the same (config, commit) — rare
+        # but happens with re-runs — keep the most recent. The chart
+        # is showing "what value did this config most recently
+        # produce for this commit?"
+        existing = bucket[ck][entry[:commit].id]
+        bucket[ck][entry[:commit].id] = ti if existing.nil? || (ti.created_at && ti.created_at >= (existing.created_at || Time.at(0)))
+      end
+    end
+
+    series = {}
+    metrics.each do |m|
+      series[m[:id]] = {}
+      top_keys.each do |key|
+        ck = _trend_config_key(key)
+        series[m[:id]][ck] = chrono.map do |entry|
+          ti = bucket[ck][entry[:commit].id]
+          ti ? _trend_extract_value(ti, m) : nil
+        end
+      end
+    end
+
+    {
+      default_metric: DEFAULT_TREND_METRIC,
+      metrics:        metrics,
+      configs:        configs,
+      commits:        commits_payload,
+      series:         series
+    }
+  end
+
   # ease transition from versions being hard coded to using new Version model
   def update_version_created
     return if version_id
@@ -555,5 +701,77 @@ class TestCase < ApplicationRecord
       newer_anchor_sha: nil,
       window_counts: {}
     }
+  end
+
+  # Stable string key for a (computer_id, threads, run_optional)
+  # tuple. Used as the series key in the trend payload's `series`
+  # hash so the Stimulus controller can address each series by a
+  # string rather than coordinating array indices.
+  def _trend_config_key(key)
+    "c#{key[0]}-t#{key[1] || 'x'}-#{key[2] ? 'full' : 'partial'}"
+  end
+
+  # Available metrics for the Trend chart. Combines hard-coded
+  # instance scalars with whatever inlist-data names are present
+  # across the window's TCCs (so a test case's custom data shows
+  # up automatically; nothing else to register).
+  #
+  # `source` tells the value extractor where to pull from:
+  #   - "instance":     direct attribute on TestInstance
+  #   - "inlist_first": first instance_inlist that has the named field
+  #   - "inlist_data":  first inlist's inlist_data row with the given name
+  def _trend_metric_specs(tccs)
+    base = [
+      { id: "runtime_minutes",     label: "Runtime [min]",         source: "instance" },
+      { id: "mem_rn",              label: "RAM rn [GB]",           source: "instance" },
+      { id: "cpu_hours",           label: "CPU hours",             source: "instance" },
+      { id: "steps",               label: "Steps",                 source: "instance" },
+      { id: "retries",             label: "Retries",               source: "instance" },
+      { id: "redos",               label: "Redos",                 source: "instance" },
+      { id: "solver_iterations",   label: "Solver iterations",     source: "instance" },
+      { id: "solver_calls_made",   label: "Solver calls made",     source: "instance" },
+      { id: "solver_calls_failed", label: "Solver calls failed",   source: "instance" },
+      { id: "log_rel_run_E_err",   label: "log rel E err",         source: "inlist_first" }
+    ]
+
+    custom_names = Set.new
+    tccs.each do |tcc|
+      tcc.test_instances.each do |ti|
+        ti.instance_inlists.each do |ii|
+          ii.inlist_data.each { |d| custom_names << d.name if d.name.present? }
+        end
+      end
+    end
+
+    base + custom_names.to_a.sort.map do |name|
+      { id: "inlist_data:#{name}", label: "#{name} (inlist)", source: "inlist_data" }
+    end
+  end
+
+  # Pull a single metric value off an instance, honoring the
+  # metric spec's `source`. Returns nil if the value isn't present
+  # — the Stimulus controller turns nil into a gap on the chart.
+  def _trend_extract_value(instance, metric)
+    case metric[:source]
+    when "instance"
+      val = instance.public_send(metric[:id])
+      # rn_mem_GB conversion lives on the model; mem_rn is in KB
+      if metric[:id] == "mem_rn" && val
+        instance.respond_to?(:rn_mem_GB) ? instance.rn_mem_GB : val / 1_048_576.0
+      else
+        val
+      end
+    when "inlist_first"
+      # First inlist that has the field set (typically only one).
+      target = instance.instance_inlists.find { |ii| ii.public_send(metric[:id]) }
+      target&.public_send(metric[:id])
+    when "inlist_data"
+      datum_name = metric[:id].split(":", 2).last
+      instance.instance_inlists.each do |ii|
+        d = ii.inlist_data.find { |x| x.name == datum_name }
+        return d.val if d
+      end
+      nil
+    end
   end
 end

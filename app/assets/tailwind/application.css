@@ -199,3 +199,44 @@
     @apply w-full;
   }
 }
+
+/* uPlot v1.6.x — minimal layout CSS, hand-written subset.
+ *
+ * uPlot ships its own ~80-line CSS file but most of it covers the
+ * built-in legend table and selection rect, which we don't use
+ * (the Trend tab rolls its own toolbar with series chips). What
+ * remains is the absolute-positioning skeleton the canvas, axes,
+ * and cursor dot need to layer correctly inside `.uplot`.
+ *
+ * Colors come from our design tokens so the chart sits inside the
+ * dark/light theme like every other panel. uPlot draws axis labels
+ * and grid lines onto the canvas itself via JS — see the controller
+ * for stroke colors. */
+.uplot {
+  position: relative;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  line-height: 1.5;
+  width: min-content;
+}
+.uplot, .uplot *, .uplot *::before, .uplot *::after { box-sizing: border-box; }
+.u-wrap { position: relative; user-select: none; }
+.u-over, .u-under { position: absolute; }
+.u-under { overflow: hidden; }
+.uplot canvas {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.u-axis { position: absolute; }
+.u-legend { font-size: 11px; margin: auto; text-align: center; }
+.u-cursor-pt {
+  position: absolute;
+  top: 0; left: 0;
+  border-radius: 50%;
+  border: 0 solid;
+  pointer-events: none;
+  will-change: transform;
+  z-index: 100;
+}
+.u-cursor-pt.u-off, .u-axis.u-off { display: none; }

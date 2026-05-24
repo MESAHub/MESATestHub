@@ -141,4 +141,106 @@ RSpec.describe TestCase, 'branch-scoped history helpers' do
       expect(window[:newer_anchor_sha]).to be_nil
     end
   end
+
+  describe '#trend_payload' do
+    let(:computer_a) { create(:computer, name: "pleiades") }
+    let(:computer_b) { create(:computer, name: "bluebear") }
+    let(:computer_c) { create(:computer, name: "vega") }
+    let(:computer_d) { create(:computer, name: "cannon") }
+
+    # Build a passing instance with a few interesting scalars set so
+    # `trend_extract_value` has something to read.
+    def instance_on(tcc:, computer:, threads:, run_optional:, runtime: 1.0, steps: 100)
+      submission = create(:submission, commit: tcc.commit, computer: computer)
+      create(:test_instance,
+             test_case: tcc.test_case,
+             test_case_commit: tcc,
+             commit: tcc.commit,
+             computer: computer,
+             submission: submission,
+             passed: true,
+             success_type: 'run_test_string',
+             compiler: 'gfortran',
+             omp_num_threads: threads,
+             run_optional: run_optional,
+             runtime_minutes: runtime,
+             steps: steps,
+             retries: 2,
+             redos: 0,
+             solver_iterations: 500,
+             solver_calls_made: 200,
+             solver_calls_failed: 1)
+    end
+
+    def window_entries(branch, tccs_by_commit_id, commits)
+      commits.reverse.map do |c|
+        tcc = tccs_by_commit_id[c.id]
+        { commit: c, tcc: tcc, status: tcc&.status || -1 }
+      end
+    end
+
+    it 'selects the top-N configs by instance count' do
+      commits = chain_on(branch, 5)
+      tccs = commits.map { |c| create(:test_case_commit, :passing, commit: c, test_case: test_case) }
+
+      # config A: 4 instances (pleiades · 8t · full)
+      # config B: 3 instances (bluebear · 4t · full)
+      # config C: 2 instances (vega · 8t · partial)
+      # config D: 1 instance  (cannon · 16t · full) — should be excluded at top_n=3
+      tccs.first(4).each { |t| instance_on(tcc: t, computer: computer_a, threads: 8,  run_optional: true) }
+      tccs.first(3).each { |t| instance_on(tcc: t, computer: computer_b, threads: 4,  run_optional: true) }
+      tccs.first(2).each { |t| instance_on(tcc: t, computer: computer_c, threads: 8,  run_optional: false) }
+      instance_on(tcc: tccs.first, computer: computer_d, threads: 16, run_optional: true)
+
+      entries = window_entries(branch, tccs.index_by(&:commit_id), commits)
+      payload = test_case.trend_payload(branch, entries, top_n: 3)
+
+      expect(payload[:configs].size).to eq(3)
+      labels = payload[:configs].map { |c| c[:label] }
+      expect(labels[0]).to eq("pleiades · 8t · full")
+      expect(labels[1]).to eq("bluebear · 4t · full")
+      expect(labels[2]).to eq("vega · 8t · partial")
+      # cannon (1 instance) excluded
+      expect(payload[:configs].none? { |c| c[:computer] == "cannon" }).to be(true)
+    end
+
+    it 'returns commits in chronological order (oldest first) for the X axis' do
+      commits = chain_on(branch, 3)
+      tccs = commits.map { |c| create(:test_case_commit, :passing, commit: c, test_case: test_case) }
+      tccs.each { |t| instance_on(tcc: t, computer: computer_a, threads: 8, run_optional: true) }
+
+      entries = window_entries(branch, tccs.index_by(&:commit_id), commits)
+      payload = test_case.trend_payload(branch, entries)
+
+      # commits[] in payload should be in oldest-first order
+      expect(payload[:commits].map { |c| c[:sha] }).to eq(commits.map(&:short_sha))
+    end
+
+    it 'emits null for (config, commit) pairs with no instance' do
+      commits = chain_on(branch, 4)
+      tccs = commits.map { |c| create(:test_case_commit, :passing, commit: c, test_case: test_case) }
+      # config A submitted on commits 0, 2, 3 only — commit 1 should be a gap
+      [0, 2, 3].each { |i| instance_on(tcc: tccs[i], computer: computer_a, threads: 8, run_optional: true, runtime: 1.5) }
+
+      entries = window_entries(branch, tccs.index_by(&:commit_id), commits)
+      payload = test_case.trend_payload(branch, entries)
+      cfg_key = payload[:configs].first[:key]
+      runtime_series = payload[:series]["runtime_minutes"][cfg_key]
+      # oldest first: commits[0] = idx 0, commits[1] = idx 1, etc.
+      expect(runtime_series[0]).to be_within(0.001).of(1.5)
+      expect(runtime_series[1]).to be_nil
+      expect(runtime_series[2]).to be_within(0.001).of(1.5)
+      expect(runtime_series[3]).to be_within(0.001).of(1.5)
+    end
+
+    it 'returns empty configs when the window has no shared instances' do
+      commits = chain_on(branch, 3)
+      # No TCCs created → no instances
+      entries = window_entries(branch, {}, commits)
+      payload = test_case.trend_payload(branch, entries)
+      expect(payload[:configs]).to be_empty
+      expect(payload[:commits].size).to eq(3)
+      expect(payload[:metrics]).not_to be_empty   # static spec still listed
+    end
+  end
 end

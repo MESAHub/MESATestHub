@@ -1,9 +1,92 @@
--# Trend tab — coming in the next commit. Will host a uPlot
--# line chart of a chosen metric (runtime by default) vs commit
--# index, with one series per top-3 most common
--# (computer, threads, run_optional) config tuple. See
--# docs/frontend-modernization.md → "test_cases#show design notes"
--# for the resolved design.
-.rounded-lg.border.border-dashed.border-border.bg-bg-elev.p-10.text-center{ style: "box-shadow: var(--shadow-card-sm);" }
-  .text-fg-muted.text-sm.mb-1 Trend chart — runtime, RAM, or a custom inlist value vs commit
-  .text-fg-subtle{ class: "text-[12px]" } Coming in the next commit.
+-# Trend tab — uPlot line chart of a chosen metric vs commit index
+-# for the top-3 most common (computer, threads, run_optional)
+-# configs in the window. The chart is the answer to the
+-# "canary-in-the-coalmine" investigation: passing tests that are
+-# degrading over time show up here as drifting lines, while the
+-# status strip drawn at the bottom of the plot area tells the user
+-# whether the regression coincided with a status flip.
+-#
+-# All the heavy lifting is in `TestCase#trend_payload` and the
+-# `trend-chart` Stimulus controller. This partial just renders the
+-# toolbar (metric picker + series chips) and the chart mount.
+
+- payload = @trend_payload
+- if payload.nil?
+  -# Controller skipped the payload build because we're on the wrong
+  -# tab — defensive only; the panel wrapper still mounts.
+  .rounded-lg.border.border-dashed.border-border.bg-bg-elev.p-10.text-center{ style: "box-shadow: var(--shadow-card-sm);" }
+    .text-fg-muted.text-sm Trend payload not loaded.
+- else
+  - configs = payload[:configs]
+  - metrics = payload[:metrics]
+  - commits = payload[:commits]
+
+  .rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);",
+                                                data: { controller: "trend-chart" } }
+
+    -# Toolbar.
+    .flex.flex-wrap.items-center.gap-3.px-4.py-3.border-b.border-border-subtle
+
+      .flex.items-center.gap-1.5
+        %label.text-fg-subtle.uppercase.tracking-wide{ for: "trend_metric_picker", class: "text-[10px]" } Metric
+        %select#trend_metric_picker{ class: "rounded-md border border-border bg-bg-elev px-2 py-1 text-fg focus:outline-none focus:border-brand cursor-pointer",
+                                     style: "font-size: 12px;",
+                                     data: { trend_chart_target: "metricPicker",
+                                             action: "change->trend-chart#selectMetric" } }
+          - metrics.each do |m|
+            - selected = m[:id] == payload[:default_metric]
+            %option{ value: m[:id], selected: selected }= m[:label]
+
+      - if configs.any?
+        .flex.items-center.gap-1.flex-wrap
+          %span.text-fg-subtle.uppercase.tracking-wide{ class: "text-[10px]" } Series
+          - configs.each do |cfg|
+            -# Each chip toggles its config on/off. Color swatch
+            -# matches the line color so chart ↔ chip mapping is
+            -# obvious. "Count" is how many instances this config
+            -# has in the window, for a sense of statistical weight.
+            %button{ type: "button",
+                     "aria-pressed": "true",
+                     title: "Toggle #{cfg[:label]} (#{cfg[:count]} instances in window)",
+                     class: "inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-elev px-2 py-1 text-fg-muted hover:bg-bg-muted cursor-pointer",
+                     style: "font-size: 11px;",
+                     data: { trend_chart_target: "seriesChip",
+                             series_key: cfg[:key],
+                             action: "click->trend-chart#toggleSeries" } }
+              %span{ style: "display:inline-block;width:10px;height:10px;border-radius:2px;background:#{cfg[:color]};" }
+              %span= cfg[:label]
+              %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= cfg[:count]
+
+      .grow
+
+      %span.text-fg-subtle.tabular-nums{ class: "text-[11px]" }
+        = "#{commits.size} commits"
+
+    -# Chart mount. The controller targets `chart` and sizes the
+    -# canvas to its offsetWidth, so the parent's padding controls
+    -# the chart's outer margins.
+    .px-4.py-4
+      %div{ data: { trend_chart_target: "chart" }, style: "min-height: 320px;" }
+
+      -# Empty-state element — the controller toggles it visible
+      -# when the window has no commits or no shared configs.
+      .text-center.text-fg-muted.py-10{ class: "text-[13px]", hidden: true, data: { trend_chart_target: "empty" } }
+
+    -# Status strip + click affordance legend, so users know what
+    -# the colored ticks at the bottom of the chart mean and what
+    -# clicking on a data point does.
+    .px-4.py-2.border-t.border-border-subtle.flex.flex-wrap.items-center.gap-x-4.gap-y-1.text-fg-muted{ class: "text-[11px]" }
+      %span.text-fg-subtle.uppercase.tracking-wide Strip
+      - [["Passing", "var(--color-success)"], ["Failing", "var(--color-danger)"], ["Mixed/Checksum", "var(--color-warning)"], ["Untested", "var(--color-skipped)"]].each do |label, color|
+        .flex.items-center.gap-1
+          %span{ style: "display:inline-block;width:8px;height:8px;border-radius:1px;background:#{color};" }
+          %span= label
+      %span.text-fg-subtle ·
+      %span Click a data point to re-center the window on that commit.
+
+    -# Embedded payload. Read once on connect by the Stimulus
+    -# controller. Skipping `compact` here so the JS sees stable
+    -# keys; nulls in `series` are meaningful (chart gap) and must
+    -# round-trip.
+    %script{ type: "application/json", data: { trend_chart_target: "data" } }
+      != payload.to_json
