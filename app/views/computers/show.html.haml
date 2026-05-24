@@ -1,94 +1,170 @@
-.row
-  .col
-    %p#notice= notice
+- content_for :title, "#{@computer.name} · #{@user.name}"
 
-.row
-  .col
-    %h3="#{@computer.name} details"
-    %table.table
-      %tr
-        %th{scope: 'row'} User
-        %td= link_to @user.name, user_path(@user)
-      %tr
-        %th{scope: 'row'} Platform
-        %td=@computer.platform
-      %tr
-        %th{scope: 'row'} Processor
-        %td=@computer.processor
-      %tr
-        %th{scope: 'row'} RAM
-        %td=@computer.ram_gb.to_s + ' GB'
-  .col
-    %h3 Usage Over Time
-    %table.table
-      %tr
-        %th{scope: 'row'} Last 24 hours
-        %td
-          = format('%.3g', @cpu_times[:day])
-          CPU Hours
-      %tr
-        %th{scope: 'row'} Last year
-        %td
-          = format('%.3g', @cpu_times[:year])
-          CPU Hours
-      %tr
-        %th{scope: 'row'}
-          Since Inception
-          = "(#{format_date(@earliest)})"
-        %td
-          = format('%.3g', @cpu_times[:all])
-          CPU Hours
-.row
-  .col
-    -if self_or_admin?
-      .text-center
-        %a.btn.btn-lg.btn-outline-primary{href: edit_user_computer_path(@user, @computer)}
-          %span.text-reset Edit
-        = link_to "<span class='text-reset'>Delete</span>".html_safe, [@user, @computer], method: :delete, data: { confirm: 'Are you sure? This will delete all associated submissions and test instances.' }, class: 'btn btn-outline-danger btn-lg'
-.row
-  .col
-    - if @submissions.empty?
-      .alert.alert-warning.align-middle
-        %h4 No submissions for this computer
-    - else
-      %h3= "Submissions from #{@computer.name}"
-      %p
-        %i= page_entries_info @submissions
-      .table-responsive
-        %table.table.table-hover.table-sm#computer-detail
-          %thead.thead-default
-            %tr
-              %th Date Uploaded
-              %th Commit
-              %th.text-center Tests Submitted
-              %th.text-center Compiled
-              %th.text-center Compiler
-              %th.text-center SDK Version
-              %th.text-center Math Backend
-            %tbody
-              - @submissions.each do |submission|
-                %tr.clickable-row{'data-href' => computer_submission_path(computer: @computer.name, id: submission.id)}
-                  %td=format_time(submission.created_at)
-                  %td.text-monospace= submission.commit
-                  %td.text-center
-                    -case @counts[submission]
-                    -when 0
-                      ='–'
-                    -when 1
-                      %span.text-monospace=submission.test_instances.first.test_case.name
-                    -else
-                      =@counts[submission]
-                  -if submission.compiled.nil?
-                    %td.font-italic.text-center Not Reported
-                  -elsif submission.compiled
-                    %td.text-success.text-center Succeeded
-                  -else
-                    %td.text-danger.text-center Failed
-                  %td.text-center= [submission.compiler, submission.compiler_version].join(' ')
-                  %td.text-center= submission.sdk_version
-                  %td.text-center= submission.math_backend
-      -# .text-center
-        # = link_to "All submissions from #{@computer.name}", user_computer_test_instances_path(@user, @computer), class: 'btn btn-md btn-secondary text-light'
-.row
-  .col
-    = paginate @submissions        
+.space-y-4
+  -# Breadcrumb. Back arrow lands on the user's computer list (the
+  -# natural "up"), mirroring the test-on-commit / test-case-show
+  -# breadcrumb pattern.
+  %nav.flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+    = link_to user_computers_path(@user),
+             class: "inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-bg-muted hover:text-fg no-underline",
+             title: "Back to #{@user.name}'s computers" do
+      = mesa_icon(:arrow_left, size: 14)
+      %span= "#{@user.name}'s computers"
+    %span.text-fg-subtle /
+    %span.font-mono.text-fg= @computer.name
+
+  -# Headline card. Two tiers separated by a hairline, mirroring
+  -# test_case_commits/_headline. Tier 1 is the identity sentence
+  -# ("<name> is a <platform> machine maintained by <user>") with
+  -# Edit/Delete actions top-right. Tier 2 splits at lg+ between
+  -# hardware identity (left) and CPU-hours usage capsule (right);
+  -# below lg the columns stack.
+  .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+
+    -# Tier 1.
+    .flex.flex-wrap.items-start.justify-between.gap-3
+      %div.min-w-0
+        %div{ class: "text-[22px] font-medium leading-snug tracking-tight text-fg" }
+          %span.font-mono.font-semibold.text-fg= @computer.name
+          %span.text-fg-muted{ class: "text-[20px]" }<>
+            = " is a "
+          - if @computer.platform.present?
+            %span.font-mono.font-semibold.text-fg= @computer.platform
+            %span.text-fg-muted{ class: "text-[20px]" }<>
+              = " machine maintained by "
+          - else
+            %span.text-fg-muted{ class: "text-[20px]" }<>
+              = "machine maintained by "
+          = link_to @user.name, user_path(@user),
+                   class: "font-semibold text-brand no-underline hover:underline"
+
+      - if self_or_admin?
+        .shrink-0.flex.items-center.gap-1
+          = link_to edit_user_computer_path(@user, @computer),
+                   class: "mesa-btn",
+                   style: "padding: 4px 10px; font-size: 12px;" do
+            %span Edit
+          = button_to user_computer_path(@user, @computer),
+                     method: :delete,
+                     form: { data: { turbo_confirm: "Delete #{@computer.name}? This removes all associated submissions and test instances." } },
+                     class: "mesa-btn",
+                     style: "padding: 4px 10px; font-size: 12px; color: var(--color-danger-soft-text); border-color: var(--color-danger-soft); background: transparent;" do
+            Delete
+
+    -# Tier 2.
+    .mt-4.pt-4.border-t.border-border-subtle.grid.gap-6{ class: "grid-cols-1 lg:grid-cols-2" }
+
+      -# LEFT — hardware identity.
+      .min-w-0
+        %span.mesa-label.mb-3 Hardware
+        %dl.mt-2.grid.gap-y-2{ class: "grid-cols-[auto_1fr] gap-x-6 text-[13px]" }
+          %dt.text-fg-subtle Platform
+          %dd.text-fg
+            - if @computer.platform.present?
+              %span.inline-flex.items-center.gap-1.rounded-md.border.border-border.bg-bg-muted.px-2.py-0.5.font-mono.text-fg{ class: "text-[11px]" }= @computer.platform
+            - else
+              %span.text-fg-subtle —
+          %dt.text-fg-subtle Processor
+          %dd.text-fg= @computer.processor.presence || content_tag(:span, "—", class: "text-fg-subtle")
+          %dt.text-fg-subtle RAM
+          %dd.text-fg.font-mono.tabular-nums
+            - if @computer.ram_gb.present?
+              = @computer.ram_gb
+              %span.text-fg-subtle  GB
+            - else
+              %span.text-fg-subtle —
+
+      -# RIGHT — CPU-hours usage capsule.
+      .min-w-0
+        %span.mesa-label.mb-3 Usage (CPU hours)
+        - cpu_rows = [["Last 24 hours", @cpu_times[:day]], ["Last year", @cpu_times[:year]], ["All time", @cpu_times[:all]]]
+        %dl.mt-2.grid.gap-y-2{ class: "grid-cols-[auto_1fr] gap-x-6 text-[13px]" }
+          - cpu_rows.each do |label, hours|
+            %dt.text-fg-subtle= label
+            %dd.font-mono.tabular-nums.text-fg
+              = format('%.3g', hours.to_f)
+              %span.text-fg-subtle  h
+          %dt.text-fg-subtle Since
+          %dd.text-fg-muted{ class: "text-[12px]" }= format_date(@earliest)
+
+  -# Submissions table card.
+  - if @submissions.empty?
+    .rounded-lg.border.border-border.bg-bg-elev.p-10.text-center.text-fg-muted.text-sm{ style: "box-shadow: var(--shadow-card-sm);" }
+      No submissions from
+      %span.font-mono.text-fg= @computer.name
+      yet.
+  - else
+    .rounded-lg.border.border-border.bg-bg-elev.overflow-hidden{ style: "box-shadow: var(--shadow-card-sm);" }
+
+      -# Header band — title + page-info.
+      .flex.flex-wrap.items-baseline.justify-between.gap-3.px-4.py-3.border-b.border-border-subtle
+        %div
+          %span.mesa-label Submissions
+          %span.ml-2.text-fg{ class: "text-[14px]" }
+            = pluralize(@submissions.total_count, "submission")
+            on
+            %span.font-mono= @computer.name
+        %span.text-fg-subtle.tabular-nums{ class: "text-[11px]" }
+          = page_entries_info @submissions
+
+      %div{ style: "overflow-x: auto;" }
+        %table.w-full.border-collapse{ style: "min-width: 820px;" }
+          %thead.bg-bg-subtle
+            %tr.text-fg-muted{ class: "text-[11px] uppercase tracking-wide" }
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Submitted
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Commit
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Build
+              %th.text-right.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Tests
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Compiler
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap SDK
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Math backend
+          %tbody
+            - @submissions.each do |submission|
+              - count = @counts[submission]
+              - sole = count == 1 ? submission.test_instances.first&.test_case : nil
+              %tr.border-b.border-border-subtle.align-middle.hover:bg-bg-subtle{ class: "[&>td]:py-2" }
+                %td.px-3.text-fg-muted.whitespace-nowrap{ class: "text-[12px] tabular-nums" }
+                  = format_time(submission.created_at)
+                %td.px-3.font-mono.whitespace-nowrap{ class: "text-[12px]" }
+                  - if submission.commit
+                    = link_to submission.commit.short_sha,
+                             commit_path(branch: "main", sha: submission.commit.short_sha),
+                             class: "text-brand font-semibold no-underline hover:underline",
+                             title: submission.commit.message_first_line(120)
+                  - else
+                    %span.text-fg-subtle —
+                %td.px-3.whitespace-nowrap{ class: "text-[12px]" }
+                  - case submission.compiled
+                  - when true
+                    %span.inline-flex.items-center.gap-1.rounded-md.bg-success-soft.px-2.py-0.5.text-success-soft-text{ class: "text-[11px] font-medium" }
+                      = mesa_icon(:check, size: 11)
+                      %span Built
+                  - when false
+                    %span.inline-flex.items-center.gap-1.rounded-md.bg-buildfail-soft.px-2.py-0.5.text-buildfail-soft-text{ class: "text-[11px] font-medium" }
+                      = mesa_icon(:x, size: 11)
+                      %span Failed
+                  - else
+                    %span.inline-flex.items-center.gap-1.rounded-md.bg-bg-muted.px-2.py-0.5.text-fg-subtle{ class: "text-[11px] font-medium" }
+                      = mesa_icon(:eye_off, size: 11)
+                      %span Not reported
+                %td.px-3.text-right.font-mono.tabular-nums.whitespace-nowrap{ class: "text-[12px]" }
+                  - if count.to_i.zero?
+                    %span.text-fg-subtle —
+                  - elsif sole
+                    = link_to sole.name,
+                             test_case_path(branch: "main", module: sole.module, test_case: sole.name),
+                             class: "text-fg-muted hover:text-brand no-underline"
+                  - else
+                    = count
+                %td.px-3.font-mono.text-fg-muted.whitespace-nowrap{ class: "text-[12px]" }
+                  - compiler = [submission.compiler, submission.compiler_version].compact_blank.join(' ').presence
+                  = compiler || content_tag(:span, "—", class: "text-fg-subtle")
+                %td.px-3.font-mono.text-fg-muted.whitespace-nowrap{ class: "text-[12px]" }
+                  = submission.sdk_version.presence || content_tag(:span, "—", class: "text-fg-subtle")
+                %td.px-3.font-mono.text-fg-muted.whitespace-nowrap{ class: "text-[12px]" }
+                  = submission.math_backend.presence || content_tag(:span, "—", class: "text-fg-subtle")
+
+  -# Pagination.
+  - if @submissions.total_pages > 1
+    .pt-2
+      = paginate @submissions, theme: "modern"
