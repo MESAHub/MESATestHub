@@ -311,13 +311,16 @@ class ComputersController < ApplicationController
   # UTC day). SHA is squashed to lowercase + at-least-4-chars so a
   # too-short paste doesn't accidentally match every commit.
   def parse_submission_filters
+    raw_type = params[:type].to_s
     {
       from: parse_filter_date(params[:from], end_of_day: false),
       to:   parse_filter_date(params[:to],   end_of_day: true),
       sha:  params[:sha].to_s.strip.downcase.presence,
+      type: Submission::TYPES.include?(raw_type) ? raw_type : nil,
       from_raw: params[:from].to_s,
       to_raw:   params[:to].to_s,
-      sha_raw:  params[:sha].to_s
+      sha_raw:  params[:sha].to_s,
+      type_raw: raw_type
     }
   end
 
@@ -334,6 +337,7 @@ class ComputersController < ApplicationController
     scope = computer.submissions
                     .includes(:commit, test_instances: :test_case)
                     .submitted_between(filter[:from], filter[:to])
+                    .of_type(filter[:type])
     if filter[:sha] && filter[:sha].length >= 4
       scope = scope.for_commit_sha(filter[:sha])
     end
@@ -345,6 +349,6 @@ class ComputersController < ApplicationController
   def filter_query_params
     f = @filter ||= parse_submission_filters
     { from: f[:from_raw].presence, to: f[:to_raw].presence,
-      sha:  f[:sha_raw].presence }.compact
+      sha:  f[:sha_raw].presence,  type: f[:type] }.compact
   end
 end

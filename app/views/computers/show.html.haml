@@ -95,7 +95,7 @@
   -# the same URL); the modal contains its own DELETE form so the
   -# table itself isn't wrapped in a form at all (avoids nesting
   -# issues with the pagination links that live below it).
-  - filter_active = @filter[:from] || @filter[:to] || @filter[:sha]
+  - filter_active = @filter[:from] || @filter[:to] || @filter[:sha] || @filter[:type]
   - total_matching = @submissions_scope.unscope(:order, :limit, :offset).count
   - visible_count = @submissions.size
   - can_delete = self_or_admin?
@@ -143,6 +143,18 @@
                          placeholder: "abc1234",
                          class: "mesa-input font-mono",
                          style: "width: 180px; padding: 4px 8px; font-size: 12px;"
+      -# Submission type — Empty (build only) vs Individual (one
+      -# test) vs Combined (build + entire suite). Native <select>
+      -# stays in the form so Apply submits it alongside the other
+      -# filters; mesa-input gives the surrounding border + padding
+      -# while the browser handles the chevron and selection list.
+      - type_options = [["All types", ""], ["Empty (build only)", "empty"], ["Individual test", "individual"], ["Combined (build + suite)", "combined"]]
+      %div
+        %label.mesa-label.mb-1{ for: "filter-type" } Type
+        = select_tag :type, options_for_select(type_options, @filter[:type]),
+                     id: "filter-type",
+                     class: "mesa-input",
+                     style: "width: 200px; padding: 4px 8px; font-size: 12px;"
       .flex.items-center.gap-2
         %button.mesa-btn.mesa-btn-primary{ type: "submit", style: "padding: 5px 12px; font-size: 12px;" } Apply
         - if filter_active
@@ -273,6 +285,8 @@
                 = hidden_field_tag :to, @filter[:to_raw]
               - if @filter[:sha_raw].present?
                 = hidden_field_tag :sha, @filter[:sha_raw]
+              - if @filter[:type].present?
+                = hidden_field_tag :type, @filter[:type]
               %div{ data: { submission_selection_target: "idsContainer" } }
               %button{ type: "submit", class: "mesa-btn", style: "padding: 6px 14px; font-size: 13px; background: var(--color-danger); border-color: var(--color-danger); color: var(--color-danger-fg);" }
                 Delete

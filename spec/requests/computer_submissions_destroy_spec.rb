@@ -167,4 +167,61 @@ RSpec.describe 'Bulk-deleting submissions on computers#show', type: :request do
       expect(response).to have_http_status(:ok)
     end
   end
+
+  describe 'type filter' do
+    let!(:empty_sub)      { create(:submission, computer: computer, empty: true,  entire: false) }
+    let!(:individual_sub) { create(:submission, computer: computer, empty: false, entire: false) }
+    let!(:combined_sub)   { create(:submission, computer: computer, empty: false, entire: true) }
+
+    before { sign_in(owner) }
+
+    it 'filters to empty (build-only) submissions' do
+      get "/users/#{owner.id}/computers/#{computer.id}", params: { type: 'empty' }
+      shas = response.body.scan(/[a-f0-9]{7}/).uniq
+      expect(shas).to include(empty_sub.commit.short_sha)
+      expect(shas).not_to include(individual_sub.commit.short_sha)
+      expect(shas).not_to include(combined_sub.commit.short_sha)
+    end
+
+    it 'filters to individual-test submissions' do
+      get "/users/#{owner.id}/computers/#{computer.id}", params: { type: 'individual' }
+      shas = response.body.scan(/[a-f0-9]{7}/).uniq
+      expect(shas).to include(individual_sub.commit.short_sha)
+      expect(shas).not_to include(empty_sub.commit.short_sha)
+      expect(shas).not_to include(combined_sub.commit.short_sha)
+    end
+
+    it 'filters to combined (build + suite) submissions' do
+      get "/users/#{owner.id}/computers/#{computer.id}", params: { type: 'combined' }
+      shas = response.body.scan(/[a-f0-9]{7}/).uniq
+      expect(shas).to include(combined_sub.commit.short_sha)
+      expect(shas).not_to include(empty_sub.commit.short_sha)
+      expect(shas).not_to include(individual_sub.commit.short_sha)
+    end
+
+    it 'treats a junk type param as no filter' do
+      get "/users/#{owner.id}/computers/#{computer.id}", params: { type: 'banana' }
+      expect(response).to have_http_status(:ok)
+      shas = response.body.scan(/[a-f0-9]{7}/).uniq
+      expect(shas).to include(empty_sub.commit.short_sha)
+      expect(shas).to include(individual_sub.commit.short_sha)
+      expect(shas).to include(combined_sub.commit.short_sha)
+    end
+
+    it 'narrows destroy to the type-matching subset' do
+      expect do
+        delete destroy_path,
+               params: { select_all_matching: '1', type: 'empty' }
+      end.to change { computer.submissions.count }.by(-1)
+      expect(Submission.exists?(empty_sub.id)).to be false
+      expect(Submission.exists?(individual_sub.id)).to be true
+      expect(Submission.exists?(combined_sub.id)).to be true
+    end
+
+    it 'preserves type on the post-delete redirect' do
+      delete destroy_path,
+             params: { select_all_matching: '1', type: 'empty' }
+      expect(response.location).to include("type=empty")
+    end
+  end
 end

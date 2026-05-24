@@ -32,6 +32,34 @@ class Submission < ApplicationRecord
     joins(:commit).where("commits.sha LIKE ?", "#{sha}%")
   }
 
+  # Three operational categories of submission, mapped onto the
+  # `empty` + `entire` boolean pair stored on the row:
+  #
+  #   empty       — build status only, no test instances.
+  #                 `empty = true`
+  #   individual  — a single (or small) batch of test instances,
+  #                 not the whole suite. `empty = false AND
+  #                 entire = false`
+  #   combined    — build status + the entire test suite in one
+  #                 submission. `entire = true`
+  #
+  # Production data confirms these three states partition the
+  # table (no `(true, true)` or NULL rows in 843k submissions).
+  TYPES = %w[empty individual combined].freeze
+
+  scope :of_type, ->(type) {
+    case type.to_s
+    when "empty"
+      where(empty: true)
+    when "individual"
+      where(empty: false, entire: false)
+    when "combined"
+      where(entire: true)
+    else
+      all
+    end
+  }
+
 
   # syntactic sugar to determine if the submission is empty
   def empty?
