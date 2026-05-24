@@ -149,9 +149,12 @@ class TestCaseCommit < ApplicationRecord
     # determine if this test case in this commit is in a passing, failing,
     # mixed, multiple checksum, or untested state. DO THIS AFTER ALL OTHER
     # UPDATE_* METHODS TO ENSURE ACCURACY
-    
-    # assume untested unless there is at least one submission
-    self.status ||= @@status_encoder[:untested]
+    #
+    # Reset to untested unconditionally so that a TCC whose submissions
+    # were all destroyed flips back to untested rather than carrying its
+    # stale previous status — the legacy `status ||= :untested` only
+    # fired when status was nil, which it never is after the first save.
+    self.status = @@status_encoder[:untested]
     return unless submission_count.positive?
 
     outcomes = test_instances.pluck(:passed).uniq
