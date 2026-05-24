@@ -118,11 +118,6 @@ Rails.application.routes.draw do
   post 'check_user', to: 'sessions#check_credentials', as: 'check_user'
   post 'check_computer', to: 'computers#check_computer', as: 'check_computer'
 
-  # index of a particular user's computers's test instances
-  get 'user/:user_id/computers/:id/test_instances',
-      to: 'computers#test_instances_index',
-      as: 'user_computer_test_instances'
-
   # Bulk-delete a set of submissions from a computer. Drives the
   # "Delete selected" flow on computers#show. Authorization (user
   # owns the computer, or admin) lives in the controller. See

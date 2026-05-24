@@ -10,9 +10,8 @@ class ComputersController < ApplicationController
   BULK_DESTROY_LIMIT = 500
 
   before_action :set_user, only: %i[show new create index edit update destroy
-                                    test_instances_index destroy_submissions]
+                                    destroy_submissions]
   before_action :set_computer, only: %i[show edit update destroy
-                                        test_instances_index
                                         destroy_submissions]
   before_action :authorize_self_or_admin, only: %i[new create edit update
                                                    destroy destroy_submissions]
@@ -35,15 +34,6 @@ class ComputersController < ApplicationController
     @sort = sanitize_sort(params[:sort], allow_maintainer: true)
     @computers = Computer.includes(:user).ordered(@sort).page(params[:page])
     render 'index'
-  end
-
-  # GET /computers/1/test_instances
-  # GET /computers/1/test_instances.json
-  def test_instances_index
-    @computer_instances = @computer.test_instances
-                                   .includes(:version)
-                                   .order(mesa_version: :desc)
-                                   .page(params[:page])
   end
 
   # GET /computers/1

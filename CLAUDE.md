@@ -226,11 +226,15 @@ Before doing non-trivial work, read the appropriate doc:
   ships only Turbo (no rails-ujs), so `data-method=delete` from
   the legacy helper is dead.
 
-  Step 8's remaining wing-it pages
-  (`computers/test_instances_index`, `test_instances#*`, admin,
+  Step 8's remaining wing-it pages (`test_instances#*`, admin,
   users) are still outstanding; the page priority list is at the
   bottom of
   [`docs/frontend-modernization.md`](docs/frontend-modernization.md).
+  Note: `computers#test_instances_index` was deleted, not
+  modernized — it had been dead since the SVN→git transition
+  (controller ordered by the missing `mesa_version` column, view
+  linked to the missing `Version` model) and nothing in the app
+  pointed at the route.
 
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.

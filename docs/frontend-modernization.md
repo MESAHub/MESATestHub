@@ -198,7 +198,19 @@ partials). Classification below — anything not listed is implicitly
     paginator theme that subsequent wing-it pages can opt into via
     `paginate @scope, theme: "modern"`). See "computers#index +
     computers#show design notes" below.
-  - `computers/test_instances_index.html.haml`
+  - ~~`computers/test_instances_index.html.haml`~~ — **deleted**
+    rather than modernized. The page was broken on `master`
+    (controller ordered by the long-gone `mesa_version` column,
+    view linked to the long-gone `Version` model via
+    `version_path` / `test_case_version_path`), the route was
+    never linked from anywhere in the app, and the use cases it
+    nominally served — "all submissions from a computer with
+    filter" and "all instances of one test on one computer over
+    time" — are already covered by the modern `computers#show`
+    submissions table and `test_cases#show` Submissions tab.
+    Removed in the same commit that landed this note: the
+    route, the `test_instances_index` action, the entries in
+    `set_user` / `set_computer` filters, and the view template.
   - `users/index.html.haml`, `users/show.html.haml`,
     `users/admin.html.haml`, `users/computers_index.html.haml`
   - `users/new.html.haml`, `users/edit.html.haml` (signup / edit)
