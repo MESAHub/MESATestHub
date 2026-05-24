@@ -21,10 +21,11 @@
     %span.text-fg-subtle /
     %span.text-fg Computers
 
-  -# Headline card. Status sentence on top, "Add computer" CTA in the
-  -# top-right when the user is allowed to add machines to this
-  -# account. Matches the single-tier headline pattern from
-  -# test_cases#show.
+  -# Headline card. Status sentence on top, Sort dropdown + (when
+  -# allowed) "Add computer" CTA in the top-right. Matches the
+  -# single-tier headline pattern from test_cases#show; the Sort
+  -# dropdown mirrors the picker pattern used by the test_cases#show
+  -# submissions tab's Computer dropdown.
   .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
     .flex.flex-wrap.items-start.justify-between.gap-3
       %div.min-w-0
@@ -44,8 +45,38 @@
           .mt-2.text-fg-subtle{ class: "text-[12px] tabular-nums" }
             = page_entries_info @computers
 
-      - if @user && self_or_admin?
-        .shrink-0
+      .shrink-0.flex.items-center.gap-2
+        -# Sort picker. Reuses dropdown_controller (the same one the
+        -# test_cases submissions Computer picker uses). Active row
+        -# carries `aria-selected="true"` + brand-soft tint. Picking
+        -# a sort always resets pagination back to page 1.
+        .relative{ data: { controller: "dropdown", open: "false" } }
+          %button.inline-flex.items-center.gap-2.rounded-md.border.border-border.bg-bg-elev.px-2.py-1.text-fg.cursor-pointer.hover:bg-bg-muted{
+            type: "button",
+            "aria-haspopup": "listbox",
+            "aria-label": "Sort computers",
+            class: "text-[12px]",
+            data: { dropdown_target: "trigger", action: "click->dropdown#toggle" } }
+            %span.text-fg-subtle Sort
+            %span.font-semibold= computer_sort_label(@sort)
+            = mesa_icon(:chevron, size: 10)
+
+          .absolute.right-0.top-full.z-30.mt-1.rounded-md.border.border-border.bg-bg-elev.shadow-md{
+            hidden: true,
+            role: "listbox",
+            style: "min-width: 220px;",
+            data: { dropdown_target: "menu" } }
+            - computer_sort_options(include_maintainer: @show_users).each do |value, label|
+              - active = @sort == value
+              - sort_param = value == "recent" ? nil : value
+              = link_to url_for(only_path: true, sort: sort_param, page: nil),
+                       role: "option",
+                       "aria-selected": active.to_s,
+                       class: "block px-3 py-1.5 no-underline #{active ? 'bg-brand-soft text-brand-soft-text' : 'text-fg hover:bg-bg-muted'}",
+                       style: "font-size: 12px;" do
+                = label
+
+        - if @user && self_or_admin?
           = link_to new_user_computer_path(@user),
                    class: "mesa-btn mesa-btn-primary",
                    style: "padding: 6px 12px; font-size: 12px;" do

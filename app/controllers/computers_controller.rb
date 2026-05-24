@@ -16,14 +16,15 @@ class ComputersController < ApplicationController
   # GET /computers.json
   def index
     @owner_prefix = "#{@user.name}'s"
-    @computers = @user.computers.order(:created_at).page(params[:page])
+    @sort = sanitize_sort(params[:sort], allow_maintainer: false)
+    @computers = @user.computers.ordered(@sort).page(params[:page])
   end
 
   def index_all
     @owner_prefix = 'All'
     @show_users = true
-    @computers = Computer.includes(:user).order(:user_id).page(params[:page])
-    # @computers.sort_by { |c| c.user.name }
+    @sort = sanitize_sort(params[:sort], allow_maintainer: true)
+    @computers = Computer.includes(:user).ordered(@sort).page(params[:page])
     render 'index'
   end
 
@@ -222,5 +223,14 @@ class ComputersController < ApplicationController
     return if admin? || @user.id == current_user.id
     redirect_to login_url, alert: 'Must be an admin or the user in ' \
       'question to do that action.'
+  end
+
+  # Whitelist sort param so a stale or hand-typed URL can't reach
+  # an undefined branch in `Computer.ordered`. `maintainer` is only
+  # meaningful on the admin all-users view since the per-user index
+  # has exactly one maintainer.
+  def sanitize_sort(raw, allow_maintainer:)
+    allowed = allow_maintainer ? Computer::SORT_OPTIONS : Computer::SORT_OPTIONS - %w[maintainer]
+    allowed.include?(raw.to_s) ? raw.to_s : "recent"
   end
 end
