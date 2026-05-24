@@ -23,6 +23,50 @@ module CommitsHelper
     crosshair: '<circle cx="8" cy="8" r="5"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/>'.html_safe
   }.freeze
 
+  # Same output as the `commits/_matrix_cell_visual` partial, but
+  # rendered without going through the partial cache / template
+  # lookup pipeline. Worth it on the History tab where the same
+  # visual fires hundreds of times per request (25-100 commits × ~7
+  # computers = 200–700 cells). Inlining drops both the render
+  # logging noise and the per-partial overhead.
+  #
+  # Returns an html_safe string. Same `cell` shape as the partial:
+  # the hash from `Commit#test_computer_matrix` (or a synthetic
+  # `{ status:, flags: }` for the diff tab's before/after pair).
+  def matrix_cell_visual(cell, size: 22, label: nil)
+    attrs = matrix_cell_attrs(cell)
+    bg_style = if attrs[:kind] == :striped
+                 "background: repeating-linear-gradient(45deg, #{attrs[:bg]} 0 4px, #{attrs[:stripe]} 4px 8px);"
+               else
+                 "background: #{attrs[:bg]};"
+               end
+    size_val    = size || 22
+    glyph_size  = [(size_val * 0.55).round, 8].max
+    corner_box  = [(size_val * 0.5).round, 9].max
+    corner_glyph = [(corner_box * 0.6).round, 5].max
+    tooltip = label || attrs[:label]
+
+    inner = "".html_safe
+    if attrs[:glyph]
+      inner += content_tag(:span,
+                           mesa_icon(attrs[:glyph], size: glyph_size),
+                           class: "absolute inset-0 flex items-center justify-center",
+                           style: "color: #{attrs[:glyph_color]};")
+    end
+    if attrs[:corner]
+      inner += content_tag(:span,
+                           mesa_icon(attrs[:corner], size: corner_glyph),
+                           class: "absolute flex items-center justify-center",
+                           style: "top: -2px; right: -2px; width: #{corner_box}px; " \
+                                  "height: #{corner_box}px; border-radius: 50%; " \
+                                  "background: #{attrs[:corner_bg]}; color: white;")
+    end
+    content_tag(:span, inner,
+                class: "relative inline-block rounded-sm align-middle",
+                style: "#{bg_style} width: #{size_val}px; height: #{size_val}px;",
+                title: tooltip)
+  end
+
   def mesa_icon(name, size: 16, css: nil)
     paths = ICON_PATHS[name] or return ""
     content_tag(:svg,

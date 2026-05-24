@@ -25,6 +25,16 @@ import uPlot from "uplot"
 //   - 0 data points after toggles → handled by uPlot (all-null series)
 export default class extends Controller {
   static targets = ["chart", "metricPicker", "seriesChip", "data", "empty"]
+  static values  = {
+    // Server seeds the metric from ?metric=<id> (or the default if
+    // the URL is silent). Keeping the source of truth in the value
+    // means the <select>'s server-rendered `selected` attribute and
+    // the chart agree without a sync-on-connect dance.
+    metric:    { type: String, default: "" },
+    // The anchor commit's short_sha — server-known — so we can
+    // highlight its X position on the chart and label it cleanly.
+    anchorSha: { type: String, default: "" }
+  }
 
   connect() {
     this._loadPayload()
@@ -36,10 +46,14 @@ export default class extends Controller {
       this._renderEmpty("Not enough data: no commits in this window were run with a common (computer, threads, run-mode) config. Try a wider window or check the History tab to see which configs have submitted.")
       return
     }
-    this.currentMetric = this.payload.default_metric
+    this.currentMetric = this.metricValue || this.payload.default_metric
+    this.anchorIdx = this.anchorShaValue
+      ? this.payload.commits.findIndex(c => c.sha === this.anchorShaValue)
+      : -1
     this.visibleSeries = new Set(this.payload.configs.map(c => c.key))
     this._buildChart()
     this._observeTheme()
+    this._observeVisibility()
     this._onResize = () => this._resize()
     window.addEventListener("resize", this._onResize)
   }
@@ -47,6 +61,7 @@ export default class extends Controller {
   disconnect() {
     window.removeEventListener("resize", this._onResize)
     if (this._themeObserver) this._themeObserver.disconnect()
+    if (this._visibilityObserver) this._visibilityObserver.disconnect()
     if (this.chart) { this.chart.destroy(); this.chart = null }
   }
 
@@ -54,7 +69,33 @@ export default class extends Controller {
 
   selectMetric(event) {
     this.currentMetric = event.currentTarget.value
+    // Persist to the URL so a subsequent re-center (which is a full
+    // navigation) keeps the chosen metric. replaceState — not push
+    // — so the back button doesn't accumulate one entry per dropdown
+    // change.
+    const url = new URL(window.location.href)
+    url.searchParams.set("metric", this.currentMetric)
+    window.history.replaceState({}, "", url.toString())
+    // Server-rendered toolbar / tab-strip links were built with
+    // whatever metric was on the URL at page render time. After a
+    // JS-only change they're stale — update any link that points
+    // at THIS test_case_path so a pan/window/tab nav carries the
+    // new metric. Links to other test cases or other branches are
+    // left alone (changing tests resets metric, intentionally).
+    this._propagateMetricToLinks(this.currentMetric)
     this._updateData()
+  }
+
+  _propagateMetricToLinks(metric) {
+    const here = window.location.pathname
+    document.querySelectorAll("a[href]").forEach(a => {
+      let u
+      try { u = new URL(a.href) } catch (_) { return }
+      if (u.origin !== window.location.origin) return
+      if (u.pathname !== here) return
+      u.searchParams.set("metric", metric)
+      a.href = u.toString()
+    })
   }
 
   toggleSeries(event) {
@@ -109,23 +150,34 @@ export default class extends Controller {
     ]
 
     const xs = this.payload.commits
+    // Only three X labels are meaningful here: "← older" at the
+    // left edge, the anchor SHA at its position, "newer →" at the
+    // right. Per-tick SHAs were just noise — users hover for
+    // commit detail. `splits` forces uPlot to put ticks ONLY at
+    // those positions; `values` returns the matching label per tick.
+    const lastIdx = xs.length - 1
+    const splitPositions = (() => {
+      const ps = new Set([0, lastIdx])
+      if (this.anchorIdx > 0 && this.anchorIdx < lastIdx) ps.add(this.anchorIdx)
+      return [...ps].sort((a, b) => a - b)
+    })()
     const xAxis = {
       stroke: tokens.fgSubtle,
       grid: { stroke: tokens.borderSubtle, width: 1 },
       ticks: { stroke: tokens.borderSubtle, width: 1 },
-      // Show ~6 short-SHA labels evenly across the axis. uPlot
-      // calls `values()` with the auto-computed ticks; we override
-      // each to the commit SHA at that integer index.
+      splits: () => splitPositions,
       values: (_u, ticks) => ticks.map(t => {
         const i = Math.round(t)
-        return xs[i] ? xs[i].sha : ""
+        if (i === 0)            return "← older"
+        if (i === lastIdx)      return "newer →"
+        if (i === this.anchorIdx) return xs[i]?.sha || ""
+        return ""
       }),
-      space: 60,
       font: '10px ui-monospace, "SF Mono", Menlo, monospace',
       // Leave room at the bottom for the status strip we draw in
-      // the `drawAxes` hook (6px strip + 4px gap above + 14px for
-      // the SHA label below). Default size ~50; +14 covers the
-      // strip without crowding.
+      // the `drawAxes` hook (6px strip + 4px gap above + the label
+      // text). Default size ~50; +14 covers the strip without
+      // crowding.
       size: 64
     }
     const yAxis = {
@@ -149,7 +201,10 @@ export default class extends Controller {
       axes: [xAxis, yAxis],
       series,
       hooks: {
-        drawAxes: [u => this._drawStatusStrip(u)],
+        // drawAxes runs once per redraw, after axes/ticks but
+        // before series — perfect for the anchor marker (behind
+        // the lines) and the status strip (below the plot area).
+        drawAxes: [u => { this._drawAnchorMarker(u); this._drawStatusStrip(u) }],
         ready: [u => {
           u.over.style.cursor = "crosshair"
           // Capture-phase listener so we fire *before* uPlot's own
@@ -170,6 +225,32 @@ export default class extends Controller {
   _resize() {
     if (!this.chart) return
     this.chart.setSize({ width: this.chartTarget.offsetWidth, height: 320 })
+  }
+
+  // ─── Anchor marker (vertical brand-colored line) ──────────────
+
+  // Soft full-height vertical line at the anchor commit's X
+  // position. Sits behind the data lines (we draw in drawAxes,
+  // before series) so the data still reads cleanly on top.
+  // Skipped when the anchor isn't inside the window (e.g. anchor
+  // resolved to a commit not in `commits[]`).
+  _drawAnchorMarker(u) {
+    if (this.anchorIdx < 0) return
+    const xs = this.payload.commits
+    if (xs.length < 2) return
+    const ctx = u.ctx
+    const pxRatio = devicePixelRatio || 1
+    const x = u.bbox.left + (this.anchorIdx / (xs.length - 1)) * u.bbox.width
+    const tokens = this._readTokens()
+    ctx.save()
+    ctx.strokeStyle = tokens.brand
+    ctx.lineWidth = 2 * pxRatio
+    ctx.globalAlpha = 0.35
+    ctx.beginPath()
+    ctx.moveTo(x, u.bbox.top)
+    ctx.lineTo(x, u.bbox.top + u.bbox.height)
+    ctx.stroke()
+    ctx.restore()
   }
 
   // ─── Status strip (drawn into the canvas after axes) ──────────
@@ -280,6 +361,27 @@ export default class extends Controller {
   // those don't auto-update on token changes, so we destroy and
   // rebuild the chart whenever the attribute changes. Cheap — the
   // chart is small and rebuild is instant.
+  // Charts that connect inside a `hidden` tab panel get `offsetWidth
+  // === 0`, so uPlot draws a zero-width canvas. The tabs controller
+  // toggles `hidden` on the panel without firing a window resize.
+  // Watch the panel's `hidden` attribute and resize once it goes
+  // from true → false.
+  _observeVisibility() {
+    const panel = this.element.closest('[data-tabs-target="panel"]')
+    if (!panel) return
+    this._visibilityObserver = new MutationObserver(muts => {
+      for (const m of muts) {
+        if (m.attributeName === "hidden" && !panel.hasAttribute("hidden")) {
+          // Re-measure on the next animation frame so layout has
+          // settled (offsetWidth would still be the old value
+          // synchronously, on some browsers).
+          requestAnimationFrame(() => this._resize())
+        }
+      }
+    })
+    this._visibilityObserver.observe(panel, { attributes: true, attributeFilter: ["hidden"] })
+  }
+
   _observeTheme() {
     this._themeObserver = new MutationObserver(muts => {
       if (muts.some(m => m.attributeName === "data-theme")) {
@@ -299,6 +401,7 @@ export default class extends Controller {
       fgSubtle:      v("--color-fg-subtle",     "#8b949e"),
       bgElev:        v("--color-bg-elev",       "#ffffff"),
       borderSubtle:  v("--color-border-subtle", "#e6e8ec"),
+      brand:         v("--color-brand",         "#3a56fd"),
       success:       v("--color-success",       "#2da44e"),
       danger:        v("--color-danger",        "#cf222e"),
       warning:       v("--color-warning",       "#9a6700"),

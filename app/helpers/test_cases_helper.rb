@@ -18,7 +18,8 @@ module TestCasesHelper
       test_case: @test_case.name,
       tab:       @active_tab,
       window:    @window_size,
-      center:    params[:center].presence
+      center:    params[:center].presence,
+      metric:    params[:metric].presence
     }
     test_case_path(base.merge(overrides).compact)
   end

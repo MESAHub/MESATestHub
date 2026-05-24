@@ -497,8 +497,15 @@ class TestCase < ApplicationRecord
     commits = branch.focused_commit_window(anchor_commit, size: size)
     return empty_commit_window(size, anchor_commit) if commits.empty?
 
+    # Eager-load everything every per-tab payload needs:
+    #   - History matrix:   :computer (per-cell)
+    #   - History popover:  :computer + instance_inlists/inlist_data (metrics)
+    #   - Trend payload:    instance_inlists/inlist_data (custom-name
+    #                       discovery + scalar metric extraction)
+    # One pre-load is cheap; the N+1 alternative inside
+    # _trend_metric_specs hit ~1500 queries on a 100-commit window.
     tccs_by_commit = test_case_commits
-                       .includes(test_instances: :computer)
+                       .includes(test_instances: [:computer, { instance_inlists: :inlist_data }])
                        .where(commit_id: commits.map(&:id))
                        .index_by(&:commit_id)
 

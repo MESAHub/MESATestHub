@@ -28,14 +28,22 @@ class TestCasesController < ApplicationController
                                                anchor_commit: @anchor_commit,
                                                size: @window_size)
 
-    # Trend payload — built only when the Trend tab is active. The
-    # query cost (per-instance iteration plus inlist_data scan) is
-    # avoided when the user is on History or Submissions. The
-    # payload uses the same window entries so all tabs stay in
-    # lockstep with the toolbar.
-    @trend_payload = if @active_tab == :trend
-                       @test_case.trend_payload(@selected_branch, @window[:entries])
-                     end
+    # Trend payload — built every request. The tabs-controller
+    # client-side switch doesn't refetch, so a lazy build would
+    # leave the Trend panel empty until the user reloaded. Cost is
+    # bounded by the window size (50–250 commits) and re-uses the
+    # instances + inlist_data the History tab eager-loads anyway,
+    # so the marginal Ruby work is small.
+    @trend_payload = @test_case.trend_payload(@selected_branch, @window[:entries])
+
+    # Sticky metric across navigation. The URL param (?metric=<id>)
+    # is the source of truth; the Trend tab's <select> pre-selects
+    # it, and the JS controller writes back via history.replaceState
+    # when the user changes the dropdown so a subsequent re-center
+    # carries it along via toolbar_path.
+    requested_metric = params[:metric].to_s.presence
+    valid_ids = @trend_payload[:metrics].map { |m| m[:id] }
+    @selected_metric = valid_ids.include?(requested_metric) ? requested_metric : @trend_payload[:default_metric]
   end
 
   private

@@ -569,10 +569,13 @@ Substep follow-ups landed 2026-05-22:
   to `auto` and traps sticky positioning inside the wrapper; on
   the rare commit wide enough to overflow the panel column, the
   document itself scrolls horizontally instead. Matrix cell
-  visuals were factored into a shared
-  `_matrix_cell_visual.html.haml` partial so the Summary matrix,
-  Diff tab, and Tests-tab ribbon all render through the same
-  encoding helper (`matrix_cell_attrs`).
+  visuals are produced by the `matrix_cell_visual` helper
+  (originally a `_matrix_cell_visual.html.haml` partial; promoted
+  to a helper when the test_cases#show History tab started
+  painting 700+ cells per request and the per-partial overhead
+  showed up in the dev log). The encoding helper
+  (`matrix_cell_attrs`) is still the single source of truth for
+  colors / glyphs / corner badges.
 
 Summary/Tests merge landed 2026-05-22:
 

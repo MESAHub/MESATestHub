@@ -22,7 +22,9 @@
   - commits = payload[:commits]
 
   .rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);",
-                                                data: { controller: "trend-chart" } }
+                                                data: { controller: "trend-chart",
+                                                        trend_chart_metric_value: @selected_metric,
+                                                        trend_chart_anchor_sha_value: @anchor_commit&.short_sha.to_s } }
 
     -# Toolbar.
     .flex.flex-wrap.items-center.gap-3.px-4.py-3.border-b.border-border-subtle
@@ -34,7 +36,7 @@
                                      data: { trend_chart_target: "metricPicker",
                                              action: "change->trend-chart#selectMetric" } }
           - metrics.each do |m|
-            - selected = m[:id] == payload[:default_metric]
+            - selected = m[:id] == @selected_metric
             %option{ value: m[:id], selected: selected }= m[:label]
 
       - if configs.any?

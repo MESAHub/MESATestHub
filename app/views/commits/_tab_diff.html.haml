@@ -47,15 +47,15 @@
                 %span.font-mono.text-fg.truncate{ class: "text-[12px]" }= test_case&.name || "test ##{row[:test_case_id]}"
                 %span.font-mono.text-fg-muted.truncate{ class: "text-[12px]" }= computer&.name || "computer ##{row[:computer_id]}"
                 .flex.items-center.gap-1.justify-end.shrink-0
-                  = render "commits/matrix_cell_visual", cell: diff_before_cell, size: 18, label: "was: pass"
+                  = matrix_cell_visual(diff_before_cell, size: 18, label: "was: pass")
                   = mesa_icon(:arrow_right, size: 11, css: "text-fg-subtle")
-                  = render "commits/matrix_cell_visual", cell: diff_after_cell(row), size: 18, label: "now: #{diff_change_label(row)}"
+                  = matrix_cell_visual(diff_after_cell(row), size: 18, label: "now: #{diff_change_label(row)}")
             - else
               %div{ class: row_class.sub('hover:bg-bg-muted ', '').sub('no-underline', '').strip, style: row_style }
                 %span{ class: "inline-block h-2 w-2 rounded-full shrink-0 #{row_dot}" }
                 %span.font-mono.text-fg.truncate{ class: "text-[12px]" }= "test ##{row[:test_case_id]}"
                 %span.font-mono.text-fg-muted.truncate{ class: "text-[12px]" }= computer&.name || "computer ##{row[:computer_id]}"
                 .flex.items-center.gap-1.justify-end.shrink-0
-                  = render "commits/matrix_cell_visual", cell: diff_before_cell, size: 18, label: "was: pass"
+                  = matrix_cell_visual(diff_before_cell, size: 18, label: "was: pass")
                   = mesa_icon(:arrow_right, size: 11, css: "text-fg-subtle")
-                  = render "commits/matrix_cell_visual", cell: diff_after_cell(row), size: 18, label: "now: #{diff_change_label(row)}"
+                  = matrix_cell_visual(diff_after_cell(row), size: 18, label: "now: #{diff_change_label(row)}")

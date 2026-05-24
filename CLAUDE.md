@@ -74,10 +74,11 @@ Before doing non-trivial work, read the appropriate doc:
   `#sparkline_data` / `#commit_neighbors` /
   `#focused_commit_window` / `#last_clean_commit_before`;
   `TestCaseCommit#instances_for_display` round out the layer.
-  Matrix cell visuals live in a shared
-  [`_matrix_cell_visual`](app/views/commits/_matrix_cell_visual.html.haml)
-  partial used by the Summary matrix, Diff tab, and Tests-tab
-  ribbon. Stimulus controllers driving the page:
+  Matrix cell visuals come from the `matrix_cell_visual` helper
+  in [`CommitsHelper`](app/helpers/commits_helper.rb) — same SVG
+  output as the original partial, but called as a plain helper to
+  avoid the per-cell partial-render overhead (the History tab on
+  test_cases#show can paint 700+ cells per request). Stimulus controllers driving the page:
   `tabs_controller.js`, `matrix_filter_controller.js`,
   `matrix_scroll_controller.js` (header↔body horizontal scroll
   sync), `popover_controller.js`, `dropdown_controller.js`,

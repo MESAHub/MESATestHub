@@ -162,7 +162,7 @@
                                        popover_key: key,
                                        popover_fallback_href: fallback,
                                        action: "click->popover#open" } }
-                        = render "commits/matrix_cell_visual", cell: cell, size: 22, label: cell_label
+                        = matrix_cell_visual(cell, size: 22, label: cell_label)
 
         -# Empty state when filters knock everything out.
         .px-4.py-8.text-center.text-fg-subtle.text-sm{ hidden: true, data: { instance_filter_target: "empty" } }
