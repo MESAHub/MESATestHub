@@ -255,7 +255,18 @@ export default class extends Controller {
       sectionRows.push(`<div class="text-[11px] text-fg-subtle">${meta.join(" · ")}</div>`)
     }
 
-    const href = cell.dataset.popoverFallbackHref || "#"
+    // Optional scalar-metrics block. Surfaces things like steps,
+    // retries, runtime, log_rel_run_E_err — the values a user
+    // chasing degradation in a passing test wants to compare across
+    // commits. Only renders when `info.metrics` is present (the
+    // commit#show matrix doesn't populate it; the test_cases#show
+    // History matrix does).
+    if (info.metrics) {
+      const metricRow = this._renderMetricsBlock(info.metrics)
+      if (metricRow) sectionRows.push(metricRow)
+    }
+
+    const href = info.test_case_commit_href || cell.dataset.popoverFallbackHref || "#"
     const footerLink = `<a href="${this._esc(href)}" class="text-brand text-[11px] no-underline hover:opacity-80">View full test case details →</a>`
     const flagRow = flagPills.length
       ? `<div class="px-3 py-2 flex flex-wrap gap-1 border-b border-border-subtle bg-bg-subtle">${flagPills.join("")}</div>`
@@ -273,14 +284,18 @@ export default class extends Controller {
     // the header layout.
     const closeIcon = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>`
 
+    // Two header variants. When the payload includes a commit_sha,
+    // the cell is per-commit (test_cases#show History matrix) — the
+    // user already knows the test, so the SHA + message + author
+    // belongs up top. Without commit_sha, fall back to the
+    // test-name/computer-name header used by commit#show.
+    const headerInner = info.commit_short_sha
+      ? this._commitCentricHeader(info)
+      : this._testCentricHeader(info)
+
     this._renderTarget().innerHTML = `
       <div class="px-3 py-2 border-b border-border-subtle flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <div class="font-mono text-[12px] text-fg truncate" title="${this._esc(info.module)}/${this._esc(info.test_name)}">
-            <span class="text-fg-subtle">${this._esc(info.module)}/</span>${this._esc(info.test_name)}
-          </div>
-          <div class="text-[11px] text-fg-muted truncate">on <span class="font-mono text-fg">${this._esc(info.computer_name || "—")}</span></div>
-        </div>
+        ${headerInner}
         <div class="flex items-start gap-2 shrink-0">
           <span class="font-semibold ${statusTone} text-[11px] uppercase tracking-wide">${this._esc(headline)}</span>
           <button type="button" aria-label="Close" title="Close" data-action="popover#close" class="text-fg-subtle hover:text-fg hover:bg-bg-muted rounded p-1 -m-1 leading-none">
@@ -297,6 +312,69 @@ export default class extends Controller {
         ${footerLink}
       </div>
     `
+  }
+
+  _testCentricHeader(info) {
+    return `
+      <div class="min-w-0">
+        <div class="font-mono text-[12px] text-fg truncate" title="${this._esc(info.module)}/${this._esc(info.test_name)}">
+          <span class="text-fg-subtle">${this._esc(info.module)}/</span>${this._esc(info.test_name)}
+        </div>
+        <div class="text-[11px] text-fg-muted truncate">on <span class="font-mono text-fg">${this._esc(info.computer_name || "—")}</span></div>
+      </div>`
+  }
+
+  _commitCentricHeader(info) {
+    const ageBit = info.commit_time_ago ? ` <span class="text-fg-subtle">·</span> <span class="tabular-nums">${this._esc(info.commit_time_ago)}</span>` : ""
+    const author = info.commit_author ? ` <span class="text-fg-subtle">·</span> ${this._esc(info.commit_author)}` : ""
+    return `
+      <div class="min-w-0">
+        <div class="text-[12px] text-fg truncate">
+          <span class="font-mono font-semibold text-brand">${this._esc(info.commit_short_sha)}</span>
+          <span class="text-fg-subtle">on</span>
+          <span class="font-mono text-fg">${this._esc(info.computer_name || "—")}</span>
+        </div>
+        <div class="text-[11px] text-fg-muted truncate" title="${this._esc(info.commit_message || "")}">${this._esc(info.commit_message || "")}</div>
+        <div class="text-[11px] text-fg-subtle truncate">${author.replace(/^ <span class="text-fg-subtle">·<\/span> /, "")}${ageBit}</div>
+      </div>`
+  }
+
+  // Compact two-column key/value grid for scalar metrics. Skips
+  // zero/null values so the panel doesn't list "0 redos" type noise.
+  // Field labels and number formatting are tuned for what the
+  // History tab's degradation investigation actually wants — steps
+  // and retries get integer formatting, runtime gets 2dp, the
+  // accuracy proxy gets 3sf.
+  _renderMetricsBlock(metrics) {
+    const fmtInt = (v) => v == null ? null : Math.round(v).toLocaleString()
+    const fmt2   = (v) => typeof v === "number" ? v.toFixed(2) : null
+    const fmt3sf = (v) => typeof v === "number" ? v.toPrecision(3) : null
+
+    const specs = [
+      ["Runtime",        fmt2(metrics.runtime_minutes),     "min"],
+      ["RAM (rn)",       fmt2(metrics.mem_rn_gb),           "GB"],
+      ["Threads",        fmtInt(metrics.threads),           ""],
+      ["Steps",          fmtInt(metrics.steps),             ""],
+      ["Retries",        fmtInt(metrics.retries),           ""],
+      ["Redos",          fmtInt(metrics.redos),             ""],
+      ["Solver iters",   fmtInt(metrics.solver_iterations), ""],
+      ["Solver calls",   fmtInt(metrics.solver_calls_made), ""],
+      ["Solver fails",   fmtInt(metrics.solver_calls_failed), ""],
+      ["log rel E err",  fmt3sf(metrics.log_rel_run_E_err), ""]
+    ].filter(([, v]) => v != null && v !== "0")
+
+    if (!specs.length) return null
+    const items = specs.map(([label, val, unit]) =>
+      `<div class="flex items-baseline justify-between gap-2 py-0.5">
+         <span class="text-fg-subtle text-[11px]">${this._esc(label)}</span>
+         <span class="font-mono tabular-nums text-fg text-[11px]">${this._esc(val)}${unit ? ` <span class="text-fg-subtle">${this._esc(unit)}</span>` : ""}</span>
+       </div>`
+    ).join("")
+    return `
+      <div class="rounded-md border border-border-subtle bg-bg-subtle/40 px-2 py-1.5">
+        <div class="text-fg-subtle uppercase tracking-wide text-[10px] mb-1">Metrics</div>
+        <div class="grid grid-cols-2 gap-x-3">${items}</div>
+      </div>`
   }
 
   _esc(s) {

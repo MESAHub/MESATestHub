@@ -7,7 +7,12 @@
 -#                            commit message + author + age
 -#   then one cell per computer (22px each) showing this commit's
 -#                            (test, computer) status via the shared
--#                            `_matrix_cell_visual` partial
+-#                            `_matrix_cell_visual` partial. Cells are
+-#                            wrapped in popover triggers — click any
+-#                            cell to see degradation metrics + failure
+-#                            mode + checksum + SDK + submission count
+-#                            in a panel (docked on xl+ viewports,
+-#                            floating below).
 -#
 -# Empty rows (commits where this test has no TCC yet, or a TCC
 -# with no submitted instances) still render as a row — the empty
@@ -24,113 +29,177 @@
     No commits in this window. Try a wider window or pan toward HEAD.
 - else
   - rows_with_tcc = entries.map { |e| e[:tcc] }.compact
-  - payload = history_matrix_payload(rows_with_tcc)
-  - columns = payload[:columns]
-  - cells_by_tcc = payload[:cells]
+  - matrix = history_matrix_payload(rows_with_tcc)
+  - columns = matrix[:columns]
+  - cells_by_tcc = matrix[:cells]
+  - popover_data = history_popover_data(entries, test_case: @test_case, branch: @selected_branch)
   - status_specs = history_status_specs_for_entries(entries)
   - col_template = "360px repeat(#{[columns.size, 1].max}, 22px)"
 
-  .rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);",
-                                                data: { controller: "instance-filter",
-                                                        instance_filter_status_value: "all",
-                                                        instance_filter_query_value: "" } }
+  -# Outer wrapper hosts the `popover` controller so both the matrix
+  -# cells (triggers) AND the rail (dockedContent target) live inside
+  -# its scope. `xl:flex` enables the rail on wide viewports;
+  -# below xl the rail collapses and the controller falls back to
+  -# its floating-panel mode (it senses `offsetParent` of the rail).
+  .xl:flex.xl:gap-4{ data: { controller: "popover" } }
+    .xl:flex-1.xl:min-w-0
+      .rounded-lg.border.border-border.bg-bg-elev.relative{ style: "box-shadow: var(--shadow-card-sm);",
+                                                    data: { controller: "instance-filter",
+                                                            instance_filter_status_value: "all",
+                                                            instance_filter_query_value: "" } }
 
-    -# Toolbar.
-    .flex.flex-wrap.items-center.gap-2.px-4.py-3.border-b.border-border-subtle
-      %strong.text-fg.text-sm
-        = pluralize(entries.size, "commit")
+        -# Toolbar.
+        .flex.flex-wrap.items-center.gap-2.px-4.py-3.border-b.border-border-subtle
+          %strong.text-fg.text-sm
+            = pluralize(entries.size, "commit")
 
-      .relative
-        %span.absolute.inset-y-0.left-0.flex.items-center.pl-2.text-fg-subtle{ "aria-hidden": "true" }
-          = mesa_icon(:search, size: 12)
-        %input{ type: "search",
-                placeholder: "Filter by SHA, message, or author…",
-                "aria-label": "Filter history",
-                class: "rounded-md border border-border bg-bg-elev pl-7 pr-2 py-1 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-brand",
-                style: "width: 280px;",
-                data: { instance_filter_target: "search",
-                        action: "input->instance-filter#search" } }
+          .relative
+            %span.absolute.inset-y-0.left-0.flex.items-center.pl-2.text-fg-subtle{ "aria-hidden": "true" }
+              = mesa_icon(:search, size: 12)
+            %input{ type: "search",
+                    placeholder: "Filter by SHA, message, or author…",
+                    "aria-label": "Filter history",
+                    class: "rounded-md border border-border bg-bg-elev pl-7 pr-2 py-1 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-brand",
+                    style: "width: 280px;",
+                    data: { instance_filter_target: "search",
+                            action: "input->instance-filter#search" } }
 
-      .inline-flex.rounded-md.border.border-border.bg-bg-elev.p-0.5.gap-0.5
-        - status_specs.each do |id, label, count, dot|
-          - on = (id == "all")
-          %button{ type: "button",
-                   "aria-pressed": on.to_s,
-                   class: "inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs font-medium cursor-pointer transition-colors #{on ? 'bg-brand-soft text-brand-soft-text' : 'text-fg-muted hover:bg-bg-muted'}",
-                   data: { instance_filter_target: "statusChip",
-                           status: id,
-                           action: "click->instance-filter#selectStatus" } }
-            - if dot
-              %span{ class: "inline-block h-1.5 w-1.5 rounded-full #{dot}" }
-            %span= label
-            %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= count
+          .inline-flex.rounded-md.border.border-border.bg-bg-elev.p-0.5.gap-0.5
+            - status_specs.each do |id, label, count, dot|
+              - on = (id == "all")
+              %button{ type: "button",
+                       "aria-pressed": on.to_s,
+                       class: "inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs font-medium cursor-pointer transition-colors #{on ? 'bg-brand-soft text-brand-soft-text' : 'text-fg-muted hover:bg-bg-muted'}",
+                       data: { instance_filter_target: "statusChip",
+                               status: id,
+                               action: "click->instance-filter#selectStatus" } }
+                - if dot
+                  %span{ class: "inline-block h-1.5 w-1.5 rounded-full #{dot}" }
+                %span= label
+                %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= count
 
-    -# Matrix body.
-    %div{ style: "overflow-x: auto;" }
-      .px-4.py-3{ style: "width: max-content; min-width: 100%;" }
-        - if columns.any?
-          .grid.gap-1{ style: "grid-template-columns: #{col_template}; align-items: end;" }
-            -# Column headers (identity column blank; computer names rotated).
-            %span{ style: "height: 90px;" } &nbsp;
-            - columns.each do |name|
-              - display = name.length > 14 ? "#{name[0, 13]}…" : name
-              %span.font-mono.text-fg-subtle.justify-self-center.overflow-hidden{
-                class: "text-[10px]",
-                style: "writing-mode: vertical-rl; transform: rotate(180deg); height: 90px; line-height: 22px;",
-                title: name }
-                = display
-
-        -# Data rows — one per entry, anchor row visually highlighted.
-        .grid.gap-1.mt-1{ style: "grid-template-columns: #{col_template};" }
-          - entries.each do |entry|
-            - commit = entry[:commit]
-            - tcc    = entry[:tcc]
-            - status = entry[:status]
-            - status_word, status_class = history_row_status(status)
-            - is_anchor = (commit.id == @window[:anchor_commit]&.id)
-            - status_filter = history_row_filter(status)
-            - blob = [commit.short_sha, commit.message_first_line(120), commit.author].join(" ").downcase
-            %div.contents{ data: { instance_filter_target: "row",
-                                    row_status: status_filter,
-                                    row_search: blob } }
-              .min-w-0.py-1.pr-2{ class: is_anchor ? "border-l-2 border-brand pl-2" : "border-l-2 border-transparent pl-2" }
-                .flex.items-center.gap-2.min-w-0
-                  %span{ class: "inline-block h-2 w-2 rounded-full shrink-0 #{tcc_status_dot_class(status)}",
-                         title: status_word }
-                  - if tcc
-                    = link_to commit.short_sha,
-                             test_case_commit_path(branch: @selected_branch.name,
-                                                   sha: commit.short_sha,
-                                                   module: @test_case.module,
-                                                   test_case: @test_case.name),
-                             class: "font-mono font-semibold text-brand no-underline hover:underline shrink-0",
-                             style: "font-size: 12px;"
-                  - else
-                    %span.font-mono.font-semibold.text-fg-muted.shrink-0{ style: "font-size: 12px;", title: "No TCC for this commit" }
-                      = commit.short_sha
-                  %span.font-medium.shrink-0{ class: "text-[11px] #{status_class}" }= status_word
-                  - if is_anchor
-                    %span.uppercase.tracking-wide.text-brand.shrink-0{ class: "text-[10px]" } anchor
-                  - else
-                    = link_to toolbar_path(center: commit.short_sha),
-                             class: "text-fg-subtle hover:text-brand no-underline shrink-0",
-                             title: "Re-center the window on #{commit.short_sha}",
-                             style: "font-size: 10px;" do
-                      = mesa_icon(:crosshair, size: 10)
-                  %span.truncate.text-fg{ class: "text-[12px]" }= commit.message_first_line(120)
-                .flex.items-center.gap-2.mt-0.5.text-fg-subtle{ class: "text-[11px]" }
-                  %span= commit.author
-                  %span.text-fg-subtle ·
-                  %span.tabular-nums= time_ago_compact(commit.commit_time)
-
-              -# Per-computer cells (or blank when no columns at all).
-              - if columns.empty?
-                %span.text-fg-subtle &nbsp;
-              - else
-                - row_cells = (tcc && cells_by_tcc[tcc.id]) || {}
+        -# Matrix body.
+        %div{ style: "overflow-x: auto;" }
+          .px-4.py-3{ style: "width: max-content; min-width: 100%;" }
+            - if columns.any?
+              .grid.gap-1{ style: "grid-template-columns: #{col_template}; align-items: end;" }
+                -# Column headers (identity column blank; computer names rotated).
+                %span{ style: "height: 90px;" } &nbsp;
                 - columns.each do |name|
-                  = render "commits/matrix_cell_visual", cell: row_cells[name], size: 22
+                  - display = name.length > 14 ? "#{name[0, 13]}…" : name
+                  %span.font-mono.text-fg-subtle.justify-self-center.overflow-hidden{
+                    class: "text-[10px]",
+                    style: "writing-mode: vertical-rl; transform: rotate(180deg); height: 90px; line-height: 22px;",
+                    title: name }
+                    = display
 
-    -# Empty state when filters knock everything out.
-    .px-4.py-8.text-center.text-fg-subtle.text-sm{ hidden: true, data: { instance_filter_target: "empty" } }
-      No commits match the current filters.
+            -# Data rows — one per entry, anchor row visually highlighted.
+            .grid.gap-1.mt-1{ style: "grid-template-columns: #{col_template};" }
+              - entries.each do |entry|
+                - commit = entry[:commit]
+                - tcc    = entry[:tcc]
+                - status = entry[:status]
+                - status_word, status_class = history_row_status(status)
+                - is_anchor = (commit.id == @window[:anchor_commit]&.id)
+                - status_filter = history_row_filter(status)
+                - blob = [commit.short_sha, commit.message_first_line(120), commit.author].join(" ").downcase
+                %div.contents{ data: { instance_filter_target: "row",
+                                        row_status: status_filter,
+                                        row_search: blob } }
+                  .min-w-0.py-1.pr-2{ class: is_anchor ? "border-l-2 border-brand pl-2" : "border-l-2 border-transparent pl-2" }
+                    .flex.items-center.gap-2.min-w-0
+                      %span{ class: "inline-block h-2 w-2 rounded-full shrink-0 #{tcc_status_dot_class(status)}",
+                             title: status_word }
+                      - if tcc
+                        = link_to commit.short_sha,
+                                 test_case_commit_path(branch: @selected_branch.name,
+                                                       sha: commit.short_sha,
+                                                       module: @test_case.module,
+                                                       test_case: @test_case.name),
+                                 class: "font-mono font-semibold text-brand no-underline hover:underline shrink-0",
+                                 style: "font-size: 12px;"
+                      - else
+                        %span.font-mono.font-semibold.text-fg-muted.shrink-0{ style: "font-size: 12px;", title: "No TCC for this commit" }
+                          = commit.short_sha
+                      %span.font-medium.shrink-0{ class: "text-[11px] #{status_class}" }= status_word
+                      - if is_anchor
+                        %span.uppercase.tracking-wide.text-brand.shrink-0{ class: "text-[10px]" } anchor
+                      - else
+                        = link_to toolbar_path(center: commit.short_sha),
+                                 class: "text-fg-subtle hover:text-brand no-underline shrink-0",
+                                 title: "Re-center the window on #{commit.short_sha}",
+                                 style: "font-size: 10px;" do
+                          = mesa_icon(:crosshair, size: 10)
+                      %span.truncate.text-fg{ class: "text-[12px]" }= commit.message_first_line(120)
+                    .flex.items-center.gap-2.mt-0.5.text-fg-subtle{ class: "text-[11px]" }
+                      %span= commit.author
+                      %span.text-fg-subtle ·
+                      %span.tabular-nums= time_ago_compact(commit.commit_time)
+
+                  -# Per-computer cells. Wrap each in a popover trigger
+                  -# so any cell — clean or not — is clickable. Cells
+                  -# whose (commit, computer) key isn't in popover_data
+                  -# fall through to a direct nav to the test-on-commit
+                  -# page via popover_fallback_href.
+                  - if columns.empty?
+                    %span.text-fg-subtle &nbsp;
+                  - else
+                    - row_cells = (tcc && cells_by_tcc[tcc.id]) || {}
+                    - columns.each do |name|
+                      - cell = row_cells[name]
+                      - key = "#{commit.id}-#{name}"
+                      - has_popover = popover_data.key?(key)
+                      - fallback = test_case_commit_path(branch: @selected_branch.name, sha: commit.short_sha, module: @test_case.module, test_case: @test_case.name, computer: name)
+                      - cell_label = cell ? "#{name} — #{(matrix_cell_attrs(cell)[:label] || 'cell')}" : "#{name} — no data"
+                      - trigger_class = "relative block rounded-sm p-0 border-0 cursor-pointer hover:opacity-80 transition-transform duration-100"
+                      - trigger_class += " hover:scale-125 hover:z-10 cursor-zoom-in" if has_popover
+                      %button{ type: "button",
+                               title: cell_label,
+                               "aria-label": cell_label,
+                               style: "width: 22px; height: 22px; touch-action: manipulation; background: transparent;",
+                               class: trigger_class,
+                               data: { popover_target: "cell",
+                                       popover_key: key,
+                                       popover_fallback_href: fallback,
+                                       action: "click->popover#open" } }
+                        = render "commits/matrix_cell_visual", cell: cell, size: 22, label: cell_label
+
+        -# Empty state when filters knock everything out.
+        .px-4.py-8.text-center.text-fg-subtle.text-sm{ hidden: true, data: { instance_filter_target: "empty" } }
+          No commits match the current filters.
+
+        -# Floating popover panel — only used on viewports below xl
+        -# where the docked rail is hidden. The controller chooses
+        -# automatically; this just has to exist.
+        %div.absolute.z-30.rounded-lg.border.border-border.bg-bg-elev.shadow-lg.text-fg{
+          hidden: true,
+          role: "dialog",
+          "aria-modal": "false",
+          style: "width: 320px; box-shadow: var(--shadow-card-lg, 0 12px 28px rgba(0,0,0,.18));",
+          data: { popover_target: "panel" } }
+          %div{ data: { popover_target: "content" } }
+
+        -# Embedded popover payload. The controller parses on first
+        -# open and caches as a JS Map keyed by `popover-key`.
+        %script{ type: "application/json", data: { popover_target: "data" } }
+          != popover_data.to_json
+
+    -# Docked detail rail. xl+ only — collapses out below and the
+    -# popover falls back to its floating panel automatically.
+    .hidden.xl:block.xl:w-80.xl:shrink-0
+      .sticky{ style: "top: 16px;" }
+        .rounded-lg.border.border-border.bg-bg-elev.overflow-hidden.text-fg{
+          style: "box-shadow: var(--shadow-card-sm); max-height: calc(100vh - 32px); overflow-y: auto;" }
+          %div{ data: { popover_target: "dockedContent" } }
+            .px-4.py-3
+              .text-fg-subtle.uppercase.tracking-wide{ class: "text-[10px]" } Cell details
+              %p.text-fg-muted.mt-1{ class: "text-[12px]" }
+                Click any matrix cell to see this test's failure mode,
+                checksum, runtime, and degradation metrics on that
+                (commit, computer) here.
+              .mt-3.text-fg-subtle{ class: "text-[11px]" }
+                Window:
+                %span.font-mono.text-fg.tabular-nums= entries.size
+                commits ·
+                %span.font-mono.text-fg.tabular-nums= columns.size
+                computers
