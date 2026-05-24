@@ -1018,17 +1018,20 @@ message.
 
 Pages without designs, in priority order:
 
-- `test_cases#show` (test-across-commits) — **in progress.** Three
-  tabs sharing the test-on-commit visual frame: **History** (one row
-  per TCC with per-row mini-matrix, default), **Trend** (uPlot
-  line chart of a chosen metric vs commit index for the top-3
-  most-common `(computer, threads, run_optional)` config tuples),
-  **Submissions** (per-instance table for a chosen computer,
-  reusing the test-on-commit instances table). Headline carries a
-  status sentence with a test-case picker + branch picker; below
-  it a "passage strip" — wider sibling of the test-on-commit
-  subway map covering ~60 commits to expose regression points at
-  a glance. See "test_cases#show design notes" below.
+- `test_cases#show` (test-across-commits) — **landed.** Three
+  tabs sharing the test-on-commit visual frame: **History** (one
+  row per TCC with per-row mini-matrix + popover with degradation
+  metrics, default), **Trend** (uPlot line chart of a chosen
+  metric vs commit index for the top-3 most-common
+  `(computer, threads, run_optional)` config tuples + status strip
+  + vertical anchor marker), **Submissions** (per-instance table
+  for a chosen computer over the window — picker auto-selects the
+  most-active). All three tabs share a single time-window toolbar
+  (anchor commit + window size 25/50/100/250 + pan ←/→) and a
+  collapsed-tier headline. Re-centering on a clicked Trend point
+  or a History-row crosshair pivots the whole page. URL contract:
+  `?tab=&center=&window=&metric=&computer=`. See
+  "test_cases#show design notes" below.
 - `computers#index` and `computers#show`
 - `test_instances#index`, `test_instances#search`,
   `test_instances#show`

@@ -19,7 +19,8 @@ module TestCasesHelper
       tab:       @active_tab,
       window:    @window_size,
       center:    params[:center].presence,
-      metric:    params[:metric].presence
+      metric:    params[:metric].presence,
+      computer:  params[:computer].presence
     }
     test_case_path(base.merge(overrides).compact)
   end
@@ -78,6 +79,66 @@ module TestCasesHelper
     when 3  then "mixed"
     else         "untested"
     end
+  end
+
+  # Build the payload for the Submissions tab. Reads off the
+  # already-loaded entries (TestCase#commit_window eager-loads the
+  # full instance/inlist/computer chain), so this adds no queries.
+  #
+  # Returns:
+  #
+  #   {
+  #     chosen:     <Computer or nil>,
+  #     options:    [{ name:, count: }, ...]  # sorted by count desc
+  #     instances:  [<TestInstance>, ...]      # sorted by commit_time desc
+  #     commit_for: { instance_id => Commit }  # for the Commit column
+  #   }
+  #
+  # `chosen` defaults to the computer with the most instances in
+  # the window when `chosen_name` is nil. When `chosen_name` is set
+  # but doesn't appear in the window, returns chosen: nil + empty
+  # instances so the view can render a helpful "no instances from
+  # X in this window" empty state.
+  def submissions_payload(entries, chosen_name: nil)
+    options_by_name = {}
+    instance_to_commit = {}
+
+    entries.each do |entry|
+      tcc = entry[:tcc]
+      next unless tcc
+      tcc.test_instances.each do |ti|
+        name = ti.computer&.name
+        next unless name
+        options_by_name[name] ||= { name: name, count: 0, computer: ti.computer }
+        options_by_name[name][:count] += 1
+        instance_to_commit[ti.id] = entry[:commit]
+      end
+    end
+
+    options = options_by_name.values.sort_by { |o| [-o[:count], o[:name]] }
+    return { chosen: nil, options: options, instances: [], commit_for: {} } if options.empty?
+
+    chosen_meta = chosen_name.present? ? options.find { |o| o[:name] == chosen_name } : options.first
+    return { chosen: nil, options: options, instances: [], commit_for: instance_to_commit } unless chosen_meta
+
+    target_name = chosen_meta[:name]
+    matching_instances = entries.flat_map do |entry|
+      tcc = entry[:tcc]
+      next [] unless tcc
+      tcc.test_instances.select { |ti| ti.computer&.name == target_name }
+    end
+
+    sorted = matching_instances.sort_by do |ti|
+      commit = instance_to_commit[ti.id]
+      [-(commit&.commit_time&.to_i || 0), -(ti.created_at&.to_i || 0)]
+    end
+
+    {
+      chosen:     chosen_meta[:computer],
+      options:    options,
+      instances:  sorted,
+      commit_for: instance_to_commit
+    }
   end
 
   # Build the popover payload for the History tab matrix. One entry

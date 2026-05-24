@@ -35,13 +35,16 @@ Before doing non-trivial work, read the appropriate doc:
   — plan for the Phase 4 frontend rewrite (Bootstrap+jQuery →
   Tailwind+Turbo+Stimulus, plus port of the design in
   `docs/design_handoff_mesa_testhub/`). Spans multiple sessions on
-  the `frontend-tailwind` branch. **Steps 0–7 are landed** —
-  Tailwind + Turbo + Stimulus + importmap are installed alongside
-  the legacy stack; the 404 page, login, the commits index
-  (`/:branch/commits`), the commit detail page
-  (`/:branch/commits/:sha`), and the test-on-commit page
-  (`/:branch/commits/:sha/test_cases/:module/:test_case`) all
-  render through the modern layout.
+  the `frontend-tailwind` branch. **Steps 0–7 are landed**, plus
+  Step 8's first wing-it page — `test_cases#show` (test history
+  across commits) — Tailwind + Turbo + Stimulus + importmap are
+  installed alongside the legacy stack; the 404 page, login, the
+  commits index (`/:branch/commits`), the commit detail page
+  (`/:branch/commits/:sha`), the test-on-commit page
+  (`/:branch/commits/:sha/test_cases/:module/:test_case`), and the
+  test-case history page
+  (`/:branch/test_cases/:module/:test_case`) all render through
+  the modern layout.
   Commit detail has four tabs (Summary / Computers / Diff vs
   last pass / Build logs) — the original Tests tab was folded
   into Summary when review flagged it as redundant with the
@@ -118,9 +121,43 @@ Before doing non-trivial work, read the appropriate doc:
   top-right) on the right. Subway stations link to that
   commit's test-on-commit page and reveal popovers (SHA ·
   age · message · author · this test's status) via the
-  shared `subway_map_controller.js`. Step 8 (wing-it for
-  the un-designed pages) is the next outstanding chunk; the
-  page priority list is at the bottom of
+  shared `subway_map_controller.js`. The test-case history page
+  (`test_cases#show`) shares the headline + tab-strip frame from
+  the test-on-commit page but adds a shared time-window toolbar
+  (anchor commit picker with SHA-paste + date-snap-to-nearest +
+  jump-to-HEAD shortcut, window size 25/50/100/250, ← Newer /
+  Older → pan by half-window) that drives all three tabs:
+  **History** (default — per-commit rows with status pills + a
+  per-row computer ribbon that reuses the matrix cell encoding +
+  popover with degradation metrics like steps/retries/log E err
+  on a docked rail at xl+), **Trend** (uPlot line chart of a
+  chosen metric vs commit *index* — equally spaced — for the
+  top-3 most-common `(computer, threads, run_optional)` config
+  tuples with a status strip drawn at the bottom of the plot
+  area and a brand-colored vertical anchor marker; click any
+  point re-centers the toolbar), and **Submissions** (per-
+  instance table for a chosen computer over the window — picker
+  auto-selects the most-active in the window). The toolbar's
+  URL params (`?center=&window=&metric=&computer=`) all
+  round-trip via the `toolbar_path` helper so pan / tab switch /
+  metric change preserve everything else.
+
+  `TestCase#commit_window` and `#trend_payload` plus the
+  TestCasesHelper's `submissions_payload` /
+  `history_popover_data` / `history_matrix_payload` build all
+  per-tab data off ONE eagerly-loaded TCC scope
+  (`test_instances: [:computer, { instance_inlists: :inlist_data }]`)
+  so a 100-commit window completes in ~25 queries.
+
+  Stimulus controllers added for this page:
+  `trend_chart_controller.js` (uPlot wrapper that lives inside
+  initially-hidden tab panels — uses a MutationObserver on the
+  panel's `hidden` attribute to `setSize` once visible, since
+  uPlot bakes width at construction time).
+
+  Step 8's remaining wing-it pages (`computers#*`,
+  `test_instances#*`, admin) are still outstanding; the page
+  priority list is at the bottom of
   [`docs/frontend-modernization.md`](docs/frontend-modernization.md).
 
 When changes invalidate the plan, update the relevant doc in the same commit

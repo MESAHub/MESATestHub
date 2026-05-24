@@ -44,6 +44,12 @@ class TestCasesController < ApplicationController
     requested_metric = params[:metric].to_s.presence
     valid_ids = @trend_payload[:metrics].map { |m| m[:id] }
     @selected_metric = valid_ids.include?(requested_metric) ? requested_metric : @trend_payload[:default_metric]
+
+    # Submissions tab — picks one computer's instances out of the
+    # window. Same eager-loaded data as History + Trend, so no
+    # new queries.
+    @submissions_payload = helpers.submissions_payload(@window[:entries],
+                                                       chosen_name: params[:computer].presence)
   end
 
   private
