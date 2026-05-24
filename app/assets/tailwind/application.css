@@ -198,6 +198,23 @@
   .mesa-modern .mesa-btn-block {
     @apply w-full;
   }
+
+  /* HTML5 <dialog>. `dialog.showModal()` would normally drop the
+     element into the top layer with centered positioning, but
+     browsers vary on whether they add a visible backdrop or
+     reset the off-screen baseline styles a dialog inherits. Pin
+     position to viewport-centered and give the backdrop our
+     standard scrim so the modal reads as a true overlay rather
+     than as a stray card glued to a corner. */
+  .mesa-modern dialog[open] {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+  }
+  .mesa-modern dialog::backdrop {
+    background-color: rgba(15, 18, 25, 0.55);
+    backdrop-filter: blur(2px);
+  }
 }
 
 /* uPlot v1.6.x — minimal layout CSS, hand-written subset.

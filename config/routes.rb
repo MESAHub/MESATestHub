@@ -123,6 +123,15 @@ Rails.application.routes.draw do
       to: 'computers#test_instances_index',
       as: 'user_computer_test_instances'
 
+  # Bulk-delete a set of submissions from a computer. Drives the
+  # "Delete selected" flow on computers#show. Authorization (user
+  # owns the computer, or admin) lives in the controller. See
+  # ComputersController#destroy_submissions for the IDOR-safe
+  # scoping and the BULK_DESTROY_LIMIT cap.
+  delete 'users/:user_id/computers/:id/submissions',
+         to: 'computers#destroy_submissions',
+         as: 'destroy_computer_submissions'
+
   # global list of all computers (admins only)
   get 'all_computers', to: 'computers#index_all', as: 'all_computers'
 

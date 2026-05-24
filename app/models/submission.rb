@@ -11,6 +11,27 @@ class Submission < ApplicationRecord
 
   paginates_per 25
 
+  # Inclusive of both endpoints. Either bound is optional — pass nil
+  # to leave that end open. Used by the computers#show submissions
+  # toolbar so users can narrow down a bad batch by submission time
+  # before deleting.
+  scope :submitted_between, ->(from, to) {
+    scope = all
+    scope = scope.where("submissions.created_at >= ?", from) if from
+    scope = scope.where("submissions.created_at <= ?", to) if to
+    scope
+  }
+
+  # Prefix-match a (partial) commit SHA — accepts 4+ characters so
+  # the typical short-SHA paste (`abc1234`) works without forcing
+  # the full 40-character hex. Lowercased for case-insensitive
+  # match (SHAs are stored lowercase).
+  scope :for_commit_sha, ->(sha) {
+    sha = sha.to_s.strip.downcase
+    return all if sha.blank?
+    joins(:commit).where("commits.sha LIKE ?", "#{sha}%")
+  }
+
 
   # syntactic sugar to determine if the submission is empty
   def empty?

@@ -87,30 +87,106 @@
           %dt.text-fg-subtle Since
           %dd.text-fg-muted{ class: "text-[12px]" }= format_date(@earliest)
 
-  -# Submissions table card.
-  - if @submissions.empty?
-    .rounded-lg.border.border-border.bg-bg-elev.p-10.text-center.text-fg-muted.text-sm{ style: "box-shadow: var(--shadow-card-sm);" }
-      No submissions from
-      %span.font-mono.text-fg= @computer.name
-      yet.
-  - else
-    .rounded-lg.border.border-border.bg-bg-elev.overflow-hidden{ style: "box-shadow: var(--shadow-card-sm);" }
+  -# Submissions card. The whole thing — header band, filter form,
+  -# selection bar, table, modal — sits under a single
+  -# `submission-selection` Stimulus controller scope so the
+  -# checkbox state, the bar, and the modal all read from the same
+  -# target set. The filter form is a separate inner form (GET to
+  -# the same URL); the modal contains its own DELETE form so the
+  -# table itself isn't wrapped in a form at all (avoids nesting
+  -# issues with the pagination links that live below it).
+  - filter_active = @filter[:from] || @filter[:to] || @filter[:sha]
+  - total_matching = @submissions_scope.unscope(:order, :limit, :offset).count
+  - visible_count = @submissions.size
+  - can_delete = self_or_admin?
+  - has_no_submissions_at_all = !filter_active && @computer.submissions.none?
 
-      -# Header band — title + page-info.
-      .flex.flex-wrap.items-baseline.justify-between.gap-3.px-4.py-3.border-b.border-border-subtle
-        %div
-          %span.mesa-label Submissions
-          %span.ml-2.text-fg{ class: "text-[14px]" }
-            = pluralize(@submissions.total_count, "submission")
+  .rounded-lg.border.border-border.bg-bg-elev.overflow-hidden{ style: "box-shadow: var(--shadow-card-sm);", data: ({ controller: "submission-selection", submission_selection_total_matching_value: total_matching, submission_selection_visible_count_value: visible_count } if can_delete) }
+
+    -# Header band — title + page-info.
+    .flex.flex-wrap.items-baseline.justify-between.gap-3.px-4.py-3.border-b.border-border-subtle
+      %div
+        %span.mesa-label Submissions
+        %span.ml-2.text-fg{ class: "text-[14px]" }
+          = pluralize(total_matching, "submission")
+          - if filter_active
+            matching the filter
+          - else
             on
             %span.font-mono= @computer.name
+      - if @submissions.total_pages > 1
         %span.text-fg-subtle.tabular-nums{ class: "text-[11px]" }
           = page_entries_info @submissions
 
+    -# Filter toolbar. GET form — submits to the same URL with the
+    -# active filter params. Three inputs: from / to / sha. The
+    -# pickers stay quiet when empty (no labels); on focus the
+    -# placeholder makes their intent clear. "Reset" only appears
+    -# when at least one filter is active.
+    = form_tag user_computer_path(@user, @computer), method: :get, class: "flex flex-wrap items-end gap-2 px-4 py-3 border-b border-border-subtle bg-bg-subtle/40" do
+      %div
+        %label.mesa-label.mb-1{ for: "filter-from" } From
+        = date_field_tag :from, @filter[:from_raw],
+                         id: "filter-from",
+                         class: "mesa-input",
+                         style: "width: 150px; padding: 4px 8px; font-size: 12px;"
+      %div
+        %label.mesa-label.mb-1{ for: "filter-to" } To
+        = date_field_tag :to, @filter[:to_raw],
+                         id: "filter-to",
+                         class: "mesa-input",
+                         style: "width: 150px; padding: 4px 8px; font-size: 12px;"
+      %div
+        %label.mesa-label.mb-1{ for: "filter-sha" } Commit SHA
+        = text_field_tag :sha, @filter[:sha_raw],
+                         id: "filter-sha",
+                         placeholder: "abc1234",
+                         class: "mesa-input font-mono",
+                         style: "width: 180px; padding: 4px 8px; font-size: 12px;"
+      .flex.items-center.gap-2
+        %button.mesa-btn.mesa-btn-primary{ type: "submit", style: "padding: 5px 12px; font-size: 12px;" } Apply
+        - if filter_active
+          = link_to "Reset", user_computer_path(@user, @computer),
+                   class: "text-fg-muted hover:text-fg no-underline",
+                   style: "font-size: 12px;"
+
+    -# Selection bar — appears when at least one row is checked.
+    -# Only rendered for users who can delete; otherwise dead UI.
+    - if can_delete
+      .flex.flex-wrap.items-center.justify-between.gap-3.px-4.py-2.border-b.border-border-subtle.bg-brand-soft.text-brand-soft-text{ hidden: true, data: { submission_selection_target: "selectionBar" } }
+        .flex.flex-wrap.items-center.gap-3{ class: "text-[12px]" }
+          %strong.tabular-nums{ data: { submission_selection_target: "count" } } 0
+          %span selected
+          - if total_matching > visible_count
+            %a{ href: "#", hidden: true, class: "underline hover:no-underline", data: { submission_selection_target: "allMatchingToggle", action: "click->submission-selection#selectAllMatching" } }
+              Select all
+              %span.tabular-nums= total_matching
+              matching the filter
+        .flex.items-center.gap-2
+          %button{ type: "button", class: "mesa-btn", style: "padding: 4px 10px; font-size: 12px; color: var(--color-danger-soft-text); border-color: var(--color-danger-soft);", data: { action: "click->submission-selection#openConfirm" } }
+            = mesa_icon(:x, size: 11)
+            %span Delete selected
+          %a.text-fg-muted.hover:text-fg.no-underline{ href: "#", class: "text-[12px]", data: { action: "click->submission-selection#clear" } } Clear
+
+    -# Table — or empty state.
+    - if has_no_submissions_at_all
+      .px-4.py-10.text-center.text-fg-muted.text-sm
+        No submissions from
+        %span.font-mono.text-fg= @computer.name
+        yet.
+    - elsif @submissions.empty?
+      .px-4.py-10.text-center.text-fg-muted.text-sm
+        No submissions match the current filter.
+        = link_to "Reset", user_computer_path(@user, @computer),
+                 class: "text-brand no-underline hover:underline"
+    - else
       %div{ style: "overflow-x: auto;" }
         %table.w-full.border-collapse{ style: "min-width: 820px;" }
           %thead.bg-bg-subtle
             %tr.text-fg-muted{ class: "text-[11px] uppercase tracking-wide" }
+              - if can_delete
+                %th.px-3.py-2.font-medium.border-b.border-border-subtle{ style: "width: 28px;" }
+                  %input{ type: "checkbox", "aria-label": "Select all submissions on this page", data: { submission_selection_target: "allCheckbox", action: "change->submission-selection#toggleAll" } }
               %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Submitted
               %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Commit
               %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Build
@@ -122,7 +198,10 @@
             - @submissions.each do |submission|
               - count = @counts[submission]
               - sole = count == 1 ? submission.test_instances.first&.test_case : nil
-              %tr.border-b.border-border-subtle.align-middle.hover:bg-bg-subtle{ class: "[&>td]:py-2" }
+              %tr.border-b.border-border-subtle.align-middle.hover:bg-bg-subtle{ class: "[&>td]:py-2", data: ({ submission_selection_target: "row" } if can_delete) }
+                - if can_delete
+                  %td.px-3
+                    %input{ type: "checkbox", value: submission.id, "aria-label": "Select submission #{submission.id}", data: { submission_selection_target: "checkbox", action: "change->submission-selection#toggle" } }
                 %td.px-3.text-fg-muted.whitespace-nowrap{ class: "text-[12px] tabular-nums" }
                   = format_time(submission.created_at)
                 %td.px-3.font-mono.whitespace-nowrap{ class: "text-[12px]" }
@@ -163,6 +242,42 @@
                   = submission.sdk_version.presence || content_tag(:span, "—", class: "text-fg-subtle")
                 %td.px-3.font-mono.text-fg-muted.whitespace-nowrap{ class: "text-[12px]" }
                   = submission.math_backend.presence || content_tag(:span, "—", class: "text-fg-subtle")
+
+    -# Confirm-delete modal. Rendered alongside the table inside
+    -# the same Stimulus scope so the controller can wire its
+    -# `idsContainer` target to inputs that ultimately POST.
+    -# Uses HTML5 `<dialog>` — `showModal()` gives a free backdrop,
+    -# ESC handling, and focus trap on modern browsers.
+    - if can_delete
+      %dialog.rounded-lg.border.border-border.bg-bg-elev.p-0{ style: "box-shadow: var(--shadow-card-lg); max-width: 480px;", data: { submission_selection_target: "modal", action: "click->submission-selection#backdropClose" } }
+        .p-6
+          %h3.text-fg.font-semibold{ class: "text-[16px]" }
+            Delete
+            %span.tabular-nums{ data: { submission_selection_target: "count" } } 0
+            submissions?
+          %p.mt-3.text-fg-muted{ class: "text-[13px]" }
+            This permanently removes
+            %strong{ data: { submission_selection_target: "modalSummary" } } 0 selected submissions
+            from
+            %span.font-mono.text-fg= @computer.name
+            along with every test instance and inlist record they reference.
+            %strong This cannot be undone.
+          .mt-6.flex.items-center.justify-end.gap-2
+            %button.mesa-btn{ type: "button", style: "padding: 6px 14px; font-size: 13px;", data: { action: "click->submission-selection#closeConfirm" } } Cancel
+            = form_tag destroy_computer_submissions_path(user_id: @user.id, id: @computer.id), method: :delete, class: "inline" do
+              -# Preserve active filter so the post-delete redirect
+              -# lands on the same view the user was looking at.
+              - if @filter[:from_raw].present?
+                = hidden_field_tag :from, @filter[:from_raw]
+              - if @filter[:to_raw].present?
+                = hidden_field_tag :to, @filter[:to_raw]
+              - if @filter[:sha_raw].present?
+                = hidden_field_tag :sha, @filter[:sha_raw]
+              %div{ data: { submission_selection_target: "idsContainer" } }
+              %button{ type: "submit", class: "mesa-btn", style: "padding: 6px 14px; font-size: 13px; background: var(--color-danger); border-color: var(--color-danger); color: var(--color-danger-fg);" }
+                Delete
+                %span.tabular-nums{ data: { submission_selection_target: "count" } } 0
+                submissions
 
   -# Pagination.
   - if @submissions.total_pages > 1
