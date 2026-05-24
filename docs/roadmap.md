@@ -17,8 +17,8 @@ phase as work lands.
 
 ## Phase 1 — Test foundation
 
-**Branch:** `tests/api-foundation` (active)
-**Status:** in progress
+**Branch:** `tests/api-foundation`
+**Status:** complete (then continuously grown alongside later phases)
 **Estimate:** 1–2 days
 
 The goal is a *small* characterization suite, not comprehensive coverage. ~12
@@ -39,7 +39,7 @@ request specs replace it.
 ## Phase 1.5 — Drop CoffeeScript
 
 **Branch:** `frontend/drop-coffeescript`
-**Status:** in progress
+**Status:** complete
 **Estimate:** 0.5–1 day
 
 Pulled forward from Phase 4 (frontend modernization) to de-risk the Rails 8
@@ -149,7 +149,10 @@ Suite grew from 78 to 158 specs over this phase.
 ## Phase 4 — Frontend modernization
 
 **Branch:** `frontend-tailwind` (active)
-**Status:** in progress — Steps 0–5 complete + Step 6 (commit detail) mostly landed; Tests-tab/Computers-tab polish and Step 7 still ahead
+**Status:** in progress — Steps 0–7 complete + Step 8's first wing-it page
+(`test_cases#show`, with History / Trend / Submissions tabs over a shared
+anchor+window toolbar). Step 8 remaining: `computers#*`, `test_instances#*`,
+admin pages.
 **Estimate:** 4–8 days (incremental, page by page; less now that
 CoffeeScript was pulled forward to Phase 1.5)
 
@@ -239,12 +242,11 @@ conversion. Captured here so they don't get lost.
   documented `version` option is still commented out in the model
   (no `mesa_version` column exists any more) — the help text should
   drop that bullet during Phase 4.
-- **Column visibility on `test_case_commits#show` does not persist across
-  reloads.** The JS writes a cookie when a column is toggled, but on next
-  load the columns reset to the default set. Either the cookie name doesn't
-  match what the server reads, or the server never reads it. Phase 3 or
-  Phase 4 candidate. Fixing this is also a good opportunity to migrate the
-  state from cookies to URL params or localStorage.
+- ~~**Column visibility on `test_case_commits#show` does not persist across
+  reloads.**~~ Fixed by the Phase 4 / Step 7 port — the modern test-on-commit
+  page persists its column picker state to
+  `localStorage["mesa.test_on_commit.columns.v1"]` instead of relying on
+  the legacy cookie machinery.
 - **`#passing` / `#missing` collapse animation feels clunky.** Expansion is
   instantaneous, followed by a smooth scroll — disorienting. Bootstrap 4's
   `.collapse` plugin should do a smooth transition; needs investigating

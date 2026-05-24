@@ -138,7 +138,7 @@ Before doing non-trivial work, read the appropriate doc:
   point re-centers the toolbar), and **Submissions** (per-
   instance table for a chosen computer over the window — picker
   auto-selects the most-active in the window). The toolbar's
-  URL params (`?center=&window=&metric=&computer=`) all
+  URL params (`?tab=&center=&window=&metric=&computer=`) all
   round-trip via the `toolbar_path` helper so pan / tab switch /
   metric change preserve everything else.
 
@@ -172,12 +172,15 @@ that makes the change.
   from the original plan — Rack 3's `:unprocessable_entity` →
   `:unprocessable_content` rename, `show_exceptions` becoming an enum,
   and the gems that needed bumps or removal for the resolver to settle.
-- **The test suite is small but real.** 180 specs (request + model + job)
-  cover auth, submissions API, GitHub webhook (now async via
-  `BranchSyncJob`, payload-driven), branch deletion, the Octokit
-  middleware wiring, `TestInstance.query`, `Commit#computer_info`, the
-  Phase 3.5 ingestion + topology + ordering + reconcile path, and
-  high-traffic page renders. They are the regression safety net for
+- **The test suite is small but real.** 227 specs (request + model +
+  helper + job) cover auth, submissions API, GitHub webhook (now
+  async via `BranchSyncJob`, payload-driven), branch deletion, the
+  Octokit middleware wiring, `TestInstance.query`,
+  `Commit#computer_info`, the Phase 3.5 ingestion + topology +
+  ordering + reconcile path, the test_cases#show branch-scoped
+  helpers (`#commit_window`, `#status_summary_for`,
+  `#trend_payload`) + the `TestCasesHelper#submissions_payload`
+  picker logic, and high-traffic page renders. They are the regression safety net for
   upcoming work — build on this rather than starting fresh.
 - **No Cucumber.** The old Cucumber suite is preserved at
   `features.deprecated/` and `spec/features.deprecated/`. RSpec request

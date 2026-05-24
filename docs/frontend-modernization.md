@@ -188,7 +188,10 @@ partials). Classification below — anything not listed is implicitly
     (new modern layout; nav drops top-bar branch dropdown in favor of
     the inline branch chip pattern)
 - Step 8, in priority order:
-  - `test_cases/show.html.haml` (test-across-commits)
+  - ~~`test_cases/show.html.haml` (test-across-commits)~~ — landed
+    (Steps 8a–8f; History + Trend + Submissions tabs over a shared
+    anchor+window toolbar; see the "Step 8" / "Pages without
+    designs" sections below for the design notes).
   - `computers/index.html.haml`, `computers/show.html.haml`
   - `computers/test_instances_index.html.haml`
   - `users/index.html.haml`, `users/show.html.haml`,
