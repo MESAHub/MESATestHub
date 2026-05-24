@@ -1,0 +1,96 @@
+-# Passage strip: a wide, low-detail subway map covering the
+-# branch's last PASSAGE_LIMIT commits. Newest-on-left to match the
+-# subway maps elsewhere; each station shows just this test's
+-# status on that commit. Click → jump to the test-on-commit page.
+-# Hover/focus → popover (SHA · age · message · author · status).
+-#
+-# Differences from the test-on-commit `_subway_map`:
+-#   - no focused commit (this page isn't scoped to one)
+-#   - 60 stations vs 5, so no per-station label and tighter
+-#     spacing (14px vs 100px); the strip is a sparkline, not a
+-#     labeled diagram
+-#   - horizontally scrollable on narrow viewports
+-#   - "untested" stations (commit predates the test, or test
+-#     wasn't submitted) render in gray and are non-clickable but
+-#     still hoverable for a "no run on this commit" popover
+-#
+-# Locals:
+-#   entries: array of { commit:, tcc:, status: } hashes, newest first.
+
+- entries = local_assigns.fetch(:entries)
+- if entries.empty?
+  %p.text-fg-subtle{ class: "text-[11px]" } No commits to show.
+- else
+  - station_spacing = 14
+  - pad_x           = 8
+  - panel_h         = 24
+  - center_y        = 12
+  - station_r       = 5
+  - count = entries.size
+  - width = pad_x * 2 + station_spacing * [count - 1, 0].max
+
+  .relative.overflow-x-auto{ data: { controller: "subway-map" } }
+    %svg{ viewBox: "0 0 #{width} #{panel_h}",
+          preserveAspectRatio: "xMinYMid meet",
+          role: "img",
+          "aria-label": "Recent #{count} commits — passage status per commit",
+          class: "block",
+          style: "width: #{width}px; max-width: none; height: #{panel_h}px;" }
+      - if count > 1
+        %line{ x1: pad_x, y1: center_y,
+               x2: pad_x + station_spacing * (count - 1),
+               y2: center_y,
+               stroke: "var(--color-border-strong)",
+               "stroke-width": 1.5 }
+
+      - entries.each_with_index do |entry, i|
+        - commit = entry[:commit]
+        - tcc    = entry[:tcc]
+        - status = entry[:status]
+        - color  = "var(--color-#{tcc_status_token(status)})"
+        - x = pad_x + station_spacing * i
+        - station_title = "#{commit.short_sha} · #{tcc_status_word(status)}"
+        - hover_actions = "mouseenter->subway-map#show mouseleave->subway-map#hide focus->subway-map#show blur->subway-map#hide"
+        - if tcc
+          %a{ href: test_case_commit_path(branch: @selected_branch.name,
+                                          sha: commit.short_sha,
+                                          module: @test_case.module,
+                                          test_case: @test_case.name),
+              data: { commit_id: commit.id, action: hover_actions } }
+            %circle{ cx: x, cy: center_y, r: station_r, fill: color, stroke: "var(--color-bg-elev)", "stroke-width": 1 }
+            %title= station_title
+        - else
+          %g{ tabindex: 0,
+              data: { commit_id: commit.id, action: hover_actions },
+              style: "cursor: default;" }
+            %circle{ cx: x, cy: center_y, r: station_r, fill: color, stroke: "var(--color-bg-elev)", "stroke-width": 1, opacity: 0.55 }
+            %title= station_title
+
+    -# Popover layer. One per station; the controller toggles `hidden`
+    -# via `data-commit-id` lookup. Width is a fixed 240px box, anchored
+    -# by percent of the SVG's natural width so popovers stay aligned
+    -# under horizontal scroll.
+    .pointer-events-none.absolute.inset-0
+      - entries.each_with_index do |entry, i|
+        - commit = entry[:commit]
+        - tcc    = entry[:tcc]
+        - status = entry[:status]
+        - x_pct = ((pad_x + station_spacing * i).to_f / width * 100).round(3)
+        .absolute.z-20.rounded-md.border.border-border.bg-bg-elev.p-2.text-xs{ hidden: true,
+            style: "box-shadow: var(--shadow-card-md); width: 240px; left: #{x_pct}%; top: 100%; transform: translateX(-50%); margin-top: 8px;",
+            data: { subway_map_target: "popover", commit_id: commit.id } }
+          .flex.items-center.gap-2.mb-1.text-fg
+            %span.font-mono.text-brand{ class: "text-[12px]" }= commit.short_sha
+            %span.text-fg-subtle ·
+            %span.text-fg-subtle.tabular-nums{ class: "text-[11px]" }= time_ago_compact(commit.commit_time)
+          .font-medium.text-fg.mb-1.line-clamp-2= commit.message_first_line(80)
+          .flex.items-center.gap-2.text-fg-muted{ class: "text-[11px]" }
+            = commit_avatar(commit.author, size: 16)
+            %span.truncate= commit.author
+          .mt-2.flex.items-center.gap-2
+            %span{ class: "inline-block h-2 w-2 rounded-full #{tcc_status_dot_class(status)}" }
+            %span.text-fg-muted{ class: "text-[11px]" }
+              - if tcc
+                = tcc_status_word(status)
+              - else
+                no run on this commit

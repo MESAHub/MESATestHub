@@ -363,6 +363,142 @@ class TestCase < ApplicationRecord
     version_status(last_version)
   end
 
+  ###############################################
+  # Modern test_cases#show — branch-scoped helpers.
+  #
+  # These are intentionally narrow: they exist to feed the redesigned
+  # page's headline (status sentence + counts), passage strip (~60
+  # commit overview), and History tab (paginated TCC list). The legacy
+  # `#find_test_case_commits` / `#find_instances` pair stays around
+  # for the legacy show until that file is replaced; nothing here
+  # shares state with it.
+  ###############################################
+
+  # Worst-first headline status word + Tailwind text-color class for
+  # the headline sentence ("`black_hole` is **passing** on main").
+  # The classification follows the most-recent TCC on the branch
+  # rather than rolling up everything in the date window — the user
+  # cares "what's the current state?", not "what's the average."
+  HEADLINE_STATUSES = {
+    1  => ["failing",  "text-danger-soft-text"],
+    3  => ["mixed",    "text-warning-soft-text"],
+    2  => ["checksum-divergent", "text-warning-soft-text"],
+    0  => ["passing",  "text-success-soft-text"],
+    -1 => ["untested", "text-fg-muted"]
+  }.freeze
+
+  # Pull together everything the modern show page's headline + Tier 2
+  # summary need in one round trip. Returns:
+  #
+  #   {
+  #     counts:        { passing:, failing:, mixed:, checksum:, untested:, total: },
+  #     last_run:      TestCaseCommit | nil,   # most-recent TESTED TCC (status != -1)
+  #     last_passing:  TestCaseCommit | nil,   # most-recent fully-passing TCC
+  #     pending_on_head: TestCaseCommit | nil, # untested TCC newer than last_run
+  #     headline_word: "passing" | "failing" | ... | "never run",
+  #     headline_class: Tailwind text-color class
+  #   }
+  #
+  # An "untested" TCC is one that exists in the DB but has no
+  # submitted instances yet — `status = -1`. It doesn't count as a
+  # "run" for headline purposes: the user wants the state of the
+  # most recent commit *that has results*. When a newer commit
+  # exists but is still pending, `pending_on_head` surfaces that
+  # separately so the subline can say "Pending on aa27a08."
+  #
+  # Heavy queries are scoped through the branch's reachable commits
+  # via `branch.ordered_commits.pluck(:id)` so divergent branches
+  # don't pollute each other's counts.
+  def status_summary_for(branch)
+    commit_ids = branch.ordered_commits.pluck(:id)
+    scope = test_case_commits.where(commit_id: commit_ids)
+
+    raw_counts = scope.group(:status).count
+    counts = {
+      passing:  raw_counts[0].to_i,
+      failing:  raw_counts[1].to_i,
+      checksum: raw_counts[2].to_i,
+      mixed:    raw_counts[3].to_i,
+      untested: raw_counts[-1].to_i
+    }
+    counts[:total] = counts.values.sum
+
+    last_run = scope.joins(:commit)
+                    .where.not(status: -1)
+                    .reorder("commits.commit_time DESC")
+                    .first
+
+    last_passing = scope.joins(:commit)
+                        .where(status: 0)
+                        .reorder("commits.commit_time DESC")
+                        .first
+
+    # If newer commits exist that haven't been tested yet, surface
+    # the most recent one so the user knows the chart is waiting on
+    # results. Skip when last_run is nil — there's no "newer than"
+    # comparison to make.
+    pending_on_head = if last_run
+                        scope.joins(:commit)
+                             .where(status: -1)
+                             .where("commits.commit_time > ?", last_run.commit.commit_time)
+                             .reorder("commits.commit_time DESC")
+                             .first
+                      end
+
+    if last_run
+      word, klass = HEADLINE_STATUSES.fetch(last_run.status, HEADLINE_STATUSES[-1])
+    else
+      word, klass = ["never run", "text-fg-muted"]
+    end
+
+    {
+      counts: counts,
+      last_run: last_run,
+      last_passing: last_passing,
+      pending_on_head: pending_on_head,
+      headline_word: word,
+      headline_class: klass
+    }
+  end
+
+  # Ordered list of the `limit` most recent commits on `branch`, each
+  # paired with its TestCaseCommit (or nil if this test wasn't run on
+  # that commit). Newest first — matches the existing subway-map
+  # convention so the passage strip reads left-to-right as
+  # newest-to-oldest.
+  #
+  # Two queries: one for the commit window, one for the matching
+  # TCCs. The view layer treats nil TCCs as "untested" stations so
+  # the strip stays contiguous even on commits that pre-date this
+  # test case.
+  def passage_strip_window(branch, limit: 60)
+    commits = branch.ordered_commits.limit(limit).to_a
+    return [] if commits.empty?
+
+    tccs_by_commit = test_case_commits
+                       .where(commit_id: commits.map(&:id))
+                       .index_by(&:commit_id)
+
+    commits.map do |commit|
+      tcc = tccs_by_commit[commit.id]
+      { commit: commit, tcc: tcc, status: tcc&.status || -1 }
+    end
+  end
+
+  # Paginated TCCs for the History tab. Newest commit first; eager
+  # loads everything the per-row mini-matrix needs (commit + test
+  # instances + their computers) so the table render is one
+  # query-per-association rather than N+1 per row.
+  def history_window(branch, page: 1, per: 25)
+    commit_ids = branch.ordered_commits.pluck(:id)
+    test_case_commits
+      .includes(:commit, test_instances: :computer)
+      .where(commit_id: commit_ids)
+      .joins(:commit)
+      .reorder("commits.commit_time DESC")
+      .page(page).per(per)
+  end
+
   # ease transition from versions being hard coded to using new Version model
   def update_version_created
     return if version_id

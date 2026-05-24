@@ -1,0 +1,159 @@
+-# History tab — paginated TCCs with a per-row computer-cell ribbon.
+-#
+-# Per-row layout (one CSS grid):
+-#   identity column (360px): status dot + SHA pill + status word +
+-#                            commit message + author + age
+-#   then one cell per computer (22px each) showing this commit's
+-#                            (test, computer) status via the shared
+-#                            `_matrix_cell_visual` partial
+-#
+-# Filter axes (client-side, via the `instance-filter` controller):
+-#   1. Status segment (All / Failing / Mixed / Passing / Untested)
+-#   2. Free-text search across "<sha> <message> <author>"
+-#
+-# Pagination: Kaminari, 25 rows per page (TestCasesController::HISTORY_PER_PAGE).
+
+- if @history_rows.nil? || @history_rows.empty?
+  .rounded-lg.border.border-border.bg-bg-elev.p-10.text-center.text-fg-muted.text-sm{ style: "box-shadow: var(--shadow-card-sm);" }
+    No commits on
+    %span.font-mono.text-fg= @selected_branch.name
+    have a record of
+    %span.font-mono.text-fg= "#{@test_case.module}/#{@test_case.name}"
+    yet.
+- else
+  - payload = history_matrix_payload(@history_rows)
+  - columns = payload[:columns]
+  - cells_by_tcc = payload[:cells]
+
+  - status_specs = history_status_specs(@history_rows)
+  - col_template = "360px repeat(#{[columns.size, 1].max}, 22px)"
+
+  .rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);",
+                                                data: { controller: "instance-filter",
+                                                        instance_filter_status_value: "all",
+                                                        instance_filter_query_value: "" } }
+
+    -# Toolbar.
+    .flex.flex-wrap.items-center.gap-2.px-4.py-3.border-b.border-border-subtle
+      %strong.text-fg.text-sm
+        - if @history_rows.respond_to?(:total_count)
+          = pluralize(@history_rows.total_count, "commit")
+        - else
+          = pluralize(@history_rows.size, "commit")
+
+      .relative
+        %span.absolute.inset-y-0.left-0.flex.items-center.pl-2.text-fg-subtle{ "aria-hidden": "true" }
+          = mesa_icon(:search, size: 12)
+        %input{ type: "search",
+                placeholder: "Filter by SHA, message, or author…",
+                "aria-label": "Filter history",
+                class: "rounded-md border border-border bg-bg-elev pl-7 pr-2 py-1 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-brand",
+                style: "width: 280px;",
+                data: { instance_filter_target: "search",
+                        action: "input->instance-filter#search" } }
+
+      .inline-flex.rounded-md.border.border-border.bg-bg-elev.p-0.5.gap-0.5
+        - status_specs.each do |id, label, count, dot|
+          - on = (id == "all")
+          %button{ type: "button",
+                   "aria-pressed": on.to_s,
+                   class: "inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs font-medium cursor-pointer transition-colors #{on ? 'bg-brand-soft text-brand-soft-text' : 'text-fg-muted hover:bg-bg-muted'}",
+                   data: { instance_filter_target: "statusChip",
+                           status: id,
+                           action: "click->instance-filter#selectStatus" } }
+            - if dot
+              %span{ class: "inline-block h-1.5 w-1.5 rounded-full #{dot}" }
+            %span= label
+            %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= count
+
+      .grow
+
+      - if @history_rows.respond_to?(:total_pages) && @history_rows.total_pages > 1
+        %span.text-fg-subtle.tabular-nums{ class: "text-[11px]" }
+          = "page #{@history_rows.current_page} of #{@history_rows.total_pages}"
+
+    -# Matrix body.
+    %div{ style: "overflow-x: auto;" }
+      .px-4.py-3{ style: "width: max-content; min-width: 100%;" }
+        .grid.gap-1{ style: "grid-template-columns: #{col_template}; align-items: end;" }
+          -# Column headers (identity column blank; computer names rotated).
+          %span{ style: "height: 90px;" } &nbsp;
+          - if columns.empty?
+            %span.text-fg-subtle{ class: "text-[10px]" } &nbsp;
+          - else
+            - columns.each do |name|
+              - display = name.length > 14 ? "#{name[0, 13]}…" : name
+              %span.font-mono.text-fg-subtle.justify-self-center.overflow-hidden{
+                class: "text-[10px]",
+                style: "writing-mode: vertical-rl; transform: rotate(180deg); height: 90px; line-height: 22px;",
+                title: name }
+                = display
+
+        -# Data rows.
+        .grid.gap-1.mt-1{ style: "grid-template-columns: #{col_template};" }
+          - @history_rows.each do |tcc|
+            - status_word, status_class = history_row_status(tcc.status)
+            - status_filter = case tcc.status when 0 then "passing" when 1 then "failing" when 2 then "checksum" when 3 then "mixed" else "untested" end
+            - blob = [tcc.commit.short_sha, tcc.commit.message_first_line(120), tcc.commit.author].join(" ").downcase
+            %div.contents{ data: { instance_filter_target: "row",
+                                    row_status: status_filter,
+                                    row_search: blob } }
+              -# Identity column — SHA pill (worst-first colored),
+              -# status word, message + author + age on a second line.
+              .min-w-0.py-1
+                .flex.items-center.gap-2.min-w-0
+                  %span{ class: "inline-block h-2 w-2 rounded-full shrink-0 #{tcc_status_dot_class(tcc.status)}",
+                         title: status_word }
+                  = link_to tcc.commit.short_sha,
+                           test_case_commit_path(branch: @selected_branch.name,
+                                                 sha: tcc.commit.short_sha,
+                                                 module: @test_case.module,
+                                                 test_case: @test_case.name),
+                           class: "font-mono font-semibold text-brand no-underline hover:underline shrink-0",
+                           style: "font-size: 12px;"
+                  %span.font-medium.shrink-0{ class: "text-[11px] #{status_class}" }= status_word
+                  %span.truncate.text-fg{ class: "text-[12px]" }= tcc.commit.message_first_line(120)
+                .flex.items-center.gap-2.mt-0.5.text-fg-subtle{ class: "text-[11px]" }
+                  %span= tcc.commit.author
+                  %span.text-fg-subtle ·
+                  %span.tabular-nums= time_ago_compact(tcc.commit.commit_time)
+
+              -# Per-computer cells.
+              - if columns.empty?
+                %span.text-fg-subtle &nbsp;
+              - else
+                - row_cells = cells_by_tcc[tcc.id] || {}
+                - columns.each do |name|
+                  = render "commits/matrix_cell_visual", cell: row_cells[name], size: 22
+
+    -# Empty state when filters knock everything out.
+    .px-4.py-8.text-center.text-fg-subtle.text-sm{ hidden: true, data: { instance_filter_target: "empty" } }
+      No commits match the current filters.
+
+    -# Pagination footer — minimal prev/next + page indicator, since
+    -# the legacy `_paginator.html.haml` is Bootstrap-classed and the
+    -# modern layout doesn't load Bootstrap. Single-page result skips
+    -# the whole footer.
+    - if @history_rows.respond_to?(:total_pages) && @history_rows.total_pages > 1
+      .px-4.py-3.border-t.border-border-subtle.flex.items-center.justify-between.text-fg-muted{ class: "text-[12px]" }
+        - prev_page = @history_rows.current_page > 1 ? @history_rows.current_page - 1 : nil
+        - next_page = @history_rows.current_page < @history_rows.total_pages ? @history_rows.current_page + 1 : nil
+        - link_class = "inline-flex items-center gap-1 rounded-md border border-border bg-bg-elev px-2 py-1 text-fg-muted hover:bg-bg-muted no-underline"
+        - disabled_class = "inline-flex items-center gap-1 rounded-md border border-border bg-bg-muted px-2 py-1 text-fg-subtle cursor-not-allowed"
+        - if prev_page
+          = link_to test_case_path(branch: @selected_branch.name, module: @test_case.module, test_case: @test_case.name, tab: :history, page: prev_page), class: link_class do
+            = mesa_icon(:arrow_left, size: 11)
+            %span Newer
+        - else
+          %span{ class: disabled_class }
+            = mesa_icon(:arrow_left, size: 11)
+            %span Newer
+        %span.tabular-nums= "Page #{@history_rows.current_page} of #{@history_rows.total_pages}"
+        - if next_page
+          = link_to test_case_path(branch: @selected_branch.name, module: @test_case.module, test_case: @test_case.name, tab: :history, page: next_page), class: link_class do
+            %span Older
+            = mesa_icon(:chevron, size: 11)
+        - else
+          %span{ class: disabled_class }
+            %span Older
+            = mesa_icon(:chevron, size: 11)

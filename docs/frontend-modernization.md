@@ -1015,9 +1015,17 @@ message.
 
 Pages without designs, in priority order:
 
-- `test_cases#show` (test-across-commits) — similar in spirit to
-  commit detail's per-row computer ribbon, but the rows are
-  commits and the columns are computers.
+- `test_cases#show` (test-across-commits) — **in progress.** Three
+  tabs sharing the test-on-commit visual frame: **History** (one row
+  per TCC with per-row mini-matrix, default), **Trend** (uPlot
+  line chart of a chosen metric vs commit index for the top-3
+  most-common `(computer, threads, run_optional)` config tuples),
+  **Submissions** (per-instance table for a chosen computer,
+  reusing the test-on-commit instances table). Headline carries a
+  status sentence with a test-case picker + branch picker; below
+  it a "passage strip" — wider sibling of the test-on-commit
+  subway map covering ~60 commits to expose regression points at
+  a glance. See "test_cases#show design notes" below.
 - `computers#index` and `computers#show`
 - `test_instances#index`, `test_instances#search`,
   `test_instances#show`
@@ -1028,6 +1036,41 @@ For each: read the existing Bootstrap view, identify the data
 shown, and rebuild in the same Tailwind vocabulary. Lean on the
 shared components from Step 3. When in doubt, match the
 information density and color encoding of the designed pages.
+
+#### `test_cases#show` design notes
+
+Resolved choices (locked in before Phase A landed):
+
+- **Default metric on Trend tab**: `runtime_minutes`. Most
+  universally meaningful and doesn't require an inlist pick.
+- **X-axis**: commit index along the branch, equally spaced — not
+  commit time. Equal spacing makes regression points easier to find
+  visually; the time information is still in the per-point tooltip.
+- **Custom inlist-data series**: when a `custom:<name>` metric is
+  picked, use the first inlist on each instance that contains
+  that datum name. Future enhancement: add an inlist sub-picker
+  that surfaces only when the chosen datum appears in multiple
+  inlists.
+- **Top-N config tuples**: 3 by default. Few computers do heavy
+  testing, so 3 covers the common cases without making the chart
+  noisy. Power users get a "+more" panel listing every config
+  with counts.
+- **Chart library**: uPlot. ~45 KB, MIT, pin via importmap. D3
+  is the wrong tool here — we don't need its DSL, just a fast
+  XY chart with multiple series and gaps.
+- **Passage strip**: ~60 most-recent commits on the branch, one
+  small pill per commit colored by `tcc.status`. Horizontally
+  scrollable. Reuses the `subway-map` Stimulus controller for
+  hover popovers.
+
+**Future note** — the Trend tab payload + Stimulus controller
+should be lifted up to `test_case_commit#show` as an additional
+"Trend" tab once `test_cases#show` ships. There the chart would
+be scoped to "this test across the last N commits centered on
+this one", giving regression hunting a per-commit drilldown
+without leaving the test-on-commit view. Out of scope for the
+initial Step 8 port; build the foundation here, reuse it there
+later.
 
 ### Step 9 — Cleanup
 
