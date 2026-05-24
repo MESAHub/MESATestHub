@@ -41,9 +41,11 @@ Before doing non-trivial work, read the appropriate doc:
   installed alongside the legacy stack; the 404 page, login, the
   commits index (`/:branch/commits`), the commit detail page
   (`/:branch/commits/:sha`), the test-on-commit page
-  (`/:branch/commits/:sha/test_cases/:module/:test_case`), and the
+  (`/:branch/commits/:sha/test_cases/:module/:test_case`), the
   test-case history page
-  (`/:branch/test_cases/:module/:test_case`) all render through
+  (`/:branch/test_cases/:module/:test_case`), and the
+  computers list + detail pages (`/users/:id/computers`,
+  `/users/:id/computers/:id`, `/all_computers`) all render through
   the modern layout.
   Commit detail has four tabs (Summary / Computers / Diff vs
   last pass / Build logs) — the original Tests tab was folded
@@ -155,9 +157,33 @@ Before doing non-trivial work, read the appropriate doc:
   panel's `hidden` attribute to `setSize` once visible, since
   uPlot bakes width at construction time).
 
-  Step 8's remaining wing-it pages (`computers#*`,
-  `test_instances#*`, admin) are still outstanding; the page
-  priority list is at the bottom of
+  The `computers#index` + `#show` pair (Step 8g–8h) shares the
+  breadcrumb + status-sentence headline + sticky-thead table
+  vocabulary used by the test-case pages. Show adds a
+  hairline-split lower tier with Hardware (Platform / Processor /
+  RAM) on the left and Usage (CPU hours over 24h / year / all
+  time) on the right. Same Build status pill (Built / Failed /
+  Not reported) as the commit-show banners. The admin
+  `/all_computers` view threads through the same `index` template
+  with an extra Maintainer column.
+
+  Pagination on the modern pages uses a new Kaminari theme at
+  [`app/views/kaminari/modern/`](app/views/kaminari/modern/) —
+  brand-fill for the active page, neutral mesa-btn-styled
+  Older/Newer arrows. Pages opt in with
+  `paginate @scope, theme: "modern"`. The Bootstrap-era partials
+  at `app/views/kaminari/` keep serving un-migrated pages.
+
+  Destructive actions on modern-layout pages use
+  `button_to ..., method: :delete, form: { data: { turbo_confirm: } }`
+  rather than `link_to ..., method: :delete` — the modern layout
+  ships only Turbo (no rails-ujs), so `data-method=delete` from
+  the legacy helper is dead.
+
+  Step 8's remaining wing-it pages
+  (`computers/test_instances_index`, `test_instances#*`, admin,
+  users) are still outstanding; the page priority list is at the
+  bottom of
   [`docs/frontend-modernization.md`](docs/frontend-modernization.md).
 
 When changes invalidate the plan, update the relevant doc in the same commit

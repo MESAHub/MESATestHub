@@ -192,7 +192,12 @@ partials). Classification below — anything not listed is implicitly
     (Steps 8a–8f; History + Trend + Submissions tabs over a shared
     anchor+window toolbar; see the "Step 8" / "Pages without
     designs" sections below for the design notes).
-  - `computers/index.html.haml`, `computers/show.html.haml`
+  - ~~`computers/index.html.haml`, `computers/show.html.haml`~~ —
+    landed (Steps 8g–8h; breadcrumb + status-sentence headline +
+    sticky-thead table pattern, with a new "modern" Kaminari
+    paginator theme that subsequent wing-it pages can opt into via
+    `paginate @scope, theme: "modern"`). See "computers#index +
+    computers#show design notes" below.
   - `computers/test_instances_index.html.haml`
   - `users/index.html.haml`, `users/show.html.haml`,
     `users/admin.html.haml`, `users/computers_index.html.haml`
@@ -1080,6 +1085,54 @@ this one", giving regression hunting a per-commit drilldown
 without leaving the test-on-commit view. Out of scope for the
 initial Step 8 port; build the foundation here, reuse it there
 later.
+
+#### `computers#index` + `computers#show` design notes
+
+Landed in Steps 8g + 8h. Two pages, one focused chunk — the user
+clicks from index → show, so they share visual vocabulary and the
+same headline rhythm.
+
+- **Breadcrumb on top.** `← <user>'s computers / <computer>` on
+  show; `← <user> / Computers` on index (or `← Admin / Computers`
+  on the admin all-view). Same back-arrow + slug pattern the
+  test_case_commits / test_cases pages use.
+- **Headline card with the same single-tier sentence rhythm as
+  test_cases#show.** Index reads "N computers maintained by
+  `<user>`" (or "across all users" on the admin view) with an
+  "Add computer" CTA top-right when `self_or_admin?`. Show reads
+  "`<name>` is a `<platform>` machine maintained by `<user>`" with
+  Edit + Delete CTAs top-right. The show page adds a Tier 2 below
+  a hairline that splits at `lg+` into Hardware (Platform /
+  Processor / RAM) on the left and Usage (CPU hours over last
+  24h / last year / all time + the inception date) on the right,
+  mirroring the test_case_commits hero's commit-identity / test-
+  history capsule split.
+- **Sticky-thead tables in both pages.** Index has 5 columns
+  (Name / Platform / Processor / RAM / actions) plus an optional
+  Maintainer column for the admin view. Show's submissions table
+  has 7 (Submitted / Commit / Build / Tests / Compiler / SDK /
+  Math backend) — same 7 the legacy Bootstrap view had, per the
+  wing-it "preserve information density" rule. Build status is a
+  semantic pill (Built / Failed / Not reported) matching the
+  banner palette on commit-show; everything else is mono.
+- **Tests column collapses to a link when there's exactly one.**
+  Submissions with a single test instance show the test name as a
+  link to the test's history page rather than a bare "1" count —
+  matches the legacy view's "test_case.name appears in the cell
+  when count == 1" behavior.
+- **Modern Kaminari paginator theme.** Both pages introduced
+  `app/views/kaminari/modern/_paginator.html.haml` (plus `_page`,
+  `_prev_page`, `_next_page`, `_gap`). Brand-fill for the active
+  page; neutral mesa-btn-styled buttons for the rest; Older/Newer
+  arrows reuse the mesa_icon set. Pages opt in with
+  `paginate @scope, theme: "modern"`. The Bootstrap-era partials
+  at `app/views/kaminari/` stay in place for un-migrated pages.
+- **Delete actions use `button_to` + `turbo_confirm`.** The modern
+  layout ships only Turbo (no rails-ujs), so `link_to ...,
+  method: :delete` is dead. `button_to` renders a real form so
+  Turbo's confirm flow + DELETE handling work without any custom
+  JS. Reusable everywhere the wing-it pages need destructive
+  actions.
 
 ### Step 9 — Cleanup
 
