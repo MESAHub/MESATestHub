@@ -3,37 +3,30 @@ class TestCasesController < ApplicationController
 
   before_action :set_test_case, only: :show
 
-  HISTORY_PER_PAGE = 25
-  PASSAGE_LIMIT    = 60
-
   def show
     @selected_branch = Branch.named(params[:branch]) || Branch.main
     return render_404("Branch '#{params[:branch]}' not found") unless @selected_branch
 
     # Pickers in the headline. The test picker spans every test case
-    # in the catalog (worst-first by module, then alphabetical) so the
-    # user can jump anywhere; the legacy show used the same superset.
-    # The branch picker shares the commits-index splitting — recent
-    # vs. older — so the dropdown doesn't get crowded by stale
-    # feature branches.
-    @test_cases     = TestCase.ordered_cases.to_a
+    # in the catalog so the user can jump anywhere. The branch picker
+    # uses the same recent/older split as the commits index.
+    @test_cases      = TestCase.ordered_cases.to_a
     @recent_branches = Branch.recent
     @older_branches  = Branch.older
 
     @status_summary = @test_case.status_summary_for(@selected_branch)
-    @passage_window = @test_case.passage_strip_window(@selected_branch,
-                                                       limit: PASSAGE_LIMIT)
 
     @active_tab = parse_tab(params[:tab])
 
-    # Per-tab payloads are loaded lazily — the History tab is the
-    # default and the most common landing, so build its rows here.
-    # Trend + Submissions data hangs off later commits in this phase.
-    @history_rows = if @active_tab == :history
-                      @test_case.history_window(@selected_branch,
-                                                page: params[:page],
-                                                per:  HISTORY_PER_PAGE)
-                    end
+    # Shared time window for all tabs that show per-commit data
+    # (History today, Trend next). Anchor + size live in the URL so
+    # deep links round-trip; the toolbar's pan arrows just rewrite
+    # ?anchor= to a new SHA.
+    @window_size    = parse_window_size(params[:window])
+    @anchor_commit  = resolve_anchor_commit(@selected_branch, params)
+    @window         = @test_case.commit_window(@selected_branch,
+                                               anchor_commit: @anchor_commit,
+                                               size: @window_size)
   end
 
   private
@@ -44,11 +37,50 @@ class TestCasesController < ApplicationController
     return render_404("Test case '#{params[:module]}/#{params[:test_case]}' not found") unless @test_case
   end
 
-  # Tab params come from URL only — bookmarkable deep links to
-  # ?tab=trend should still land on Trend after a reload. Anything
-  # unrecognized falls back to History.
   def parse_tab(raw)
     sym = raw.to_s.to_sym
     %i[history trend submissions].include?(sym) ? sym : :history
+  end
+
+  def parse_window_size(raw)
+    n = raw.to_i
+    TestCase::WINDOW_SIZES.include?(n) ? n : TestCase::DEFAULT_WINDOW_SIZE
+  end
+
+  # Resolve the URL params (`?center=<sha>` or `?center_date=YYYY-MM-DD`)
+  # to a Commit on `branch`. Precedence: explicit SHA > date snap >
+  # branch HEAD. The date snap finds the most-recent commit at or
+  # before the given date so "jump to last March" works even if no
+  # commit landed on the exact date.
+  #
+  # NOTE on naming: this param is `center`, not `anchor`, because
+  # Rails' `url_for` treats `:anchor` as the URL fragment (#...) — a
+  # `test_case_path(anchor: x)` call writes `…#x`, not `…?anchor=x`,
+  # which silently breaks GET round-trips. Use `center` everywhere
+  # in this controller and its views.
+  #
+  # Returns nil if a SHA was supplied but doesn't resolve — the view
+  # then renders an empty window with a "couldn't find that commit"
+  # hint rather than silently falling back to HEAD (which would mask
+  # a typo).
+  def resolve_anchor_commit(branch, params)
+    sha = params[:center].to_s.strip
+    if sha.present? && sha.downcase != "head"
+      return Commit.parse_sha(sha, branch: branch.name)
+    end
+
+    if (date_str = params[:center_date].to_s.strip).present?
+      begin
+        date = Date.parse(date_str)
+        anchor = branch.ordered_commits
+                       .where("commits.commit_time <= ?", date.end_of_day)
+                       .first
+        return anchor if anchor
+      rescue ArgumentError
+        # fall through to HEAD on a malformed date
+      end
+    end
+
+    branch.head
   end
 end

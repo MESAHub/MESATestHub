@@ -1,27 +1,25 @@
--# Headline card. Mirrors the test-on-commit headline's two-tier
--# structure (status sentence on top, two-column metadata + history
--# capsule below), but scoped to a test case across a branch.
+-# Single-tier headline. The status sentence is the headline; the
+-# branch-wide status-count chips sit inline as compact context.
+-# No Tier 2 — the time-window toolbar lives between this card and
+-# the tab strip, so the right-column "history capsule" pattern from
+-# the test-on-commit page would be redundant here.
 -#
--#   Tier 1: status sentence — clickable test-case pill (jumps to a
--#           sibling test) "is <status> on <branch>." A subline
--#           shows the most-recent SHA + age (and, when failing, the
--#           last-passing SHA so the user has a direct lead for
--#           bisection).
--#   Tier 2: at lg+, two columns. LEFT — status-count chips (passing
--#           / failing / mixed / checksum / untested) plus the total
--#           TCC count on this branch. RIGHT — wide passage strip
--#           covering the last PASSAGE_LIMIT commits with hover
--#           popovers, so the user can spot transitions at a glance.
+-# Sub-sentence below the headline carries the three navigational
+-# anchors a user typically wants when landing on this page:
+-#   - Pending on <sha>:   newest commit awaiting submissions (if any)
+-#   - Last run <sha>:     most-recent commit with submitted instances
+-#   - Last passed <sha>:  most-recent fully-passing commit
+-# Each links into the test-on-commit page for that SHA.
 
-- summary = @status_summary
-- counts  = summary[:counts]
-- last_run = summary[:last_run]
+- summary   = @status_summary
+- counts    = summary[:counts]
+- last_run  = summary[:last_run]
 - last_pass = summary[:last_passing]
-- pending = summary[:pending_on_head]
+- pending   = summary[:pending_on_head]
 
 .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
 
-  -# Tier 1 — status sentence.
+  -# Headline status sentence.
   %div{ class: "text-[22px] font-medium leading-snug tracking-tight text-fg" }
     = render "test_cases/test_picker"
     %span.text-fg-muted{ class: "text-[20px]" }<>
@@ -31,18 +29,22 @@
       = " on "
     = render "test_cases/branch_picker"
 
-  -# Sub-sentence. Three rows of information at most, all `text-fg-muted`
-  -# at 12px so they don't compete with the headline verb:
-  -#   - Pending: a newer-than-last-run commit exists but has no
-  -#     submitted instances yet. Tells the user "the chart is
-  -#     waiting on results for X."
-  -#   - Last run: most-recent commit with submitted instances.
-  -#     Skipped when nothing has ever run on this branch.
-  -#   - Last passed: most-recent commit that fully passed. Only
-  -#     shown when distinct from last_run (so we don't say
-  -#     "last passed" twice for a passing test).
+  -# Inline status-count chips. Branch-wide (not window-scoped) so the
+  -# user always sees the total volume of activity for this test on
+  -# this branch. Window-scoped counts live in the toolbar below.
+  - chip_specs = headline_status_chips(counts).reject { |_, count, _, _| count.zero? }
+  - if chip_specs.any?
+    .mt-3.flex.flex-wrap.items-center.gap-1.5
+      %span.mesa-label{ class: "mr-1" }= "#{counts[:total]} total"
+      - chip_specs.each do |label, count, dot, text_color|
+        %span.inline-flex.items-center.gap-1.5.rounded-md.border.border-border.bg-bg-muted.px-2.py-1{ class: "text-[12px]" }
+          %span{ class: "inline-block h-1.5 w-1.5 rounded-full #{dot}" }
+          %span.font-mono.tabular-nums.text-fg= count
+          %span{ class: text_color }= label
+
+  -# Sub-sentence — pending / last run / last passed anchors.
   - if last_run || pending
-    .mt-2.flex.flex-wrap.items-center.gap-x-3.gap-y-1.text-fg-muted{ class: "text-[12px]" }
+    .mt-3.flex.flex-wrap.items-center.gap-x-3.gap-y-1.text-fg-muted{ class: "text-[12px]" }
       - if pending
         %span.flex.items-center.gap-1
           = mesa_icon(:clock, size: 11)
@@ -83,30 +85,7 @@
         %span.text-fg-subtle ·
         %span.text-fg-muted Never passed on this branch.
   - else
-    .mt-2.text-fg-muted{ class: "text-[12px]" }
+    .mt-3.text-fg-muted{ class: "text-[12px]" }
       No runs of this test on
       %span.font-mono.text-fg= @selected_branch.name
       yet.
-
-  -# Tier 2 — counts on the left, passage strip on the right.
-  .mt-4.pt-4.border-t.border-border-subtle.grid.gap-6{ class: "grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" }
-
-    -# LEFT — status-count chips.
-    .min-w-0
-      %div.mesa-label.mb-2= "#{counts[:total]} runs on #{@selected_branch.name}"
-      .flex.flex-wrap.gap-1.5
-        - headline_status_chips(counts).each do |label, count, dot, text_color|
-          - next if count.zero?
-          %span.inline-flex.items-center.gap-1.5.rounded-md.border.border-border.bg-bg-muted.px-2.py-1{ class: "text-[12px]" }
-            %span{ class: "inline-block h-1.5 w-1.5 rounded-full #{dot}" }
-            %span.font-mono.tabular-nums.text-fg= count
-            %span{ class: text_color }= label
-
-    -# RIGHT — passage strip capsule.
-    .min-w-0
-      .flex.items-center.justify-between.gap-3.mb-2
-        %span.mesa-label.min-w-0.truncate
-          = "Recent #{@passage_window.size} commits on #{@selected_branch.name}"
-        %span.text-fg-subtle{ class: "text-[10px]" }
-          newest →  ←oldest
-      = render "test_cases/passage_strip", entries: @passage_window

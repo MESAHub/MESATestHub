@@ -4,8 +4,7 @@ require 'rails_helper'
 # modern test_cases#show page:
 #
 #   #status_summary_for(branch)
-#   #passage_strip_window(branch, limit:)
-#   #history_window(branch, page:, per:)
+#   #commit_window(branch, anchor_commit:, size:)
 #
 # Tested against a small linear chain on a single branch, with a
 # sibling branch carrying its own commits to verify scoping.
@@ -86,52 +85,60 @@ RSpec.describe TestCase, 'branch-scoped history helpers' do
     end
   end
 
-  describe '#passage_strip_window' do
-    it 'returns commits newest-first with nil tcc for untested commits' do
-      commits = chain_on(branch, 4)
-      # only the two most recent commits have a TCC for this test
-      tcc_a = create(:test_case_commit, :passing, commit: commits[3], test_case: test_case)
-      tcc_b = create(:test_case_commit, :failing, commit: commits[2], test_case: test_case)
+  describe '#commit_window' do
+    it 'returns a focused window of entries newest-first around the anchor' do
+      commits = chain_on(branch, 7)
+      # only some commits have TCCs — the rest render as untested
+      tcc_mid  = create(:test_case_commit, :failing, commit: commits[3], test_case: test_case)
+      tcc_head = create(:test_case_commit, :passing, commit: commits[6], test_case: test_case)
 
-      entries = test_case.passage_strip_window(branch, limit: 10)
-      expect(entries.map { |e| e[:commit].id }).to eq(commits.reverse.map(&:id))
-      expect(entries[0][:tcc]&.id).to eq(tcc_a.id)
-      expect(entries[1][:tcc]&.id).to eq(tcc_b.id)
-      expect(entries[2][:tcc]).to be_nil
-      expect(entries[3][:tcc]).to be_nil
-      expect(entries[2][:status]).to eq(-1)
+      window = test_case.commit_window(branch, anchor_commit: commits[3], size: 50)
+      expect(window[:size]).to eq(50)
+      expect(window[:anchor_commit].id).to eq(commits[3].id)
+      expect(window[:at_head]).to be(false)
+      # 7 commits total fit comfortably; newest-first
+      expect(window[:entries].map { |e| e[:commit].id }).to eq(commits.reverse.map(&:id))
+      anchor_entry = window[:entries].find { |e| e[:commit].id == commits[3].id }
+      expect(anchor_entry[:tcc]&.id).to eq(tcc_mid.id)
+      head_entry = window[:entries].find { |e| e[:commit].id == commits[6].id }
+      expect(head_entry[:tcc]&.id).to eq(tcc_head.id)
     end
 
-    it 'honors the limit' do
-      chain_on(branch, 5)
-      expect(test_case.passage_strip_window(branch, limit: 3).size).to eq(3)
+    it 'flags at_head when the anchor is the branch head' do
+      commits = chain_on(branch, 3)
+      window = test_case.commit_window(branch, anchor_commit: commits.last, size: 50)
+      expect(window[:at_head]).to be(true)
     end
 
-    it 'returns [] on an empty branch' do
-      expect(test_case.passage_strip_window(branch)).to eq([])
+    it 'computes half-window pan targets and nil at branch ends' do
+      commits = chain_on(branch, 10)
+      # anchor near the newest end so there's room to pan older but
+      # nothing newer
+      window = test_case.commit_window(branch, anchor_commit: commits.last, size: 50)
+      # at HEAD there is no "newer" commit
+      expect(window[:newer_anchor_sha]).to be_nil
+      # older pan target should be (size/2 = 25, capped at branch
+      # length) commits behind the anchor — here, the oldest commit
+      expect(window[:older_anchor_sha]).to eq(commits.first.short_sha)
+
+      # interior anchor: both targets non-nil
+      mid = commits[5]
+      window2 = test_case.commit_window(branch, anchor_commit: mid, size: 50)
+      expect(window2[:newer_anchor_sha]).to eq(commits.last.short_sha)
+      expect(window2[:older_anchor_sha]).to eq(commits.first.short_sha)
     end
-  end
 
-  describe '#history_window' do
-    it 'paginates TCCs newest first on the branch only' do
-      commits = chain_on(branch, 6)
-      other_commits = chain_on(other, 2, label: 'o',
-                               base_time: Time.zone.parse('2026-02-01T00:00:00Z'))
+    it 'coerces unknown window sizes back to the default' do
+      commits = chain_on(branch, 3)
+      window = test_case.commit_window(branch, anchor_commit: commits.last, size: 7)
+      expect(window[:size]).to eq(TestCase::DEFAULT_WINDOW_SIZE)
+    end
 
-      commits.each { |c| create(:test_case_commit, :passing, commit: c, test_case: test_case) }
-      create(:test_case_commit, :failing, commit: other_commits[0], test_case: test_case)
-
-      page1 = test_case.history_window(branch, page: 1, per: 4)
-      page2 = test_case.history_window(branch, page: 2, per: 4)
-
-      expect(page1.size).to eq(4)
-      expect(page2.size).to eq(2)
-      # newest first
-      expect(page1.first.commit_id).to eq(commits.last.id)
-      # the sibling branch's failing TCC is not present anywhere in the
-      # paginated results
-      all_returned = (page1.to_a + page2.to_a)
-      expect(all_returned.map(&:commit_id)).not_to include(other_commits[0].id)
+    it 'returns an empty window when anchor_commit is nil' do
+      window = test_case.commit_window(branch, anchor_commit: nil, size: 50)
+      expect(window[:entries]).to eq([])
+      expect(window[:older_anchor_sha]).to be_nil
+      expect(window[:newer_anchor_sha]).to be_nil
     end
   end
 end

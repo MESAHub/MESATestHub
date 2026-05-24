@@ -1,4 +1,28 @@
 module TestCasesHelper
+  # Build a test_case_path URL preserving the current branch / module /
+  # name / tab / window / center, with `overrides` merged on top. Used
+  # by the time-window toolbar so its size chips, pan arrows, and
+  # picker forms each surgically change one knob without dropping the
+  # others.
+  #
+  # Center encoding: pass `:center` to override; pass `center: nil`
+  # explicitly to clear it (jump to HEAD).
+  #
+  # NOTE: the URL param is `center`, not `anchor`, because Rails'
+  # `url_for` treats `:anchor` as the URL fragment (#...). See the
+  # controller's `resolve_anchor_commit` for the longer explanation.
+  def toolbar_path(overrides = {})
+    base = {
+      branch:    @selected_branch.name,
+      module:    @test_case.module,
+      test_case: @test_case.name,
+      tab:       @active_tab,
+      window:    @window_size,
+      center:    params[:center].presence
+    }
+    test_case_path(base.merge(overrides).compact)
+  end
+
   # Tabs on the test_cases#show page. Helper-resident so the HAML
   # partial doesn't trip the "multi-line Ruby in attribute hash" gotcha
   # (see CLAUDE.md — array literals can't span lines inside a `- …`
@@ -27,19 +51,32 @@ module TestCasesHelper
   end
 
   # Segmented-control specs for the History tab's status filter.
-  # `rows` is the paginated TCC collection on the page; counts come
-  # from the in-page slice rather than a fresh query so the chip
-  # numbers match what the user actually sees.
-  def history_status_specs(rows)
-    by_status = rows.each_with_object(Hash.new(0)) { |tcc, h| h[tcc.status] += 1 }
+  # `entries` is the window's [{ commit:, tcc:, status: }, ...]
+  # array; counts come from the in-window slice so the chip numbers
+  # match what the user actually sees.
+  def history_status_specs_for_entries(entries)
+    by_status = entries.each_with_object(Hash.new(0)) { |e, h| h[e[:status]] += 1 }
     [
-      ["all",      "All",      rows.size,         nil],
-      ["failing",  "Failing",  by_status[1],      "bg-danger"],
-      ["mixed",    "Mixed",    by_status[3],      "bg-warning"],
-      ["checksum", "Checksum", by_status[2],      "bg-warning"],
-      ["passing",  "Passing",  by_status[0],      "bg-success"],
-      ["untested", "Untested", by_status[-1],     "bg-skipped"]
+      ["all",      "All",      entries.size,  nil],
+      ["failing",  "Failing",  by_status[1],  "bg-danger"],
+      ["mixed",    "Mixed",    by_status[3],  "bg-warning"],
+      ["checksum", "Checksum", by_status[2],  "bg-warning"],
+      ["passing",  "Passing",  by_status[0],  "bg-success"],
+      ["untested", "Untested", by_status[-1], "bg-skipped"]
     ]
+  end
+
+  # Mapping from TCC status integer to the string the History row's
+  # status filter chips reference. Kept in sync with the chip ids
+  # above.
+  def history_row_filter(status)
+    case status
+    when 0  then "passing"
+    when 1  then "failing"
+    when 2  then "checksum"
+    when 3  then "mixed"
+    else         "untested"
+    end
   end
 
   # Build the per-page per-computer matrix payload for the History

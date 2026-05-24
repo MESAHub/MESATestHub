@@ -1,0 +1,172 @@
+-# Shared time-window toolbar. Lives between the headline and the tab
+-# strip so every per-commit tab consumes the same window state.
+-#
+-#   [Anchor: c79f4a4 ⌄]  [Window: 50 ⌄]  [← Older]  [Newer →]
+-#                          25 50 100 250
+-#
+-# All URLs are full GET requests rewritten via `toolbar_path` so the
+-# four knobs (anchor, window, tab, branch) round-trip cleanly. No JS
+-# state — refreshing the page or sharing the URL gives the same view.
+-#
+-# The anchor dropdown carries:
+-#   - "Jump to HEAD" button (collapsed when already at HEAD)
+-#   - A date input that snaps to the nearest commit at/before the
+-#     chosen date — this replaces the legacy dual-date-picker form
+-#   - A SHA paste box for direct jumps
+-#
+-# Window-scoped status counts ride on the right of the toolbar so
+-# the user has at-a-glance context for the slice they're looking at.
+
+- window = @window
+- anchor = window[:anchor_commit]
+- counts = window[:window_counts] || {}
+
+.rounded-lg.border.border-border.bg-bg-elev.px-4.py-3{ style: "box-shadow: var(--shadow-card-sm);" }
+  .flex.flex-wrap.items-center.gap-2
+
+    -# Anchor picker.
+    .relative{ data: { controller: "dropdown", open: "false" } }
+      %button.inline-flex.items-center.gap-1.5.rounded-md.border.border-border.bg-bg-elev.px-2.py-1.text-fg.cursor-pointer.hover:bg-bg-muted{
+        type: "button",
+        "aria-haspopup": "true",
+        "aria-label": "Pick a commit to center the window on",
+        class: "text-[12px]",
+        data: { dropdown_target: "trigger", action: "click->dropdown#toggle" } }
+        %span.text-fg-subtle Centered on
+        - if anchor
+          %span.font-mono.font-semibold.text-brand= anchor.short_sha
+          - if window[:at_head]
+            %span.uppercase.tracking-wide.text-fg-subtle{ class: "text-[10px]" } head
+        - else
+          %span.text-fg-muted no anchor
+        = mesa_icon(:chevron, size: 10)
+
+      .absolute.left-0.top-full.z-30.mt-1.rounded-md.border.border-border.bg-bg-elev.p-3.shadow-md{
+        hidden: true,
+        style: "width: 320px;",
+        data: { dropdown_target: "menu" } }
+
+        -# Jump-to-HEAD shortcut.
+        - unless window[:at_head]
+          .mb-3
+            = link_to toolbar_path(center: nil),
+                     class: "inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-elev px-2 py-1 text-fg-muted hover:bg-bg-muted no-underline w-full justify-center" do
+              = mesa_icon(:arrow_left, size: 11)
+              %span.font-medium Jump to branch HEAD
+
+        -# Date snap.
+        %form.mb-3{ action: test_case_path(branch: @selected_branch.name,
+                                            module: @test_case.module,
+                                            test_case: @test_case.name),
+                    method: "get" }
+          %input{ type: "hidden", name: "tab",    value: @active_tab }
+          %input{ type: "hidden", name: "window", value: @window_size }
+          %label.block.text-fg-muted.mb-1{ for: "center_date_input", class: "text-[11px] uppercase tracking-wide" } Jump to a date
+          .flex.items-center.gap-2
+            %input#center_date_input{ type: "date", name: "center_date",
+                                      class: "flex-1 rounded-md border border-border bg-bg-elev px-2 py-1 text-fg focus:outline-none focus:border-brand",
+                                      style: "font-size: 12px;",
+                                      "aria-label": "Snap to nearest commit at or before this date" }
+            %button.rounded-md.border.border-border.bg-brand-soft.text-brand-soft-text.px-2.py-1.cursor-pointer.hover:bg-brand-soft{ type: "submit", class: "text-[12px] font-medium" }
+              Go
+
+        -# SHA paste.
+        %form{ action: test_case_path(branch: @selected_branch.name,
+                                       module: @test_case.module,
+                                       test_case: @test_case.name),
+               method: "get" }
+          %input{ type: "hidden", name: "tab",    value: @active_tab }
+          %input{ type: "hidden", name: "window", value: @window_size }
+          %label.block.text-fg-muted.mb-1{ for: "center_sha_input", class: "text-[11px] uppercase tracking-wide" } Jump to a SHA
+          .flex.items-center.gap-2
+            %input#center_sha_input{ type: "text", name: "center",
+                                      placeholder: "7+ chars",
+                                      class: "flex-1 rounded-md border border-border bg-bg-elev px-2 py-1 text-fg font-mono focus:outline-none focus:border-brand",
+                                      style: "font-size: 12px;",
+                                      autocomplete: "off",
+                                      spellcheck: "false",
+                                      "aria-label": "Paste a commit SHA to center on" }
+            %button.rounded-md.border.border-border.bg-brand-soft.text-brand-soft-text.px-2.py-1.cursor-pointer.hover:bg-brand-soft{ type: "submit", class: "text-[12px] font-medium" }
+              Go
+
+    -# Window size selector.
+    .inline-flex.items-center.gap-1
+      %span.text-fg-subtle{ class: "text-[11px] uppercase tracking-wide" } Window
+      .inline-flex.rounded-md.border.border-border.bg-bg-elev.p-0.5.gap-0.5
+        - ::TestCase::WINDOW_SIZES.each do |n|
+          - on = (n == @window_size)
+          = link_to toolbar_path(window: n),
+                   class: "rounded-sm px-2 py-1 font-mono tabular-nums no-underline #{on ? 'bg-brand-soft text-brand-soft-text' : 'text-fg-muted hover:bg-bg-muted'}",
+                   style: "font-size: 12px;",
+                   "aria-pressed": on.to_s do
+            = n
+
+    -# Pan arrows.
+    - newer_disabled = window[:newer_anchor_sha].blank?
+    - older_disabled = window[:older_anchor_sha].blank?
+    - btn_base = "inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 no-underline"
+    - btn_on   = "bg-bg-elev text-fg-muted hover:bg-bg-muted cursor-pointer"
+    - btn_off  = "bg-bg-muted text-fg-subtle cursor-not-allowed"
+    - if newer_disabled
+      %span{ class: "#{btn_base} #{btn_off}", style: "font-size: 12px;", "aria-disabled": "true", title: "Already at the newest commit" }
+        = mesa_icon(:arrow_left, size: 11)
+        %span Newer
+    - else
+      = link_to toolbar_path(center: window[:newer_anchor_sha]),
+               class: "#{btn_base} #{btn_on}",
+               style: "font-size: 12px;",
+               title: "Pan toward HEAD by half a window" do
+        = mesa_icon(:arrow_left, size: 11)
+        %span Newer
+    - if older_disabled
+      %span{ class: "#{btn_base} #{btn_off}", style: "font-size: 12px;", "aria-disabled": "true", title: "No older commits in this branch" }
+        %span Older
+        = mesa_icon(:chevron, size: 11)
+    - else
+      = link_to toolbar_path(center: window[:older_anchor_sha]),
+               class: "#{btn_base} #{btn_on}",
+               style: "font-size: 12px;",
+               title: "Pan away from HEAD by half a window" do
+        %span Older
+        = mesa_icon(:chevron, size: 11)
+
+    .grow
+
+    -# Window-scoped status counts. Stays narrow — full branch counts
+    -# live in the headline chips.
+    .flex.items-center.gap-1.5.text-fg-muted{ class: "text-[11px]" }
+      - if window[:entries].any?
+        %span.tabular-nums= "#{window[:entries].size} commits"
+        - [[0, "bg-success"], [1, "bg-danger"], [3, "bg-warning"], [2, "bg-warning"], [-1, "bg-skipped"]].each do |status, dot|
+          - n = counts[status].to_i
+          - next if n.zero?
+          .inline-flex.items-center.gap-1
+            %span{ class: "inline-block h-1.5 w-1.5 rounded-full #{dot}" }
+            %span.font-mono.tabular-nums= n
+      - else
+        %span.text-fg-subtle no commits in window
+
+  -# Anchor commit metadata — full message + author + age — lives one
+  -# row below the controls so the picker stays compact. Clicking the
+  -# SHA jumps into the test-on-commit page.
+  - if anchor
+    .mt-2.pt-2.border-t.border-border-subtle.flex.flex-wrap.items-center.gap-x-3.gap-y-1.text-fg-muted{ class: "text-[12px]" }
+      = link_to anchor.short_sha,
+               test_case_commit_path(branch: @selected_branch.name,
+                                     sha: anchor.short_sha,
+                                     module: @test_case.module,
+                                     test_case: @test_case.name),
+               class: "font-mono font-semibold text-brand no-underline hover:underline"
+      %span.text-fg.truncate{ style: "max-width: 60%;" }= anchor.message_first_line(120)
+      %span.flex.items-center.gap-1.5
+        = commit_avatar(anchor.author, size: 16)
+        %span= anchor.author
+      %span.text-fg-subtle ·
+      %span.tabular-nums= time_ago_compact(anchor.commit_time)
+  - elsif params[:center].present?
+    .mt-2.pt-2.border-t.border-border-subtle.text-warning-soft-text{ class: "text-[12px]" }
+      Couldn't find commit
+      %code.font-mono= params[:center]
+      on
+      %span.font-mono= @selected_branch.name
+      — showing HEAD instead.

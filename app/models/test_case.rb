@@ -461,42 +461,77 @@ class TestCase < ApplicationRecord
     }
   end
 
-  # Ordered list of the `limit` most recent commits on `branch`, each
-  # paired with its TestCaseCommit (or nil if this test wasn't run on
-  # that commit). Newest first — matches the existing subway-map
-  # convention so the passage strip reads left-to-right as
-  # newest-to-oldest.
+  # Allowed window sizes for the shared time-window toolbar. Anything
+  # else gets coerced to the default. The toolbar's selector reads
+  # off this list too so values stay in sync.
+  WINDOW_SIZES = [25, 50, 100, 250].freeze
+  DEFAULT_WINDOW_SIZE = 50
+
+  # Single window of commits centered on `anchor_commit` for both the
+  # History tab and (in the next commit) the Trend chart. Replaces the
+  # earlier separate passage-strip + Kaminari-paginated history helpers
+  # — investigation flows want one consistent navigation primitive, not
+  # two unrelated lists.
   #
-  # Two queries: one for the commit window, one for the matching
-  # TCCs. The view layer treats nil TCCs as "untested" stations so
-  # the strip stays contiguous even on commits that pre-date this
-  # test case.
-  def passage_strip_window(branch, limit: 60)
-    commits = branch.ordered_commits.limit(limit).to_a
-    return [] if commits.empty?
+  # Returns:
+  #
+  #   {
+  #     size:             actual window size used (coerced from input),
+  #     anchor_commit:    Commit at the center of the window,
+  #     at_head:          true when anchor_commit is the branch HEAD,
+  #     entries:          [{ commit:, tcc:, status: }, ...], newest first,
+  #     older_anchor_sha: short_sha to pass back as ?anchor= to pan older
+  #                       by half a window (nil when no older commits left),
+  #     newer_anchor_sha: short_sha to pass back to pan newer (nil at HEAD),
+  #     window_counts:    { status_int => count } over the window only
+  #   }
+  #
+  # Eager-loads test_instances + computers on every TCC so the
+  # per-row mini-matrix renders without N+1.
+  def commit_window(branch, anchor_commit:, size: DEFAULT_WINDOW_SIZE)
+    size = size.to_i
+    size = DEFAULT_WINDOW_SIZE unless WINDOW_SIZES.include?(size)
+
+    return empty_commit_window(size) if anchor_commit.nil?
+
+    commits = branch.focused_commit_window(anchor_commit, size: size)
+    return empty_commit_window(size, anchor_commit) if commits.empty?
 
     tccs_by_commit = test_case_commits
+                       .includes(test_instances: :computer)
                        .where(commit_id: commits.map(&:id))
                        .index_by(&:commit_id)
 
-    commits.map do |commit|
+    entries = commits.map do |commit|
       tcc = tccs_by_commit[commit.id]
       { commit: commit, tcc: tcc, status: tcc&.status || -1 }
     end
-  end
 
-  # Paginated TCCs for the History tab. Newest commit first; eager
-  # loads everything the per-row mini-matrix needs (commit + test
-  # instances + their computers) so the table render is one
-  # query-per-association rather than N+1 per row.
-  def history_window(branch, page: 1, per: 25)
-    commit_ids = branch.ordered_commits.pluck(:id)
-    test_case_commits
-      .includes(:commit, test_instances: :computer)
-      .where(commit_id: commit_ids)
-      .joins(:commit)
-      .reorder("commits.commit_time DESC")
-      .page(page).per(per)
+    # Pan targets — the commit that should become the new anchor when
+    # the user clicks "Older" / "Newer". `half` matches what the
+    # window's edge would land on after a half-window pan, so the user
+    # sees an overlap of half the previous window on each step
+    # (continuity beats teleporting).
+    half = [size / 2, 1].max
+    older_target = branch.ordered_commits
+                         .where("commits.commit_time < ?", anchor_commit.commit_time)
+                         .limit(half)
+                         .last
+    newer_target = branch.ordered_commits
+                         .where("commits.commit_time > ?", anchor_commit.commit_time)
+                         .reorder("commits.commit_time ASC")
+                         .limit(half)
+                         .last
+
+    {
+      size: size,
+      anchor_commit: anchor_commit,
+      at_head: anchor_commit.id == branch.head_id,
+      entries: entries,
+      older_anchor_sha: older_target&.short_sha,
+      newer_anchor_sha: newer_target&.short_sha,
+      window_counts: entries.each_with_object(Hash.new(0)) { |e, h| h[e[:status]] += 1 }
+    }
   end
 
   # ease transition from versions being hard coded to using new Version model
@@ -508,5 +543,17 @@ class TestCase < ApplicationRecord
     new_version.number
   end
 
+  private
 
+  def empty_commit_window(size, anchor_commit = nil)
+    {
+      size: size,
+      anchor_commit: anchor_commit,
+      at_head: false,
+      entries: [],
+      older_anchor_sha: nil,
+      newer_anchor_sha: nil,
+      window_counts: {}
+    }
+  end
 end

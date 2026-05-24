@@ -9,6 +9,7 @@
 .space-y-4{ data: { controller: "tabs", tabs_active_value: @active_tab.to_s } }
   = render "breadcrumb"
   = render "headline"
+  = render "time_window_toolbar"
   = render "show_tab_strip"
 
   -# All three panels render up-front; the tabs controller toggles
