@@ -203,6 +203,15 @@ Before doing non-trivial work, read the appropriate doc:
     spin on the `Submission#after_commit :update_commit`
     callback chain. The post-delete redirect round-trips the
     active filter params so the user lands on the same view.
+    Cascade is fully audited — the destroy fires
+    `before_destroy :remember_affected_tcc_ids, prepend: true`
+    so the affected `TestCaseCommit` IDs are captured before
+    `dependent: :destroy` wipes the `test_instances`, then
+    `update_commit` refreshes the captured TCCs (resetting
+    them to `:untested` when their last submission goes away)
+    AND the parent `Commit` scalars, in that order. See the
+    Reality-checks note + the regression specs in
+    `spec/models/submission_destroy_cascade_spec.rb`.
 
   Pagination on the modern pages uses a new Kaminari theme at
   [`app/views/kaminari/modern/`](app/views/kaminari/modern/) —
@@ -235,7 +244,7 @@ that makes the change.
   from the original plan — Rack 3's `:unprocessable_entity` →
   `:unprocessable_content` rename, `show_exceptions` becoming an enum,
   and the gems that needed bumps or removal for the resolver to settle.
-- **The test suite is small but real.** 227 specs (request + model +
+- **The test suite is small but real.** 255 specs (request + model +
   helper + job) cover auth, submissions API, GitHub webhook (now
   async via `BranchSyncJob`, payload-driven), branch deletion, the
   Octokit middleware wiring, `TestInstance.query`,
@@ -243,8 +252,11 @@ that makes the change.
   ordering + reconcile path, the test_cases#show branch-scoped
   helpers (`#commit_window`, `#status_summary_for`,
   `#trend_payload`) + the `TestCasesHelper#submissions_payload`
-  picker logic, and high-traffic page renders. They are the regression safety net for
-  upcoming work — build on this rather than starting fresh.
+  picker logic, the computers#show bulk-delete + filter +
+  permissions matrix, the Submission destroy cascade scalar
+  refresh, and high-traffic page renders. They are the regression
+  safety net for upcoming work — build on this rather than
+  starting fresh.
 - **No Cucumber.** The old Cucumber suite is preserved at
   `features.deprecated/` and `spec/features.deprecated/`. RSpec request
   specs replace it. Do not add `.feature` files.
@@ -345,6 +357,20 @@ that makes the change.
 - **Bootsnap caches load paths** in `tmp/cache/bootsnap`. If you remove or
   rename a gem and immediately see `cannot load such file`, clear the cache
   with `rm -rf tmp/cache/bootsnap`.
+- **Submission destroy refreshes TCC + Commit scalars in a specific
+  order.** `Submission` carries `before_destroy
+  :remember_affected_tcc_ids, prepend: true` (the `prepend` is
+  load-bearing — without it the capture fires AFTER the
+  `dependent: :destroy` cascade and the through-association is
+  already empty). `after_commit :update_commit` then refreshes
+  the captured TCCs first, then `commit.update_scalars` — order
+  matters since the commit's counts read TCC statuses. Don't
+  re-add `dependent: :destroy` to associations under Submission
+  without thinking about whether the capture needs extending.
+  And don't write `self.status ||= :untested` in any
+  scalar-recompute method — `||=` won't reset a previously-set
+  status; use `self.status = :untested` then override based on
+  outcomes.
 
 ## Development commands
 
