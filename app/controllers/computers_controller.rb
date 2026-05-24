@@ -1,4 +1,6 @@
 class ComputersController < ApplicationController
+  layout "modern", only: %i[index index_all show]
+
   before_action :set_user, only: %i[show new create index edit update destroy
                                     test_instances_index]
   before_action :set_computer, only: %i[show edit update destroy

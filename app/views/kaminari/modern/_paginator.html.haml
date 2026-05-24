@@ -1,0 +1,18 @@
+-# Tailwind-flavored Kaminari paginator for modern-layout pages.
+-# Use as: `= paginate @records, theme: "modern"`.
+-#
+-# Same row of inline links as the legacy partial, but rendered with
+-# our design tokens (border-border, bg-bg-elev, text-fg-muted, brand
+-# active state). Skipped first/last page entries — Older/Newer is
+-# enough for the kind of paginated lists this theme is used on
+-# (computers + submissions), and the extra controls just add noise.
+
+= paginator.render do
+  %nav.flex.flex-wrap.items-center.justify-center.gap-1{ "aria-label": "Pagination" }
+    = prev_page_tag unless current_page.first?
+    - each_page do |page|
+      - if page.left_outer? || page.right_outer? || page.inside_window?
+        = page_tag page
+      - elsif !page.was_truncated?
+        = gap_tag
+    = next_page_tag unless current_page.last?
