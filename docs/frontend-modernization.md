@@ -1133,6 +1133,42 @@ same headline rhythm.
   Turbo's confirm flow + DELETE handling work without any custom
   JS. Reusable everywhere the wing-it pages need destructive
   actions.
+- **Sort dropdown** on the index (Most recent activity /
+  Maintainer (A→Z) / Computer name (A→Z)) — same
+  `dropdown_controller` the test_cases submissions Computer
+  picker uses. Backed by `Computer.ordered(sort)`. Maintainer
+  option hidden on the per-user view since there's only one
+  maintainer. Picking a sort always resets pagination.
+- **Bulk-delete submissions on `computers#show`** —
+  filter-then-select-then-confirm. The filter toolbar
+  (`?from=&to=&sha=`) sits at the top of the submissions card
+  driven by new `Submission.submitted_between` +
+  `Submission.for_commit_sha` scopes. Per-row checkboxes (only
+  rendered for `self_or_admin?`), an indeterminate-aware
+  "select all on this page" header checkbox, and a sticky
+  brand-soft selection bar. When the filter matches more rows
+  than fit on one page AND every visible row is selected, the
+  bar grows a "Select all M matching" link that flips the
+  destroy form into `select_all_matching=1` mode — lets a
+  maintainer take out a whole filtered batch without manually
+  checking 25 boxes per page. Confirmation is an HTML5
+  `<dialog>` (`showModal()`) with a destructive-tone
+  confirm. POSTs to a new
+  `ComputersController#destroy_submissions`
+  (`DELETE /users/:user_id/computers/:id/submissions`),
+  protected by `authorize_self_or_admin`, scoped at
+  `@computer.submissions` for IDOR safety, capped at
+  `BULK_DESTROY_LIMIT = 500` so the
+  `Submission#after_commit :update_commit` chain doesn't
+  hang a single request. The
+  `submission_selection_controller.js` Stimulus controller
+  owns the checkbox state + sticky bar visibility + modal
+  open/close + dynamic count interpolation in the bar AND
+  modal AND submit button — all reading the same `count`
+  target set. A small modern-layer block in
+  `app/assets/tailwind/application.css` centers the dialog
+  and adds the scrim backdrop (the browser default for
+  `<dialog>` is transparent — easy to miss).
 
 ### Step 9 — Cleanup
 

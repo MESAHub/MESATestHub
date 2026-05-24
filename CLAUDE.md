@@ -165,7 +165,44 @@ Before doing non-trivial work, read the appropriate doc:
   time) on the right. Same Build status pill (Built / Failed /
   Not reported) as the commit-show banners. The admin
   `/all_computers` view threads through the same `index` template
-  with an extra Maintainer column.
+  with an extra Maintainer column. Index supports a Sort dropdown
+  (Most recent activity / Maintainer (A→Z) / Computer name (A→Z))
+  backed by a `Computer.ordered(sort)` scope — the "recent"
+  branch uses a correlated subquery against `submissions(MAX
+  created_at)`, with a composite
+  `submissions(computer_id, created_at)` index added to keep
+  the query under 5ms on the prod-sized submissions table.
+
+  computers#show also hosts a self-serve bulk-delete flow for
+  submissions (so a maintainer can clean up a bad batch from a
+  misconfigured SDK without escalating to the admin). Three
+  layers wire together:
+  - **Filter toolbar** on the submissions card:
+    `?from=&to=&sha=` URL params, parsed by
+    `Submission.submitted_between` + `Submission.for_commit_sha`
+    (4-char minimum case-insensitive prefix). Header switches
+    to "N submissions matching the filter" when active.
+  - **Selection UI** powered by
+    `submission_selection_controller.js`: per-row checkboxes
+    (only rendered for `self_or_admin?`), a "select all on
+    this page" header checkbox with indeterminate tri-state, a
+    sticky brand-soft selection bar, and a
+    "Select all M matching the filter" link that appears when
+    the filter scope exceeds the visible page AND every
+    visible row is ticked — flips the form into
+    `select_all_matching=1` mode so the server re-derives the
+    set from the filter scope.
+  - **Confirmation modal** as an HTML5 `<dialog>` (centered +
+    scrim backdrop styled in the modern Tailwind layer).
+    Confirm POSTs to `DELETE
+    /users/:user_id/computers/:id/submissions` →
+    `ComputersController#destroy_submissions`, protected by
+    the existing `authorize_self_or_admin` filter, scoped at
+    `@computer.submissions` to prevent IDOR, and capped at
+    `BULK_DESTROY_LIMIT = 500` so a single request doesn't
+    spin on the `Submission#after_commit :update_commit`
+    callback chain. The post-delete redirect round-trips the
+    active filter params so the user lands on the same view.
 
   Pagination on the modern pages uses a new Kaminari theme at
   [`app/views/kaminari/modern/`](app/views/kaminari/modern/) —
