@@ -10,11 +10,14 @@ RSpec.describe Commit, 'payload ingestion' do
   # Sawyer::Resource supports `[:foo]` lookup identically.
   def gh_commit(sha:, parent_shas: [], author: 'Test Author',
                 email: 'author@example.com', message: 'msg',
-                date: Time.zone.parse('2026-01-01T12:00:00Z'))
+                date: Time.zone.parse('2026-01-01T12:00:00Z'),
+                committer_date: nil)
     {
       sha: sha,
       commit: {
-        author: { name: author, email: email, date: date },
+        author:    { name: author, email: email, date: date },
+        committer: { name: author, email: email,
+                     date: committer_date || date },
         message: message
       },
       html_url: "https://github.com/MESAHub/mesa/commit/#{sha}",
@@ -87,6 +90,26 @@ RSpec.describe Commit, 'payload ingestion' do
       # api.content() calls per commit per module.
       expect_any_instance_of(Commit).not_to receive(:api_update_test_cases)
       Commit.ingest_payload_commits([gh_commit(sha: sha40('dddd4'))])
+    end
+
+    it 'stores commit_time from the committer date, not the author date' do
+      # Rebase-and-merge / Squash-and-merge / amend rewrite a commit
+      # with a new committer date but preserve the original author
+      # date. GitHub orders /commits/<branch> by committer date and
+      # treats the head as the most-recently-committed commit; all
+      # our views sort by commit_time, so commit_time must read the
+      # committer date or the head won't sit at the top of every list.
+      author_date    = Time.zone.parse('2026-03-15T10:00:00Z')
+      committer_date = Time.zone.parse('2026-03-20T08:00:00Z')
+      payload = [gh_commit(sha: sha40('rebase1'),
+                           date: author_date,
+                           committer_date: committer_date)]
+
+      Commit.ingest_payload_commits(payload)
+
+      row = Commit.find_by(sha: sha40('rebase1'))
+      expect(row.commit_time).to be_within(1.second).of(committer_date)
+      expect(row.commit_time).not_to be_within(1.second).of(author_date)
     end
   end
 

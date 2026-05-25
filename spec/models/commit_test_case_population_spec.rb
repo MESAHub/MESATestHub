@@ -124,11 +124,12 @@ RSpec.describe Commit, 'test case population' do
 
   describe '.populate_payload_test_cases' do
     def gh_commit(sha:, parent_shas: [])
+      time = Time.zone.parse('2026-01-01T12:00:00Z')
       {
         sha: sha,
         commit: {
-          author: { name: 'Bot', email: 'bot@example.com',
-                    date: Time.zone.parse('2026-01-01T12:00:00Z') },
+          author:    { name: 'Bot', email: 'bot@example.com', date: time },
+          committer: { name: 'Bot', email: 'bot@example.com', date: time },
           message: "msg #{sha[0, 7]}"
         },
         html_url: "https://github.com/MESAHub/mesa/commit/#{sha}",
@@ -228,10 +229,12 @@ RSpec.describe Commit, 'test case population' do
         gh_commit(sha: middle_sha, parent_shas: [oldest_sha]),
         gh_commit(sha: oldest_sha, parent_shas: [seed.sha])
       ]
-      # Override commit_time so each is one hour apart, newest last
-      payload[0][:commit][:author][:date] = base_time + 3.hours
-      payload[1][:commit][:author][:date] = base_time + 2.hours
-      payload[2][:commit][:author][:date] = base_time + 1.hour
+      # Override commit_time so each is one hour apart, newest last.
+      # hash_from_github reads the committer date (matches GitHub's
+      # /commits ordering); the author date is informational here.
+      payload[0][:commit][:committer][:date] = base_time + 3.hours
+      payload[1][:commit][:committer][:date] = base_time + 2.hours
+      payload[2][:commit][:committer][:date] = base_time + 1.hour
 
       sha_to_id = Commit.ingest_payload_commits(payload)
       Commit.ingest_payload_edges(payload, sha_to_id)

@@ -303,16 +303,27 @@ class Commit < ApplicationRecord
   # replaces. Deleted in Step 5 along with the position column.
 
   def self.hash_from_github(github_hash)
-    # convert hash from a github api_request representing a commit to 
-    # a hash ready to be inserted into the database
-    # +github_hash+ a hash for one commit resulting from a github webhook
-    # push payload
+    # Convert a GitHub API commit hash into the columns we store on
+    # `commits`. Driven by api.compare / api.commits (BranchSyncJob,
+    # BranchBackfillJob); the GitHub push-webhook payload's commits[]
+    # array isn't passed here directly — BranchSyncJob calls
+    # api.compare(before, after) instead, which returns the same shape.
+    #
+    # `commit_time` reads the *committer* date, not the author date.
+    # GitHub orders /commits/<branch> by committer date, and the head
+    # of a branch is always the most-recently-committed commit. For
+    # commits applied via Rebase-and-merge or Squash-and-merge, the
+    # author date is preserved (whenever the patch was originally
+    # written) but the committer date is the moment the commit landed
+    # on the branch — that's what makes the head sit at the top of
+    # GitHub's view and is what we want every commit-list view here
+    # to agree on.
     {
       sha: github_hash[:sha],
       short_sha: github_hash[:sha][(0...7)],
       author: github_hash[:commit][:author][:name],
       author_email: github_hash[:commit][:author][:email],
-      commit_time: github_hash[:commit][:author][:date],
+      commit_time: github_hash[:commit][:committer][:date],
       message: github_hash[:commit][:message],
       github_url: github_hash[:html_url]
     }
