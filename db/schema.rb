@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_05_24_203432) do
+ActiveRecord::Schema[8.0].define(version: 2026_05_25_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -212,6 +212,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_24_203432) do
   add_foreign_key "branches", "commits", column: "head_id"
   add_foreign_key "commit_relations", "commits", column: "child_id"
   add_foreign_key "commit_relations", "commits", column: "parent_id"
+  add_foreign_key "computers", "users", on_delete: :cascade
   add_foreign_key "inlist_data", "instance_inlists"
   add_foreign_key "instance_inlists", "test_instances"
   add_foreign_key "submissions", "commits"

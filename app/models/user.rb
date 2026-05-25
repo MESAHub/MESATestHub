@@ -1,5 +1,11 @@
 class User < ApplicationRecord
-  has_many :computers
+  # Destroying a user cascades through computers → submissions →
+  # test_instances → instance_inlists → inlist_data. The
+  # Submission#before_destroy/after_commit pair refreshes affected
+  # TestCaseCommit + Commit scalars so the destroy doesn't leave
+  # stale counts behind. See user_destroy_cascade_spec for the
+  # full coverage.
+  has_many :computers, dependent: :destroy
   has_many :test_instances, through: :computers
   has_many :submissions, through: :computers
 
