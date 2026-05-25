@@ -40,7 +40,8 @@ class Computer < ApplicationRecord
     end
   }
 
-  validates_inclusion_of :platform, in: %w[macOS linux]
+  PLATFORMS = %w[macOS linux].freeze
+  validates_inclusion_of :platform, in: PLATFORMS
 
   def user_name
     user.name

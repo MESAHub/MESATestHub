@@ -219,13 +219,33 @@ partials). Classification below — anything not listed is implicitly
     orphan empty `users/computers_index.html.haml` template —
     it was never wired to a controller action or route, just a
     phantom filename from an aborted SVN-era restructure.
-  - `users/admin.html.haml` — still on legacy. Forms-heavy
-    (create / select-to-edit / select-to-delete); ports
-    naturally alongside `users/new.html.haml` and
-    `users/edit.html.haml` as the "users forms" commit.
-  - `users/new.html.haml`, `users/edit.html.haml` (signup / edit)
-  - `computers/new.html.haml`, `computers/edit.html.haml`,
-    `computers/_form.html.haml`
+  - ~~`users/new.html.haml`, `users/edit.html.haml`,
+    `users/admin.html.haml`, `computers/new.html.haml`,
+    `computers/edit.html.haml`, `computers/_form.html.haml`~~ —
+    landed (Step 8j; **forms cluster**). New shared primitives:
+    - `app/views/shared/_field.html.haml` — label + input +
+      inline error wrapper. Handles `:text` / `:email` /
+      `:password` / `:select` / `:checkbox` / `:textarea` /
+      `:number` / `:url` / `:tel`. Sets `aria-invalid` +
+      `aria-describedby` when the bound attribute has errors.
+    - `app/views/shared/_form_errors.html.haml` — top-of-form
+      summary banner that lists every validation error.
+    - `.mesa-input.is-invalid` / `[aria-invalid="true"]` and
+      `.mesa-checkbox` classes added to the Tailwind layer at
+      `app/assets/tailwind/application.css`. Error state gives
+      a danger-colored border + soft glow on focus.
+
+    Every form submits with Turbo, so create/update actions
+    render the form re-render with
+    `status: :unprocessable_content` so Turbo will actually
+    swap the response into the DOM. The legacy "200 + render"
+    pattern silently no-ops under Turbo.
+
+    Also added `Computer::PLATFORMS` constant on the model —
+    the legacy form referenced a non-existent `Computer.platforms`
+    method, so the platform dropdown was actually broken on
+    `master`. The constant now drives both the validator and
+    the form.
   - `test_instances/index.html.haml`, `test_instances/search.html.haml`,
     `test_instances/show.html.haml`, and `_table`/`_search_table`
     partials
@@ -1204,6 +1224,17 @@ same headline rhythm.
 - Update `CLAUDE.md`: drop the "Bootstrap 4, jQuery, Sprockets,
   Turbolinks" line under reality checks.
 - Update `docs/roadmap.md`: mark Phase 4 complete.
+- **Date display audit.** `ApplicationController#format_time`
+  uses `I18n.l ..., format: :short`, which by default drops the
+  year. That's fine for recent rows but ambiguous on submissions
+  older than ~12 months (computers#show flagged this first, but
+  the same helper is used on `commits#show`'s submissions table,
+  `test_case_commits#show`'s instances table, `test_cases#show`'s
+  Submissions tab, etc.). Audit every modern page that renders
+  `format_time` and either (a) switch to a helper that includes
+  the year when the timestamp is more than ~6–12 months in the
+  past, or (b) add a tooltip with the full timestamp on hover.
+  Decide once, apply everywhere — don't fix it per-page.
 
 ## Pages without designs ("wing it" policy)
 

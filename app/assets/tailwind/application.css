@@ -199,6 +199,34 @@
     @apply w-full;
   }
 
+  /* Error state for mesa-input. Used by the shared `_field` partial
+     when an attribute has validation errors. `aria-invalid="true"`
+     is the accessible signal; the .is-invalid alias is for forms
+     that set the class directly instead of the ARIA attribute. */
+  .mesa-modern .mesa-input.is-invalid,
+  .mesa-modern .mesa-input[aria-invalid="true"] {
+    border-color: var(--color-danger);
+  }
+  .mesa-modern .mesa-input.is-invalid:focus,
+  .mesa-modern .mesa-input.is-invalid:focus-visible,
+  .mesa-modern .mesa-input[aria-invalid="true"]:focus,
+  .mesa-modern .mesa-input[aria-invalid="true"]:focus-visible {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 25%, transparent);
+  }
+
+  /* Native checkbox styled with the brand accent. `accent-color`
+     handles the checked-state fill on modern browsers without us
+     having to draw the check ourselves. */
+  .mesa-modern .mesa-checkbox {
+    @apply h-4 w-4 rounded border border-border bg-bg cursor-pointer;
+    accent-color: var(--color-brand);
+  }
+  .mesa-modern .mesa-checkbox:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+
   /* HTML5 <dialog>. `dialog.showModal()` would normally drop the
      element into the top layer with centered positioning, but
      browsers vary on whether they add a visible backdrop or

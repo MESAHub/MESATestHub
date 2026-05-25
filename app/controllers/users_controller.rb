@@ -1,5 +1,5 @@
 class UsersController < ApplicationController
-  layout "modern", only: %i[index show]
+  layout "modern", only: %i[index show new create edit update admin]
 
   before_action :set_user, only: %i[show edit update destroy]
   before_action :authorize_user
@@ -24,7 +24,7 @@ class UsersController < ApplicationController
     if @user.save
       redirect_to users_path, notice: "Successfully set up #{@user.name}."
     else
-      render "new"
+      render "new", status: :unprocessable_content
     end
   end
 
@@ -44,7 +44,7 @@ class UsersController < ApplicationController
         end
         format.json { render :show, status: :ok, location: @user }
       else
-        format.html { render :edit }
+        format.html { render :edit, status: :unprocessable_content }
         format.json { render json: @user.errors, status: :unprocessable_content }
       end
     end

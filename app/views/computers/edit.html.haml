@@ -1,3 +1,23 @@
-%h1 Editing computer
+- content_for :title, "Edit #{@computer.name}"
 
-= render 'form'
+.space-y-4
+  -# Breadcrumb. Back arrow lands on the computer's show page.
+  %nav.flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+    = link_to user_computers_path(@user),
+             class: "inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-bg-muted hover:text-fg no-underline",
+             title: "Back to #{@user.name}'s computers" do
+      = mesa_icon(:arrow_left, size: 14)
+      %span= "#{@user.name}'s computers"
+    %span.text-fg-subtle /
+    = link_to @computer.name, user_computer_path(@user, @computer),
+             class: "font-mono text-fg hover:text-brand no-underline"
+    %span.text-fg-subtle /
+    %span.text-fg Edit
+
+  -# Headline.
+  .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+    %div{ class: "text-[20px] font-medium leading-snug tracking-tight text-fg" }
+      Edit
+      %span.font-mono.font-semibold.text-fg= @computer.name
+
+  = render "form", cancel_path: user_computer_path(@user, @computer), submit_label: "Save changes"

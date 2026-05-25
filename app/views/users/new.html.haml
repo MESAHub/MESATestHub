@@ -1,29 +1,58 @@
-.row
-  .col
-    %h1 New User
+- content_for :title, "New user"
 
-=bootstrap_form_for @user do |f|
-  - if @user.errors.any?
-    .form-row
-      .col.alert.alert-danger
-        %h4.alert-heading= "#{pluralize(@user.errors.count, "error")} prohibited this user from being saved:"
-        %p
-          %ul
-            - @user.errors.full_messages.each do |message|
-              %li= message      
-  .form-row
-    .col.field=f.text_field :email, placeholder: 'paxton@kitp.ucsb.edu'
-  .form-row
-    .col.field=f.password_field :password
-    .col.field=f.password_field :password_confirmation
-  .form-row
-    .col.field=f.text_field :name
-  .form-row
-    .col.field=f.time_zone_select("time_zone", ActiveSupport::TimeZone.us_zones, default: "Pacific Time (US & Canada)")    
-  .form-row
-    .col.field
-      =f.form_group :admin do
-        =f.check_box :admin
-  .form-row
-    .actions=f.submit 'Save', {class: 'btn btn-lg btn-primary'}
+.space-y-4
+  -# Breadcrumb. Back arrow lands on the all-users index since
+  -# create-user is admin-gated and the natural "up" is the list.
+  %nav.flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+    = link_to users_path,
+             class: "inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-bg-muted hover:text-fg no-underline",
+             title: "Back to all users" do
+      = mesa_icon(:arrow_left, size: 14)
+      %span All users
+    %span.text-fg-subtle /
+    %span.text-fg New user
 
+  -# Headline card. Single tier: page identity sentence.
+  .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+    %div{ class: "text-[20px] font-medium leading-snug tracking-tight text-fg" }
+      Create a new
+      %strong.font-semibold MESA Test Hub
+      account.
+
+  -# Form card. Single column at narrow widths; password pair sits
+  -# on one row at md+ to mirror the legacy two-up layout.
+  = form_with model: @user, local: true, class: "rounded-lg border border-border bg-bg-elev p-5 space-y-4", html: { style: "box-shadow: var(--shadow-card-sm);" } do |f|
+    = render "shared/form_errors", model: @user, resource: "user"
+
+    = render "shared/field", form: f, attribute: :name, required: true,
+                             placeholder: "Bill Paxton"
+    = render "shared/field", form: f, attribute: :email, type: :email, required: true,
+                             placeholder: "paxton@kitp.ucsb.edu"
+
+    .grid.gap-4{ class: "grid-cols-1 md:grid-cols-2" }
+      = render "shared/field", form: f, attribute: :password, type: :password, required: true,
+                               hint: "At least 8 characters."
+      = render "shared/field", form: f, attribute: :password_confirmation, type: :password, required: true,
+                               label: "Confirm password"
+
+    -# time_zone_select handles priority zones natively, so we
+    -# call it directly with the mesa-input class rather than
+    -# routing through the _field partial.
+    %div
+      = f.label :time_zone, class: "mesa-label mb-1"
+      = f.time_zone_select :time_zone, ActiveSupport::TimeZone.us_zones,
+                           { default: "Pacific Time (US & Canada)" },
+                           { class: "mesa-input" }
+
+    = render "shared/field", form: f, attribute: :admin, type: :checkbox,
+                             label: "Administrator",
+                             hint: "Admins can manage every user and every computer."
+
+    .pt-2.border-t.border-border-subtle
+      .flex.flex-wrap.items-center.justify-end.gap-2
+        = link_to "Cancel", users_path,
+                 class: "mesa-btn",
+                 style: "padding: 6px 14px; font-size: 13px;"
+        = f.submit "Create user",
+                  class: "mesa-btn mesa-btn-primary",
+                  style: "padding: 6px 14px; font-size: 13px;"

@@ -1,33 +1,52 @@
-.row
-  .col
-    %h1
+- content_for :title, "Edit #{@user.name}"
+
+.space-y-4
+  -# Breadcrumb. Back arrow lands on this user's profile.
+  %nav.flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+    = link_to user_path(@user),
+             class: "inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-bg-muted hover:text-fg no-underline",
+             title: "Back to #{@user.name}" do
+      = mesa_icon(:arrow_left, size: 14)
+      %span= @user.name
+    %span.text-fg-subtle /
+    %span.text-fg Edit
+
+  -# Headline card. Single tier: page identity sentence.
+  .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+    %div{ class: "text-[20px] font-medium leading-snug tracking-tight text-fg" }
       Edit
-      =@user.name
+      %strong.font-semibold= @user.name
 
-=bootstrap_form_for @user do |f|
-  - if @user.errors.any?
-    .form-row
-      .col.alert.alert-danger
-        %h4.alert-heading= "#{pluralize(@user.errors.count, "error")} prohibited this user from being saved:"
-        %p
-          %ul
-            - @user.errors.full_messages.each do |message|
-              %li= message      
-  .form-row
-    .col.field=f.text_field :email
-  .form-row
-    .col.field=f.password_field :password, label: "New Password"
-    .col.field=f.password_field :password_confirmation, label: "Confirm New Password"
-  .form-row
-    .col.field=f.text_field :name
-  .form-row
-    .col.field=f.time_zone_select("time_zone", ActiveSupport::TimeZone.us_zones, default: "Pacific Time (US & Canada)")
-  - if current_user.admin?
-    .form-row
-      .col.field
-        =f.form_group :admin, label: { text: "Is this person an admin?" } do
-          =f.check_box :admin
+  -# Form card.
+  = form_with model: @user, local: true, class: "rounded-lg border border-border bg-bg-elev p-5 space-y-4", html: { style: "box-shadow: var(--shadow-card-sm);" } do |f|
+    = render "shared/form_errors", model: @user, resource: "user"
 
-  .form-row
-    .actions=f.submit 'Save', {class: 'btn btn-lg btn-primary'}
+    = render "shared/field", form: f, attribute: :name, required: true
+    = render "shared/field", form: f, attribute: :email, type: :email, required: true
 
+    .grid.gap-4{ class: "grid-cols-1 md:grid-cols-2" }
+      = render "shared/field", form: f, attribute: :password, type: :password,
+                               label: "New password",
+                               hint: "Leave blank to keep the current one."
+      = render "shared/field", form: f, attribute: :password_confirmation, type: :password,
+                               label: "Confirm new password"
+
+    %div
+      = f.label :time_zone, class: "mesa-label mb-1"
+      = f.time_zone_select :time_zone, ActiveSupport::TimeZone.us_zones,
+                           { default: "Pacific Time (US & Canada)" },
+                           { class: "mesa-input" }
+
+    - if admin?
+      = render "shared/field", form: f, attribute: :admin, type: :checkbox,
+                               label: "Administrator",
+                               hint: "Admins can manage every user and every computer."
+
+    .pt-2.border-t.border-border-subtle
+      .flex.flex-wrap.items-center.justify-end.gap-2
+        = link_to "Cancel", user_path(@user),
+                 class: "mesa-btn",
+                 style: "padding: 6px 14px; font-size: 13px;"
+        = f.submit "Save changes",
+                  class: "mesa-btn mesa-btn-primary",
+                  style: "padding: 6px 14px; font-size: 13px;"

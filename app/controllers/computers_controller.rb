@@ -1,5 +1,5 @@
 class ComputersController < ApplicationController
-  layout "modern", only: %i[index index_all show]
+  layout "modern", only: %i[index index_all show new create edit update]
 
   # Hard ceiling on bulk submission deletion. The `destroy_all` path
   # instantiates each Submission and runs its `after_commit
@@ -143,7 +143,7 @@ class ComputersController < ApplicationController
     # this if clause shouldn't be necessary, but I can't get it to work
     # otherwise
     if @computer.errors.any?
-      render 'new'
+      render 'new', status: :unprocessable_content
     else
       respond_to do |format|
         if @computer.save
@@ -153,7 +153,7 @@ class ComputersController < ApplicationController
           end
           format.json { render :show, status: :created, location: @computer }
         else
-          format.html { render :new }
+          format.html { render :new, status: :unprocessable_content }
           format.json do
             render json: @computer.errors, status: :unprocessable_content
           end
@@ -183,7 +183,7 @@ class ComputersController < ApplicationController
         end
         format.json { render :show, status: :ok, location: @computer }
       else
-        format.html { render :edit }
+        format.html { render :edit, status: :unprocessable_content }
         format.json do
           render json: @computer.errors, status: :unprocessable_content
         end

@@ -45,9 +45,11 @@ Before doing non-trivial work, read the appropriate doc:
   test-case history page
   (`/:branch/test_cases/:module/:test_case`), and the
   computers list + detail pages (`/users/:id/computers`,
-  `/users/:id/computers/:id`, `/all_computers`), and the
-  users list + detail pages (`/users`, `/users/:id`) all render
-  through the modern layout.
+  `/users/:id/computers/:id`, `/all_computers`), the
+  users list + detail pages (`/users`, `/users/:id`), and the
+  full forms cluster (`/users/new`, `/users/:id/edit`, `/admin`,
+  `/users/:id/computers/new`, `/users/:id/computers/:id/edit`)
+  all render through the modern layout.
   Commit detail has four tabs (Summary / Computers / Diff vs
   last pass / Build logs) — the original Tests tab was folded
   into Summary when review flagged it as redundant with the
@@ -241,8 +243,31 @@ Before doing non-trivial work, read the appropriate doc:
   `User.includes(:computers)` so the chip rendering doesn't
   N+1 against `users` rows.
 
-  Step 8's remaining wing-it pages (`test_instances#*`, admin,
-  users-forms) are still outstanding; the page priority list
+  The **forms cluster** (Step 8j) landed every model-bound form
+  in the app: `users/new`, `users/edit`, `users/admin` (which
+  hosts three forms — create / select-to-edit / select-to-delete),
+  `computers/new`, `computers/edit`, and the shared
+  `computers/_form` partial. New primitives at
+  [`app/views/shared/_field.html.haml`](app/views/shared/_field.html.haml)
+  (label + input + inline error, handles :text / :email /
+  :password / :select / :checkbox / :textarea / :number / :url /
+  :tel) and
+  [`app/views/shared/_form_errors.html.haml`](app/views/shared/_form_errors.html.haml)
+  (top-of-form summary banner). Driven by two new Tailwind layer
+  classes — `.mesa-input.is-invalid` / `[aria-invalid="true"]`
+  (danger border + soft glow on focus) and `.mesa-checkbox`
+  (brand-accented native checkbox). Form re-renders on
+  validation failure use
+  `render :new, status: :unprocessable_content` (or `:edit`) —
+  Turbo silently no-ops the 200 + render pattern, so the
+  status code is load-bearing. Also added a
+  `Computer::PLATFORMS = %w[macOS linux].freeze` constant to
+  fix a long-standing bug in the legacy form (which referenced
+  a non-existent `Computer.platforms` method).
+
+  Step 8's remaining wing-it pages (`test_instances#*`,
+  submissions/show, pages/about, visitors/index) are still
+  outstanding; the page priority list
   is at the bottom of
   [`docs/frontend-modernization.md`](docs/frontend-modernization.md).
   Note: `computers#test_instances_index` was deleted, not

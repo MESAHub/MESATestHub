@@ -1,63 +1,80 @@
-.row
-  .col
-    %h1 Administrator Actions
-    %p 
-      %b
-        Below are controls that are largely scattered throughout the web app
-        that only administrators can access. They are assembled here for
-        convenience.
+- content_for :title, "Administrator"
+- user_options = @users.map { |u| [u.name, u.id] }
 
-.row
-  .col
-    %h2 User Control
-    %p Add, edit, or delete users
-    %hr
-.row
-  .col
-    %h4 Add new user
-=bootstrap_form_for @user do |f|
-  - if @user.errors.any?
-    .form-row
-      .col.alert.alert-danger
-        %h4.alert-heading= "#{pluralize(@user.errors.count, "error")} prohibited this user from being saved:"
-        %p
-          %ul
-            - @user.errors.full_messages.each do |message|
-              %li= message      
-  .form-row
-    .col.field=f.text_field :email
-  .form-row
-    .col.field=f.password_field :password, label: "New Password"
-    .col.field=f.password_field :password_confirmation, label: "Confirm New Password"
-  .form-row
-    .col.field=f.text_field :name
-  - if current_user.admin?
-    .form-row
-      .col.field
-        =f.form_group :admin do
-          =f.check_box :admin
-  .form-row
-    .actions=f.submit 'Save', {class: 'btn btn-lg btn-primary'}
-%hr
+.space-y-4
+  -# Breadcrumb. Admin is a top-level page — same shape as
+  -# users#index, no back arrow.
+  %nav.flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+    %span.text-fg Admin
 
-.row
-  .col
-    .h4 Edit User
-=bootstrap_form_tag url: admin_edit_user_path, method: 'get' do |f|
-  .form-row
-    .col.field=f.select :user_id, @users.collect {|user| [user.name, user.id]}
-  .form-row
-    .actions=f.submit 'Edit', {class: 'btn btn-lg'}
-%hr
-.row
-  .col
-    %h4 Delete User
-=bootstrap_form_tag url: admin_delete_user_path, method: 'delete' do |f|
-  .form-row
-    .col.field=f.select :user_id, @users.collect {|user| [user.name, user.id]}
-  .form-row
-    .actions=f.submit 'Delete', {class: 'btn btn-lg btn-danger', data: {confirm: "Are you absolutely sure you want to delete this user?\n\nAll of their computers and test data will be deleted, too."}}
+  -# Headline card. Explains what this page is — admin-only
+  -# controls collected from across the app.
+  .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+    %div{ class: "text-[20px] font-medium leading-snug tracking-tight text-fg" }
+      Administrator actions
+    %p.mt-2.text-fg-muted{ class: "text-[13px]" }
+      Controls scattered across the app that only admins can reach,
+      collected here for convenience.
 
+  -# Create user.
+  = form_with model: @user, local: true, class: "rounded-lg border border-border bg-bg-elev p-5 space-y-4", html: { style: "box-shadow: var(--shadow-card-sm);" } do |f|
+    %div
+      %span.mesa-label Create new user
+      %p.mt-1.text-fg-muted{ class: "text-[12px]" }
+        Adds a brand-new account. The user can change their name,
+        time zone, and password from their profile after sign-in.
 
+    = render "shared/form_errors", model: @user, resource: "user"
 
-      
+    = render "shared/field", form: f, attribute: :name, required: true,
+                             placeholder: "Bill Paxton"
+    = render "shared/field", form: f, attribute: :email, type: :email, required: true,
+                             placeholder: "paxton@kitp.ucsb.edu"
+
+    .grid.gap-4{ class: "grid-cols-1 md:grid-cols-2" }
+      = render "shared/field", form: f, attribute: :password, type: :password, required: true,
+                               hint: "At least 8 characters."
+      = render "shared/field", form: f, attribute: :password_confirmation, type: :password, required: true,
+                               label: "Confirm password"
+
+    = render "shared/field", form: f, attribute: :admin, type: :checkbox,
+                             label: "Administrator",
+                             hint: "Admins can manage every user and every computer."
+
+    .pt-2.border-t.border-border-subtle
+      .flex.flex-wrap.items-center.justify-end.gap-2
+        = f.submit "Create user",
+                  class: "mesa-btn mesa-btn-primary",
+                  style: "padding: 6px 14px; font-size: 13px;"
+
+  -# Edit user — picker → redirect to the user's edit page.
+  = form_with url: admin_edit_user_path, method: :get, local: true, class: "rounded-lg border border-border bg-bg-elev p-5 space-y-4", html: { style: "box-shadow: var(--shadow-card-sm);" } do |f|
+    %div
+      %span.mesa-label Edit any user
+      %p.mt-1.text-fg-muted{ class: "text-[12px]" }
+        Jumps to the selected user's edit page. Same destination as
+        clicking their name on the users list.
+
+    %div
+      = label_tag :user_id, "User", class: "mesa-label mb-1"
+      = select_tag :user_id, options_for_select(user_options), class: "mesa-input"
+
+    .pt-2.border-t.border-border-subtle
+      .flex.flex-wrap.items-center.justify-end.gap-2
+        %button.mesa-btn{ type: "submit", style: "padding: 6px 14px; font-size: 13px;" } Open editor
+
+  -# Delete user.
+  = form_with url: admin_delete_user_path, method: :delete, local: true, class: "rounded-lg border border-border bg-bg-elev p-5 space-y-4", html: { style: "box-shadow: var(--shadow-card-sm);", data: { turbo_confirm: "Delete the selected user? All of their computers and test data will be deleted, too." } } do |f|
+    %div
+      %span.mesa-label Delete any user
+      %p.mt-1.text-fg-muted{ class: "text-[12px]" }
+        Permanently removes the user and every computer, submission,
+        and test instance they own. Cannot be undone.
+
+    %div
+      = label_tag :user_id, "User", class: "mesa-label mb-1"
+      = select_tag :user_id, options_for_select(user_options), class: "mesa-input"
+
+    .pt-2.border-t.border-border-subtle
+      .flex.flex-wrap.items-center.justify-end.gap-2
+        %button.mesa-btn{ type: "submit", style: "padding: 6px 14px; font-size: 13px; color: var(--color-danger-soft-text); border-color: var(--color-danger-soft); background: transparent;" } Delete user
