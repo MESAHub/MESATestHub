@@ -167,15 +167,14 @@ current state and the design primitives an agent needs.
 
 **Known follow-up — not blocking Phase 5:**
 
-- `TestInstance.query` (the backend for `test_instances#search`
-  and its JSON API counterpart) is partially rotted since the
-  SVN→git transition. Some fields still work (`test_case:`,
-  `user:`, `commit:`, `computer:`, `passed:`); ones tied to the
-  dropped `mesa_version` column / retired `Version` model
-  (notably `version:`) silently fall through. The search page
-  carries a `border-warning` notice so users see the state.
-  Repairing the query layer is a small, contained task — flagged
-  for whenever someone gets to it.
+- ~~`TestInstance.query` rot.~~ Fixed on
+  `fix-test-instances-search`. Dropped the dead `version:`
+  option (depended on the dropped `mesa_version` column /
+  retired `Version` model). Wired up `rn_runtime:` and
+  `re_runtime:` SearchOptions that the help text had been
+  promising. Documented the already-working `commit:` and
+  `commit_datetime:` fields (the latter accepts ranges like
+  `2024-01-01-2024-06-30`), and removed the warning banner.
 
 ## Ongoing — email migration
 
