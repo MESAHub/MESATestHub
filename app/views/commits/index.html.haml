@@ -40,8 +40,9 @@
   -# until it's actually wired to client-side filtering; restoring
   -# it should be a single block insert here.
   .rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);" }
-    -# Table header
-    .grid.gap-3.border-b.border-border-subtle.bg-bg-subtle.px-4.py-2.font-semibold.uppercase.tracking-wide.text-fg-subtle{ class: "text-[10px] grid-cols-[12px_minmax(0,2.4fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]" }
+    -# Table header — hidden on narrow viewports where the table layout
+    -# breaks down and the mobile card layout below takes over.
+    .hidden.gap-3.border-b.border-border-subtle.bg-bg-subtle.px-4.py-2.font-semibold.uppercase.tracking-wide.text-fg-subtle{ class: "text-[10px] sm:grid grid-cols-[12px_minmax(0,2.4fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]" }
       %span &nbsp;
       %span Commit
       %span SHA
@@ -62,8 +63,43 @@
           %span.text-fg-subtle.tabular-nums{ class: "text-[10px]" }= bucket_commits.size
         - bucket_commits.each do |commit|
           - state = @commit_states[commit.id]
+          - flag_count = state[:flags][:fpe].to_i + state[:flags][:checksum].to_i + state[:flags][:inlists_full].to_i
+
+          -# Mobile row (< sm). The 8-column desktop grid below has no
+          -# chance of fitting status pills + author + flags in a 343px
+          -# content area, so on mobile we stack the same information
+          -# in three lines: message, identity meta (sha · author · age
+          -# · optional PR + test count), then status pills wrapping
+          -# freely. Both rows are rendered; Tailwind's display:none
+          -# pulls the non-matching one out of the accessibility tree.
           = link_to commit_path(branch: @branch.name, sha: commit.short_sha),
-                   class: "grid gap-3 border-b border-border-subtle px-4 py-3 text-sm text-fg no-underline hover:bg-bg-subtle items-center grid-cols-[12px_minmax(0,2.4fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]" do
+                   class: "flex sm:hidden items-start gap-3 border-b border-border-subtle px-4 py-3 text-sm text-fg no-underline hover:bg-bg-subtle" do
+            %span.inline-block.h-2.w-2.rounded-full.shrink-0{ class: status_dot_class(state), style: "margin-top: 6px;", title: "build #{state[:build][:status]} · tests #{state[:tests][:status]}" }
+            .min-w-0.flex-1.flex.flex-col.gap-1.5
+              %span.font-medium.text-fg{ class: "line-clamp-2" }= commit.message_first_line(120)
+              .flex.flex-wrap.items-center.gap-x-2.gap-y-0.5.text-fg-muted{ class: "text-[11px]" }
+                %span.font-mono.text-brand= commit.short_sha
+                %span.text-fg-subtle ·
+                .inline-flex.items-center.gap-1.min-w-0
+                  = commit_avatar(commit.author, size: 14)
+                  %span.truncate= commit.author
+                %span.text-fg-subtle ·
+                %span.tabular-nums= short_relative_time(commit.commit_time, now: displayed_time)
+                - if commit.respond_to?(:pr_number) && commit.pr_number
+                  %span.text-fg-subtle ·
+                  %span= "##{commit.pr_number}"
+                - if commit.test_case_count.to_i > 0
+                  %span.text-fg-subtle ·
+                  %span= "#{commit.test_case_count} tests"
+              .flex.flex-wrap.items-center.gap-1.5
+                = build_status_pill(state, size: :sm)
+                = test_status_pill(state, size: :sm)
+                - if flag_count > 0
+                  = flag_chips(state)
+
+          -# Desktop row (≥ sm). Original 8-column grid layout, unchanged.
+          = link_to commit_path(branch: @branch.name, sha: commit.short_sha),
+                   class: "hidden sm:grid gap-3 border-b border-border-subtle px-4 py-3 text-sm text-fg no-underline hover:bg-bg-subtle items-center grid-cols-[12px_minmax(0,2.4fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]" do
             %span.inline-block.h-2.w-2.rounded-full{ class: status_dot_class(state), title: "build #{state[:build][:status]} · tests #{state[:tests][:status]}" }
             .min-w-0.flex.flex-col.gap-0.5
               %span.truncate.font-medium.text-fg= commit.message_first_line(80)
