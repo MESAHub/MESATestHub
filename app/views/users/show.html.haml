@@ -1,70 +1,149 @@
-.row
-  .col
-    %p#notice= notice
-.row
-  .col-lg-6.col-xs-12
-    %h3= "#{@user.name} Details"
-    %table.table
-      %tr
-        %th{scope: 'row'} Name
-        %td= @user.name
-      %tr
-        %th{scope: 'row'} Email
-        %td= @user.email
-      %tr
-        %th{scope: 'row'} Time Zone
-        %td= @user.time_zone || "Not Specified"
-      %tr
-        %th{scope: 'row'} Admin
-        %td= @user.admin ? 'Yes' : 'No'
-    .text-center
-      .btn-group
-        = link_to 'All Users', users_path, class: 'btn btn-md btn-secondary text-light'
+- content_for :title, @user.name
+
+.space-y-4
+  -# Breadcrumb. Back arrow lands on the all-users index.
+  %nav.flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+    = link_to users_path,
+             class: "inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-bg-muted hover:text-fg no-underline",
+             title: "Back to all users" do
+      = mesa_icon(:arrow_left, size: 14)
+      %span All users
+    %span.text-fg-subtle /
+    %span.text-fg= @user.name
+
+  -# Headline card. Two tiers separated by a hairline, mirroring
+  -# computers#show. Tier 1: identity sentence + Edit/Delete actions
+  -# (gated by self_or_admin? / admin? respectively). Tier 2 splits
+  -# at lg+ between profile facts (left) and activity facts (right);
+  -# below lg the columns stack.
+  - count = @computers.size
+  .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+
+    -# Tier 1.
+    .flex.flex-wrap.items-start.justify-between.gap-3
+      %div.min-w-0
+        %div{ class: "text-[22px] font-medium leading-snug tracking-tight text-fg" }
+          %span.font-semibold.text-fg= @user.name
+          - if count.zero?
+            %span.text-fg-muted{ class: "text-[20px]" }<>
+              = " is a MESA Test Hub user"
+          - else
+            %span.text-fg-muted{ class: "text-[20px]" }<>
+              = " maintains "
+            %strong.font-semibold.tabular-nums.text-fg= count
+            %span.text-fg-muted{ class: "text-[20px]" }<>
+              = " #{'computer'.pluralize(count)}"
+          - if @user.admin?
+            %span.ml-2.inline-flex.items-center.rounded-md.border.border-border.bg-bg-muted.align-middle.font-medium.text-fg-muted{ class: "text-[10px] uppercase tracking-wide", style: "padding: 1px 6px;" } admin
+
+      - if self_or_admin?
+        .shrink-0.flex.items-center.gap-1
+          = link_to edit_user_path(@user),
+                   class: "mesa-btn",
+                   style: "padding: 4px 10px; font-size: 12px;" do
+            %span Edit
+          - if admin?
+            = button_to user_path(@user),
+                       method: :delete,
+                       form: { data: { turbo_confirm: "Delete #{@user.name}? All of their computers and test data will be deleted, too." } },
+                       class: "mesa-btn",
+                       style: "padding: 4px 10px; font-size: 12px; color: var(--color-danger-soft-text); border-color: var(--color-danger-soft); background: transparent;" do
+              Delete
+
+    -# Tier 2.
+    .mt-4.pt-4.border-t.border-border-subtle.grid.gap-6{ class: "grid-cols-1 lg:grid-cols-2" }
+
+      -# LEFT — profile facts.
+      .min-w-0
+        %span.mesa-label.mb-3 Profile
+        %dl.mt-2.grid.gap-y-2{ class: "grid-cols-[auto_1fr] gap-x-6 text-[13px]" }
+          %dt.text-fg-subtle Email
+          %dd.text-fg.font-mono.break-all
+            = @user.email.presence || content_tag(:span, "—", class: "text-fg-subtle")
+          %dt.text-fg-subtle Time zone
+          %dd.text-fg= @user.time_zone.presence || content_tag(:span, "—", class: "text-fg-subtle")
+          %dt.text-fg-subtle Role
+          %dd.text-fg= @user.admin? ? "Administrator" : "Maintainer"
+
+      -# RIGHT — activity facts.
+      .min-w-0
+        %span.mesa-label.mb-3 Activity
+        %dl.mt-2.grid.gap-y-2{ class: "grid-cols-[auto_1fr] gap-x-6 text-[13px]" }
+          %dt.text-fg-subtle Computers
+          %dd.text-fg.font-mono.tabular-nums= count
+          %dt.text-fg-subtle Member since
+          %dd.text-fg-muted{ class: "text-[12px]" }= format_date(@user.created_at)
+
+  -# Computers card. Same row vocabulary as computers#index, minus
+  -# the Maintainer column (redundant on a user-scoped page) and the
+  -# top-right Sort dropdown (small lists don't justify it).
+  - if @computers.any?
+    .rounded-lg.border.border-border.bg-bg-elev.overflow-hidden{ style: "box-shadow: var(--shadow-card-sm);" }
+      .flex.flex-wrap.items-baseline.justify-between.gap-3.px-4.py-3.border-b.border-border-subtle
+        %div
+          %span.mesa-label Computers
+          %span.ml-2.text-fg{ class: "text-[14px]" }
+            = pluralize(count, "machine")
+            maintained by
+            %span.font-semibold= @user.name
         - if self_or_admin?
-          = link_to 'Edit', edit_user_path(@user), class: 'btn btn-md btn-primary text-light'
-        - if admin?
-          = link_to 'Delete', user_path(@user), method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-md btn-danger text-light'
-  .col-lg-6.col-xs-12
-    - unless @user.computers.empty?
-      %h3= "#{@user.name}'s Computers"
-      %table.table
-        %thead.thead-default
-          %tr
-            %th Name
-            %th Actions
-        %tbody
-          - @computers.each do |computer|
-            %tr
-              %td.align-middle= computer.name
-              %td.align-middle
-                .btn-group
-                  =link_to 'Show', user_computer_path(@user, computer), class: 'btn btn-sm btn-secondary text-light'
-                  - if self_or_admin?
-                    =link_to 'Edit', edit_user_computer_path(@user, computer), class: 'btn btn-sm btn-primary text-light'
-                    =link_to 'Delete', user_computer_path(@user, computer), method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-sm btn-danger text-light'
-      .text-center= link_to "More Computer Info", user_computers_path(@user), class: 'btn btn-md btn-secondary text-light'
-      %hr
-  -# .col-lg-6.col-xs-12
-  -#   - if @test_instances.empty?
-  -#     .alert.alert-warning.align-middle
-  -#       %h4= "#{@user.name} has not yet run any tests"
-  -#   - else
-  -#     %h3= "Latest results from #{@user.name}"
-  -#     .table-responsive
-  -#       %table.table.table-hover.table-sm.table-responsive
-  -#         %thead.thead-default
-  -#           %tr
-  -#             %th Version
-  -#             %th Date Uploaded
-  -#             %th Test Case
-  -#             %th Computer
-  -#         %tbody
-  -#           - @test_instances.each do |instance|
-  -#             %tr{class: @test_instance_classes[instance]}
-  -#               %td=instance.mesa_version
-  -#               %td=format_time(instance.created_at)
-  -#               %td
-  -#                 %samp=instance.test_case.short_name
-  -#               %td=instance.computer.name
-    -# .text-center
-    -#   = link_to "All tests from #{@user.name}", user_test_instances_path(@user), class: 'btn btn-lg btn-secondary text-light'
+          = link_to new_user_computer_path(@user),
+                   class: "mesa-btn mesa-btn-primary inline-flex items-center gap-1",
+                   style: "padding: 4px 10px; font-size: 12px;" do
+            = mesa_icon(:plus, size: 12)
+            %span Add computer
+
+      %div{ style: "overflow-x: auto;" }
+        %table.w-full.border-collapse{ style: "min-width: 720px;" }
+          %thead.bg-bg-subtle
+            %tr.text-fg-muted{ class: "text-[11px] uppercase tracking-wide" }
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Name
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Platform
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle Processor
+              %th.text-right.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap RAM
+              %th.text-right.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap
+                %span.sr-only Actions
+          %tbody
+            - @computers.each do |computer|
+              %tr.border-b.border-border-subtle.align-middle.hover:bg-bg-subtle{ class: "[&>td]:py-2" }
+                %td.px-3
+                  = link_to user_computer_path(@user, computer),
+                           class: "font-mono font-semibold text-brand no-underline hover:underline" do
+                    = computer.name
+                %td.px-3{ class: "text-[12px]" }
+                  - if computer.platform.present?
+                    %span.inline-flex.items-center.gap-1.rounded-md.border.border-border.bg-bg-muted.font-mono.text-fg{ class: "text-[11px]", style: "padding: 1px 8px;" }= computer.platform
+                  - else
+                    %span.text-fg-subtle —
+                %td.px-3.text-fg-muted{ class: "text-[12px]" }
+                  = computer.processor.presence || content_tag(:span, "—", class: "text-fg-subtle")
+                %td.px-3.text-right.font-mono.tabular-nums.whitespace-nowrap{ class: "text-[12px]" }
+                  - if computer.ram_gb.present?
+                    = computer.ram_gb
+                    %span.text-fg-subtle  GB
+                  - else
+                    %span.text-fg-subtle —
+                %td.px-3.text-right.whitespace-nowrap
+                  .inline-flex.items-center.gap-1
+                    = link_to "Show", user_computer_path(@user, computer),
+                             class: "mesa-btn",
+                             style: "padding: 3px 8px; font-size: 11px;"
+                    - if self_or_admin?
+                      = link_to "Edit", edit_user_computer_path(@user, computer),
+                               class: "mesa-btn",
+                               style: "padding: 3px 8px; font-size: 11px;"
+                      = button_to user_computer_path(@user, computer),
+                                 method: :delete,
+                                 form: { data: { turbo_confirm: "Delete #{computer.name}? This removes all associated submissions and test instances." } },
+                                 class: "mesa-btn",
+                                 style: "padding: 3px 8px; font-size: 11px; color: var(--color-danger-soft-text); border-color: var(--color-danger-soft); background: transparent;" do
+                        Delete
+  - else
+    .rounded-lg.border.border-border.bg-bg-elev.p-10.text-center.text-fg-muted.text-sm{ style: "box-shadow: var(--shadow-card-sm);" }
+      No computers maintained by
+      %span.font-semibold.text-fg= @user.name
+      yet.
+      - if self_or_admin?
+        .mt-3
+          = link_to "Add the first one →", new_user_computer_path(@user),
+                   class: "text-brand no-underline hover:underline"

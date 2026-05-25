@@ -1,35 +1,78 @@
-.row
-  .col
-    %h1 All Users
+- content_for :title, "All users"
 
-.row
-  .col.table-responsive
-    %table.table#test_summary
-      %thead.thead-default
-        %tr
-          %th Name
-          %th Email
-          %th Computers
-          %th
+.space-y-4
+  -# Top-level page — no back arrow, just a right-aligned slug to
+  -# anchor the page identity in the breadcrumb position the rest of
+  -# the modern layer uses.
+  %nav.flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+    %span.text-fg Users
 
-      %tbody
-        - @users.each do |user|
-          %tr
-            %td.align-middle= user.name
-            %td.align-middle= user.email
-            %td.align-middle 
-              -user.computers.each do |c| 
-                -if c == user.computers[-1]
-                  =link_to c.name, user_computer_path(user, c)
-                -else
-                  =link_to(c.name, user_computer_path(user, c)) + ', '
-            %td.align-middle
-              = link_to 'Show', user_path(user), class: 'btn btn-sm btn-secondary text-light'
-              - if current_user.admin?
-                = link_to 'Edit', edit_user_path(user), class: 'btn btn-sm btn-primary text-light'
-                = link_to 'Delete', user_path(user), method: :delete, data: {confirm: "Are you absolutely sure you want to delete this user?\n\nAll of their computers and test data will be deleted, too."}, class: 'btn btn-sm btn-danger text-light'
-- if admin?
-  .row
-    .col.text-center
-      %a{href: new_user_path}
-        %button.btn.btn-primary.btn-lg Create User
+  -# Headline card. Single tier: status sentence + "Create user" CTA
+  -# (admin-only). Same pattern as computers#index for visual rhyme.
+  .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+    .flex.flex-wrap.items-start.justify-between.gap-3
+      %div.min-w-0
+        %div{ class: "text-[20px] font-medium leading-snug tracking-tight text-fg" }
+          - count = @users.size
+          %strong.font-semibold.tabular-nums= count
+          %span.text-fg-muted<>
+            = " #{'user'.pluralize(count)} on MESA Test Hub"
+
+      - if admin?
+        .shrink-0.flex.items-center.gap-2
+          = link_to new_user_path,
+                   class: "mesa-btn mesa-btn-primary inline-flex items-center gap-1",
+                   style: "padding: 6px 12px; font-size: 12px;" do
+            = mesa_icon(:plus, size: 12)
+            %span Create user
+
+  -# Table card. Mirrors computers#index — sticky header, narrow row
+  -# padding, mono identifiers, action cluster on the right.
+  - if @users.empty?
+    .rounded-lg.border.border-border.bg-bg-elev.p-10.text-center.text-fg-muted.text-sm{ style: "box-shadow: var(--shadow-card-sm);" }
+      No users yet.
+  - else
+    .rounded-lg.border.border-border.bg-bg-elev.overflow-hidden{ style: "box-shadow: var(--shadow-card-sm);" }
+      %div{ style: "overflow-x: auto;" }
+        %table.w-full.border-collapse{ style: "min-width: 720px;" }
+          %thead.bg-bg-subtle
+            %tr.text-fg-muted{ class: "text-[11px] uppercase tracking-wide" }
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Name
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Email
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle Computers
+              %th.text-right.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap
+                %span.sr-only Actions
+          %tbody
+            - @users.each do |user|
+              %tr.border-b.border-border-subtle.align-middle.hover:bg-bg-subtle{ class: "[&>td]:py-2" }
+                %td.px-3
+                  = link_to user.name, user_path(user),
+                           class: "font-semibold text-brand no-underline hover:underline"
+                  - if user.admin?
+                    %span.ml-2.inline-flex.items-center.rounded-md.border.border-border.bg-bg-muted.font-medium.text-fg-muted{ class: "text-[10px] uppercase tracking-wide", style: "padding: 1px 6px;" } admin
+                %td.px-3.font-mono.text-fg-muted.whitespace-nowrap{ class: "text-[12px]" }
+                  = user.email.presence || content_tag(:span, "—", class: "text-fg-subtle")
+                %td.px-3{ class: "text-[12px]" }
+                  - if user.computers.empty?
+                    %span.text-fg-subtle —
+                  - else
+                    .flex.flex-wrap.gap-1
+                      - user.computers.each do |c|
+                        = link_to c.name, user_computer_path(user, c),
+                                 class: "inline-flex items-center rounded-md border border-border bg-bg-muted font-mono text-fg hover:bg-bg-subtle hover:text-brand no-underline",
+                                 style: "padding: 1px 6px; font-size: 11px;"
+                %td.px-3.text-right.whitespace-nowrap
+                  .inline-flex.items-center.gap-1
+                    = link_to "Show", user_path(user),
+                             class: "mesa-btn",
+                             style: "padding: 3px 8px; font-size: 11px;"
+                    - if admin?
+                      = link_to "Edit", edit_user_path(user),
+                               class: "mesa-btn",
+                               style: "padding: 3px 8px; font-size: 11px;"
+                      = button_to user_path(user),
+                                 method: :delete,
+                                 form: { data: { turbo_confirm: "Delete #{user.name}? All of their computers and test data will be deleted, too." } },
+                                 class: "mesa-btn",
+                                 style: "padding: 3px 8px; font-size: 11px; color: var(--color-danger-soft-text); border-color: var(--color-danger-soft); background: transparent;" do
+                        Delete

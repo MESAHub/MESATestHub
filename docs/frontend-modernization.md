@@ -211,8 +211,18 @@ partials). Classification below — anything not listed is implicitly
     Removed in the same commit that landed this note: the
     route, the `test_instances_index` action, the entries in
     `set_user` / `set_computer` filters, and the view template.
-  - `users/index.html.haml`, `users/show.html.haml`,
-    `users/admin.html.haml`, `users/computers_index.html.haml`
+  - ~~`users/index.html.haml`, `users/show.html.haml`~~ — landed
+    (single-tier headline + table for index; two-tier headline
+    with Profile / Activity dl split + computers card for show.
+    Same vocabulary as computers#index/#show, minus paginator
+    since the user list is tiny in practice). Also deleted the
+    orphan empty `users/computers_index.html.haml` template —
+    it was never wired to a controller action or route, just a
+    phantom filename from an aborted SVN-era restructure.
+  - `users/admin.html.haml` — still on legacy. Forms-heavy
+    (create / select-to-edit / select-to-delete); ports
+    naturally alongside `users/new.html.haml` and
+    `users/edit.html.haml` as the "users forms" commit.
   - `users/new.html.haml`, `users/edit.html.haml` (signup / edit)
   - `computers/new.html.haml`, `computers/edit.html.haml`,
     `computers/_form.html.haml`

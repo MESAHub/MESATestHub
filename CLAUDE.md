@@ -45,8 +45,9 @@ Before doing non-trivial work, read the appropriate doc:
   test-case history page
   (`/:branch/test_cases/:module/:test_case`), and the
   computers list + detail pages (`/users/:id/computers`,
-  `/users/:id/computers/:id`, `/all_computers`) all render through
-  the modern layout.
+  `/users/:id/computers/:id`, `/all_computers`), and the
+  users list + detail pages (`/users`, `/users/:id`) all render
+  through the modern layout.
   Commit detail has four tabs (Summary / Computers / Diff vs
   last pass / Build logs) — the original Tests tab was folded
   into Summary when review flagged it as redundant with the
@@ -226,15 +227,32 @@ Before doing non-trivial work, read the appropriate doc:
   ships only Turbo (no rails-ujs), so `data-method=delete` from
   the legacy helper is dead.
 
+  The `users#index` + `#show` pair (Step 8i) reuses the same
+  card / breadcrumb / table vocabulary. Index is single-tier
+  (status sentence + admin-gated "Create user" CTA + table with
+  Name / Email / Computers chips / Actions, no paginator since
+  the user list is small). Show uses the two-tier headline from
+  computers#show — Tier 1 is the identity sentence ("`<name>`
+  maintains `N` computers" + admin chip), Tier 2 is a Profile
+  dl (Email / Time zone / Role) + Activity dl (Computers count
+  / Member since) split at lg+. The computers card below uses
+  the same row vocabulary as `computers#index`, minus the
+  Maintainer column. `UsersController#index` was bumped to
+  `User.includes(:computers)` so the chip rendering doesn't
+  N+1 against `users` rows.
+
   Step 8's remaining wing-it pages (`test_instances#*`, admin,
-  users) are still outstanding; the page priority list is at the
-  bottom of
+  users-forms) are still outstanding; the page priority list
+  is at the bottom of
   [`docs/frontend-modernization.md`](docs/frontend-modernization.md).
   Note: `computers#test_instances_index` was deleted, not
   modernized — it had been dead since the SVN→git transition
   (controller ordered by the missing `mesa_version` column, view
   linked to the missing `Version` model) and nothing in the app
-  pointed at the route.
+  pointed at the route. The orphan empty
+  `users/computers_index.html.haml` template (no controller
+  action, no route, no link) was also deleted alongside the
+  users#index/#show modernization.
 
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.

@@ -1,4 +1,6 @@
 class UsersController < ApplicationController
+  layout "modern", only: %i[index show]
+
   before_action :set_user, only: %i[show edit update destroy]
   before_action :authorize_user
   before_action :authorize_admin, only: %i[new create admin destroy
@@ -6,7 +8,7 @@ class UsersController < ApplicationController
   before_action :authorize_self_or_admin, only: %i[edit update]
 
   def index
-    @users = User.all.order(:name)
+    @users = User.includes(:computers).order(:name)
   end
 
   def new
