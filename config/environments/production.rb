@@ -31,13 +31,14 @@ Rails.application.configure do
   # Apache or NGINX already handles this.
   config.public_file_server.enabled = ENV['RAILS_SERVE_STATIC_FILES'].present?
 
-  # Compress JavaScripts and CSS.
-  config.assets.js_compressor = :terser
-  # Explicitly disable the CSS compressor: sassc-rails defaults to :sass in
-  # non-development environments, but SassC can't parse Tailwind v4's modern
-  # color syntax (rgb(from red r g b), etc.). Tailwind's own build is already
-  # minified; the legacy Bootstrap bundle isn't huge enough to need extra
-  # compression. Revisit after Phase 4 drops Bootstrap and sassc-rails.
+  # Asset compression. The modern stack has nothing for Sprockets
+  # to compress: Tailwind's standalone CLI emits its own minified
+  # build, and Importmap serves ES modules verbatim with no
+  # transformation step. Both compressor slots are left as nil so
+  # Sprockets doesn't try to instantiate gems that aren't in the
+  # bundle (terser was removed when the Phase 4 legacy purge
+  # landed; sassc-rails was retired in the same wave).
+  config.assets.js_compressor = nil
   config.assets.css_compressor = nil
 
   # Do not fallback to assets pipeline if a precompiled asset is missed.
