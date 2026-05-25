@@ -64,10 +64,9 @@ Shared design primitives:
   [`app/assets/tailwind/application.css`](app/assets/tailwind/application.css):
   `.mesa-input` (with `.is-invalid` / `[aria-invalid="true"]`
   error state), `.mesa-checkbox`, `.mesa-label`, `.mesa-btn`,
-  `.mesa-btn-primary`. All gated under `.mesa-modern` on
-  `<body>` from an earlier "two stacks coexisting" world — the
-  scope is now harmless and could be flattened in a future
-  cleanup but it isn't blocking anything.
+  `.mesa-btn-primary`. Rules apply directly to elements + class
+  names without any additional scope (the `.mesa-modern` body
+  prefix from the dual-stack era was removed in Phase 4 wrap-up).
 - **Inline SVG icons** via `mesa_icon(name, size:, css:)` in
   [`CommitsHelper`](app/helpers/commits_helper.rb) — small
   curated set (check / x / chevron / arrow_left / search / warn

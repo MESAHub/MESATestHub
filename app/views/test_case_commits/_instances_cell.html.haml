@@ -18,7 +18,7 @@
   - else
     = row[:computer_name].to_s
 - when "date"
-  = format_time(row[:created_at])
+  = format_time_tag(row[:created_at])
 - when "threads"
   = row[:threads].nil? ? content_tag(:span, "—", class: "text-fg-subtle") : row[:threads]
 - when "spec"

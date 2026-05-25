@@ -34,7 +34,7 @@
     = stylesheet_link_tag "tailwind", "data-turbo-track": "reload"
     = javascript_importmap_tags
 
-  %body.mesa-modern{ data: { controller: "theme" } }
+  %body{ data: { controller: "theme" } }
     %a.sr-only.focus:not-sr-only{ href: "#main" } Skip to main content
 
     %header.border-b.border-border-subtle.bg-bg-elev{ data: { controller: "dropdown" } }

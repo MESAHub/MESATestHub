@@ -106,7 +106,10 @@ RSpec.describe 'Page renders', type: :request do
       get "/main/commits/deadbeef0000/test_cases/#{test_case.module}/#{test_case.name}"
 
       expect(response).to have_http_status(:not_found)
-      expect(response.body).to include('mesa-modern')
+      # Modern layout fingerprints — the skip-link, the Tailwind
+      # stylesheet, the theme controller wiring, and the page
+      # body itself.
+      expect(response.body).to include('Skip to main content')
       expect(response.body).to include('Page not found')
       expect(response.body).to include('tailwind')
       expect(response.body).to match(/data-controller=['"]theme['"]/)

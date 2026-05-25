@@ -130,7 +130,7 @@
                   - else
                     %span.text-fg-subtle —
                 %td.px-2.text-fg-muted{ class: "text-[11px] tabular-nums whitespace-nowrap" }
-                  = format_time(ti.created_at)
+                  = format_time_tag(ti.created_at)
                 %td.px-2.text-right.font-mono.tabular-nums{ class: "text-[12px]" }
                   - if ti.runtime_minutes
                     = format("%.2f m", ti.runtime_minutes)

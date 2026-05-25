@@ -6,7 +6,9 @@ RSpec.describe 'Authentication flow', type: :request do
       get '/login'
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include('mesa-modern')
+      # Modern layout fingerprints: the skip-link, the theme
+      # Stimulus controller wiring, and the page-specific title.
+      expect(response.body).to include('Skip to main content')
       expect(response.body).to include('Log in to MESA Test Hub')
       expect(response.body).to match(/data-controller=['"]theme['"]/)
     end

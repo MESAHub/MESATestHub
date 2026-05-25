@@ -215,7 +215,7 @@
                   %td.px-3
                     %input{ type: "checkbox", value: submission.id, "aria-label": "Select submission #{submission.id}", data: { submission_selection_target: "checkbox", action: "change->submission-selection#toggle" } }
                 %td.px-3.text-fg-muted.whitespace-nowrap{ class: "text-[12px] tabular-nums" }
-                  = format_time(submission.created_at)
+                  = format_time_tag(submission.created_at)
                 %td.px-3.font-mono.whitespace-nowrap{ class: "text-[12px]" }
                   - if submission.commit
                     = link_to submission.commit.short_sha,

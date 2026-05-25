@@ -125,12 +125,9 @@
   --shadow-card-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
-/* Base — applied only on pages that opt into the modern layout via the
-   `.mesa-modern` class on <body>. We avoid touching `body` directly so the
-   legacy Bootstrap pages keep their existing typography while the migration
-   is in flight. */
+/* Base typography + page chrome, applied directly to <body>. */
 @layer base {
-  .mesa-modern {
+  body {
     font-family: var(--font-sans);
     font-feature-settings: "cv11", "ss01", "ss03";
     color: var(--color-fg);
@@ -141,8 +138,8 @@
     line-height: 1.5;
   }
 
-  .mesa-modern .mono,
-  .mesa-modern code {
+  .mono,
+  code {
     font-family: var(--font-mono);
     font-size: 0.92em;
   }
@@ -152,50 +149,47 @@
    stacks where the same widget shows up across multiple views. The
    focus ring especially needs `--color-brand-ring` (which flips per
    theme) and Tailwind's built-in ring utilities don't reach our
-   tokens cleanly.
-
-   All rules are scoped under `.mesa-modern` so legacy Bootstrap pages
-   are unaffected. */
+   tokens cleanly. */
 @layer components {
-  .mesa-modern .mesa-input {
+  .mesa-input {
     @apply w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg;
     transition: box-shadow 0.12s, border-color 0.12s;
   }
-  .mesa-modern .mesa-input::placeholder {
+  .mesa-input::placeholder {
     color: var(--color-fg-subtle);
   }
-  .mesa-modern .mesa-input:focus,
-  .mesa-modern .mesa-input:focus-visible {
+  .mesa-input:focus,
+  .mesa-input:focus-visible {
     border-color: var(--color-brand);
     outline: none;
     box-shadow: var(--shadow-focus);
   }
 
-  .mesa-modern .mesa-label {
+  .mesa-label {
     @apply block text-xs font-medium uppercase tracking-wide text-fg-subtle;
   }
 
-  .mesa-modern .mesa-btn {
+  .mesa-btn {
     @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-elev px-3 py-1.5 text-sm font-medium text-fg cursor-pointer;
     transition: background-color 0.12s, border-color 0.12s, color 0.12s;
   }
-  .mesa-modern .mesa-btn:hover {
+  .mesa-btn:hover {
     background: var(--color-bg-muted);
   }
-  .mesa-modern .mesa-btn:focus-visible {
+  .mesa-btn:focus-visible {
     outline: none;
     box-shadow: var(--shadow-focus);
   }
-  .mesa-modern .mesa-btn-primary {
+  .mesa-btn-primary {
     background: var(--color-brand);
     border-color: var(--color-brand);
     color: var(--color-fg-on-brand);
   }
-  .mesa-modern .mesa-btn-primary:hover {
+  .mesa-btn-primary:hover {
     background: var(--color-brand-hover);
     border-color: var(--color-brand-hover);
   }
-  .mesa-modern .mesa-btn-block {
+  .mesa-btn-block {
     @apply w-full;
   }
 
@@ -203,14 +197,14 @@
      when an attribute has validation errors. `aria-invalid="true"`
      is the accessible signal; the .is-invalid alias is for forms
      that set the class directly instead of the ARIA attribute. */
-  .mesa-modern .mesa-input.is-invalid,
-  .mesa-modern .mesa-input[aria-invalid="true"] {
+  .mesa-input.is-invalid,
+  .mesa-input[aria-invalid="true"] {
     border-color: var(--color-danger);
   }
-  .mesa-modern .mesa-input.is-invalid:focus,
-  .mesa-modern .mesa-input.is-invalid:focus-visible,
-  .mesa-modern .mesa-input[aria-invalid="true"]:focus,
-  .mesa-modern .mesa-input[aria-invalid="true"]:focus-visible {
+  .mesa-input.is-invalid:focus,
+  .mesa-input.is-invalid:focus-visible,
+  .mesa-input[aria-invalid="true"]:focus,
+  .mesa-input[aria-invalid="true"]:focus-visible {
     border-color: var(--color-danger);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 25%, transparent);
   }
@@ -218,11 +212,11 @@
   /* Native checkbox styled with the brand accent. `accent-color`
      handles the checked-state fill on modern browsers without us
      having to draw the check ourselves. */
-  .mesa-modern .mesa-checkbox {
+  .mesa-checkbox {
     @apply h-4 w-4 rounded border border-border bg-bg cursor-pointer;
     accent-color: var(--color-brand);
   }
-  .mesa-modern .mesa-checkbox:focus-visible {
+  .mesa-checkbox:focus-visible {
     outline: none;
     box-shadow: var(--shadow-focus);
   }
@@ -234,12 +228,12 @@
      position to viewport-centered and give the backdrop our
      standard scrim so the modal reads as a true overlay rather
      than as a stray card glued to a corner. */
-  .mesa-modern dialog[open] {
+  dialog[open] {
     position: fixed;
     inset: 0;
     margin: auto;
   }
-  .mesa-modern dialog::backdrop {
+  dialog::backdrop {
     background-color: rgba(15, 18, 25, 0.55);
     backdrop-filter: blur(2px);
   }

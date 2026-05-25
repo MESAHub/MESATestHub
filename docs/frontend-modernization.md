@@ -1261,28 +1261,32 @@ The "two stacks coexist" / "sassc-rails CSS compressor" /
 "Frontend architecture (post-Phase 4)" section in CLAUDE.md
 captures the current state.
 
-**Known follow-ups, not blocking:**
+**Step 9 wrap-up — landed before the PR:**
 
-- **Date display audit.** `ApplicationController#format_time`
-  uses `I18n.l ..., format: :short`, which by default drops the
-  year. That's fine for recent rows but ambiguous on submissions
-  older than ~12 months (computers#show flagged this first, but
-  the same helper is used on `commits#show`'s submissions table,
-  `test_case_commits#show`'s instances table, `test_cases#show`'s
-  Submissions tab, etc.). Audit every modern page that renders
-  `format_time` and either (a) switch to a helper that includes
-  the year when the timestamp is more than ~6–12 months in the
-  past, or (b) add a tooltip with the full timestamp on hover.
-  Decide once, apply everywhere — don't fix it per-page.
+- ~~**Date display audit.**~~ Done. Added a new
+  `format_time_tag(time, css:)` helper on `ApplicationController`
+  that renders a `<time datetime title>` element. The visible
+  text uses `:short` for the current calendar year and
+  `"%-d %b %Y %H:%M"` for older timestamps (so rows from prior
+  years are no longer ambiguous), while the `title` attribute
+  always carries a second-precision tooltip. The original plain
+  `format_time` stays around for JSON callers (e.g.
+  `commits#nearby_commits`) where the HTML would corrupt the
+  response. Every modern view that surfaced a timestamp was
+  swapped over to the new helper in the same commit.
+- ~~**`.mesa-modern` CSS scope.**~~ Removed. Every rule in
+  `app/assets/tailwind/application.css` now applies directly
+  (rather than being gated under `.mesa-modern` on `<body>`).
+  The body class was dropped from `layouts/modern.html.haml` to
+  match.
+
+**Still deferred, not blocking the PR:**
+
 - **`TestInstance.query` rot.** Search backend is partially
   broken since the SVN→git transition (see the inline warning
   on `test_instances#search` + the related note above). Most
   fields still work; `version:` and a few others silently fall
   through. Rewrite SearchOption against current columns/models.
-- **`.mesa-modern` scope on the Tailwind layer.** The CSS rules
-  are all scoped under `.mesa-modern` on `<body>`, a relic of
-  the dual-stack era. Harmless but no longer load-bearing; could
-  be flattened in a small follow-up.
 
 ## Pages without designs ("wing it" policy)
 

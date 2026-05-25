@@ -75,7 +75,7 @@ module TestCaseCommitsHelper
       when "log_rel_e" then format("%.2f", value.to_f)
       when "star_age" then format("%.3e", value.to_f)
       when "checksum" then value.to_s
-      when "date"     then format_time(value)
+      when "date"     then format_time_tag(value)
       else value.to_s
       end
     text

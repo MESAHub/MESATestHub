@@ -180,7 +180,7 @@
                   = link_to ti.computer.user.name, user_path(ti.computer.user),
                            class: "text-fg-muted hover:text-brand no-underline"
                 %td.px-3.text-fg-muted.whitespace-nowrap{ class: "text-[12px] tabular-nums" }
-                  = format_time(ti.created_at)
+                  = format_time_tag(ti.created_at)
                 %td.px-3.text-right.font-mono.tabular-nums.whitespace-nowrap{ class: "text-[12px]" }
                   = ti.runtime_seconds || 0
                   %span.text-fg-subtle  /
