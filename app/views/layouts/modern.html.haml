@@ -94,8 +94,9 @@
         .mb-6.space-y-2
           - flash.each do |key, value|
             - tone = case key.to_s
-              - when "alert", "error" then "border-danger text-danger-soft-text bg-danger-soft"
-              - when "notice" then "border-success text-success-soft-text bg-success-soft"
+              - when "alert", "error", "danger" then "border-danger text-danger-soft-text bg-danger-soft"
+              - when "notice", "success" then "border-success text-success-soft-text bg-success-soft"
+              - when "warning" then "border-warning text-warning-soft-text bg-warning-soft"
               - else "border-border text-fg-muted bg-bg-muted"
             %div.rounded-md.border.px-3.py-2.text-sm{ class: tone }
               = value

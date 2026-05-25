@@ -246,9 +246,26 @@ partials). Classification below — anything not listed is implicitly
     method, so the platform dropdown was actually broken on
     `master`. The constant now drives both the validator and
     the form.
-  - `test_instances/index.html.haml`, `test_instances/search.html.haml`,
-    `test_instances/show.html.haml`, and `_table`/`_search_table`
-    partials
+  - ~~`test_instances/search.html.haml`~~ — landed (Step 8k). The
+    page now reads in the modern vocabulary (breadcrumb,
+    headline, search form, collapsible syntax reference, results
+    table). **Frontend only — the search backend
+    (`TestInstance.query`) is partially rotted since the SVN→git
+    transition.** Fields that map to live columns (`test_case:`,
+    `user:`, `commit:`, `computer:`, `passed:`) work; fields that
+    depend on the dropped `Version` model / `mesa_version` column
+    (notably `version:`) silently fall through and return the
+    unfiltered result set with a flash warning. The JSON API at
+    `/test_instances/search.json` shares the same backend. The
+    page itself carries a `border-warning` notice so users see
+    the state. **Repairing the query layer (rewriting
+    SearchOption fields against current columns / models) is a
+    deferred task — flagged here so it doesn't get lost.**
+  - `test_instances/index.html.haml`, `test_instances/show.html.haml`,
+    `_table` partial — unreachable dead code (no routes; the
+    `resources :test_cases do resources :test_instances end`
+    block is commented out in `config/routes.rb`). Delete in
+    Step 9 alongside the rest of the legacy purge.
   - `submissions/show.html.haml`
   - `visitors/index.html.haml`
   - `pages/about.html.erb`

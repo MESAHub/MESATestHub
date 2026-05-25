@@ -1,4 +1,6 @@
 class TestInstancesController < ApplicationController
+  layout "modern", only: [:search]
+
   before_action :set_test_case, except: [:submit, :search, :search_count]
   before_action :set_test_instance, only: %i[show edit update destroy]
   # set_user depends on @test_instance being set, so it can only be used
