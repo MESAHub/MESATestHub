@@ -1,0 +1,15 @@
+-# Breadcrumb: ← branch commits / module/test path.
+-#
+-# Back arrow goes to the commits index on this branch — the natural
+-# "up" from a test's per-branch history. Mirrors the test-on-commit
+-# breadcrumb pattern (back arrow + module/test slug on the right).
+%nav.flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+  = link_to commits_path(branch: @selected_branch.name),
+           class: "inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-bg-muted hover:text-fg no-underline",
+           title: "Back to #{@selected_branch.name} commits" do
+    = mesa_icon(:arrow_left, size: 14)
+    %span.font-mono= @selected_branch.name
+  %span.text-fg-subtle /
+  %span.font-mono.text-fg
+    %span.text-fg-subtle= "#{@test_case.module}/"
+    = @test_case.name

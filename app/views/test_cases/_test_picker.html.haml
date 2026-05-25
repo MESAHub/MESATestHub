@@ -1,0 +1,62 @@
+-# Clickable test-name pill in the headline. Sister of
+-# `test_case_commits/_test_picker` — same dropdown vocabulary
+-# (search box + filtered rows), but the destination is the
+-# test_case page on the currently-selected branch rather than
+-# a sibling test on the current commit. The list spans every
+-# test case in the catalog (TestCase.ordered_cases) and is
+-# sorted reverse-alphabetical by module (star → binary → astero
+-# per `TestCase.modules`) then alphabetical by name.
+-#
+-# Reuses the `dropdown` + `test-picker` Stimulus controllers
+-# unchanged: both look at `data-test-picker-target=row` rows
+-# with `data-search-key`.
+
+.relative.inline-flex.align-middle{ data: { controller: "dropdown test-picker", open: "false" } }
+  %button.inline-flex.items-center.gap-1.5.rounded-md.border.border-border.bg-bg-muted.px-2.5.py-1.font-mono.font-semibold.text-fg.cursor-pointer.hover:bg-bg-subtle{
+    type: "button",
+    "aria-haspopup": "listbox",
+    "aria-expanded": "false",
+    "aria-label": "Pick a different test case",
+    class: "text-[17px]",
+    data: { dropdown_target: "trigger", action: "click->dropdown#toggle" } }
+    = @test_case.name
+    %span.font-normal.text-fg-subtle{ class: "text-[13px]" }
+      = "(#{@test_case.module})"
+    %span.text-fg-subtle
+      = mesa_icon(:chevron, size: 11)
+
+  .absolute.left-0.top-full.z-30.mt-1.rounded-md.border.border-border.bg-bg-elev.shadow-md{
+    hidden: true,
+    role: "listbox",
+    style: "width: 340px; max-height: 360px;",
+    data: { dropdown_target: "menu" } }
+    .border-b.border-border-subtle.bg-bg-subtle.px-2.py-1.5.sticky.top-0.z-10
+      .relative
+        %span.absolute.inset-y-0.left-0.flex.items-center.pl-2.text-fg-subtle{ "aria-hidden": "true" }
+          = mesa_icon(:search, size: 12)
+        %input{ type: "search",
+                placeholder: "Filter test cases…",
+                "aria-label": "Filter test cases",
+                class: "w-full rounded-md border border-border bg-bg-elev pl-7 pr-2 py-1 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-brand",
+                data: { test_picker_target: "search",
+                        action: "input->test-picker#filter" } }
+    .overflow-y-auto.py-1{ style: "max-height: 305px;" }
+      - @test_cases.each do |tc|
+        - active = (tc.id == @test_case.id)
+        - search_key = "#{tc.module}/#{tc.name}".downcase
+        = link_to test_case_path(branch:    @selected_branch.name,
+                                 module:    tc.module,
+                                 test_case: tc.name),
+                 role: "option",
+                 "aria-selected": active.to_s,
+                 title: "#{tc.module}/#{tc.name}",
+                 class: "flex items-center gap-2 px-3 py-1.5 font-mono text-[12px] no-underline #{active ? 'bg-brand-soft text-brand-soft-text' : 'text-fg hover:bg-bg-muted'}",
+                 data: { test_picker_target: "row", search_key: search_key } do
+          %span.truncate
+            %span.text-fg-subtle= "#{tc.module}/"
+            = tc.name
+          - if active
+            %span.uppercase.tracking-wide.text-fg-subtle.shrink-0.ml-auto{ class: "text-[10px]" } current
+
+      .px-3.py-3.text-fg-subtle.text-xs.text-center{ hidden: true, data: { test_picker_target: "empty" } }
+        No test cases match.

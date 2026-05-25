@@ -1,119 +1,203 @@
-.row
-  .col
-    %h1 Search Test Instances 
-    .spacer
-    =bootstrap_form_tag(url: '/test_instances/search', method: 'GET') do |f|
-      .form-row.input-group
-        .col-md-9.col-12
-          =f.search_field :query_text, value: params[:query_text], class: 'form-control form-control-lg', hide_label: true, placeholder: "Enter Query Here"
-        .col-md-3.col-12
-          %span.input-group-btn
-            =f.submit 'Search', class: 'btn btn-lg btn-primary mb-2'
-    .spacer
-.row#instructions-head
-  %h2
-    Search Instructions
-    %a{href: "#"}
-      -if @show_instructions
-        =fa_icon "chevron-down", right:true, id:'instructions-toggle'
-      -else
-        =fa_icon "chevron-right", right:true, id:'instructions-toggle'
+- content_for :title, "Search test instances"
 
-%div{class: @show_instructions ? '' : 'initially-hidden', id: 'instructions-body'}
-  .row
-    .col-lg-4.col-md-6.col-12
-      %h4 Simple Queries
-      %p
-        Enter queries key-value pairs, with a colons separating key and value. For instance,
+.space-y-4
+  -# Top-level page, no back arrow.
+  %nav.flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+    %span.text-fg Test instances
 
-      %p
-        %code user: Bill Wolf
+  -# Headline card.
+  .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+    %div{ class: "text-[20px] font-medium leading-snug tracking-tight text-fg" }
+      Search test instances
+    %p.mt-2.text-fg-muted{ class: "text-[13px]" }
+      Cross-cuts every test run on every computer for every commit
+      using a single key-value query language.
 
-      %p
-        will return all test instances submitted by user <samp>Bill Wolf</samp>.
-        %strong
-          You must always put a space after the semi-colon in a key: value pair.
-    .col-lg-4.col-md-6.col-12
-      %h4 Compound Queries
-      %p
-        Multiple queries can be strung together by separating entire key-value pairs with semicolons. For example,
+  -# Known-broken warning. The search backend
+  -# (`TestInstance.query` in app/models/test_instance.rb) has
+  -# rotted since the SVN→git transition — `version:` queries hit
+  -# the long-gone `Version` model + dropped `mesa_version`
+  -# column and silently fall through (`flash.now[:warning]`).
+  -# Other fields like `test_case:`, `user:`, `commit:` mostly
+  -# still work. The JSON API at `/test_instances/search.json`
+  -# shares the same backend.
+  .rounded-md.border.border-warning.bg-warning-soft.p-3.text-warning-soft-text{ role: "status" }
+    .flex.items-start.gap-2
+      = mesa_icon(:warn, size: 14, css: "mt-0.5 shrink-0")
+      .min-w-0
+        %p.font-semibold{ class: "text-[13px]" } Partial functionality — known rot.
+        %p.mt-1{ class: "text-[12px]" }
+          The query backend has rotted since the SVN → git
+          transition. Some fields still work
+          (#{content_tag(:code, "test_case", class: "font-mono")},
+          #{content_tag(:code, "user", class: "font-mono")},
+          #{content_tag(:code, "commit", class: "font-mono")},
+          #{content_tag(:code, "computer", class: "font-mono")},
+          #{content_tag(:code, "passed", class: "font-mono")}); others
+          (notably #{content_tag(:code, "version", class: "font-mono")}, which depends on the dropped
+          `mesa_version` column + retired `Version` model) silently
+          drop through and return the unfiltered result set. The
+          JSON API (#{content_tag(:code, "/test_instances/search.json", class: "font-mono")})
+          shares the same backend. Repairing the query layer is a
+          separate, deferred task.
 
-      %p
-        %code user: Bill Wolf; version: 10000
+  -# Search form.
+  = form_with url: search_instances_path, method: :get, local: true, class: "rounded-lg border border-border bg-bg-elev p-5 space-y-3", html: { style: "box-shadow: var(--shadow-card-sm);" } do |f|
+    %div
+      %label.mesa-label.mb-1{ for: "search-query" } Query
+      .flex.flex-wrap.items-stretch.gap-2
+        = text_field_tag :query_text, params[:query_text],
+                         id: "search-query",
+                         placeholder: "user: Bill Wolf; test_case: 1M_pre_ms_to_wd",
+                         class: "mesa-input font-mono flex-1",
+                         style: "min-width: 280px;"
+        %button.mesa-btn.mesa-btn-primary{ type: "submit", style: "padding: 6px 16px; font-size: 13px;" }
+          = mesa_icon(:search, size: 12)
+          %span Search
 
-      %p
-        will find all test instances submitted by Bill Wolf for <samp>MESA</samp> version 10000. Multiple search criteria are always combined in an "and" sense (<strong>all</strong> conditions must be met.)
-    .col-lg-4.col-12
-      %h4 Ranges and Lists
-      %p 
-        Multiple values can be searched for each field by either comma-separating individual values or by using a dash to indicate a range. For instance,
-      %p
-        %code version: 10000-10200; test_case: wd2, 1M_thermohaline
+  -# Collapsible syntax reference. Using <details> so we get the
+  -# expand/collapse for free, no Stimulus needed. The "open"
+  -# attribute auto-opens it when @show_instructions is true (the
+  -# controller sets that when no query has been submitted).
+  %details.rounded-lg.border.border-border.bg-bg-elev{ open: @show_instructions, style: "box-shadow: var(--shadow-card-sm);" }
+    %summary.flex.items-center.justify-between.gap-2.px-5.py-3.cursor-pointer.hover:bg-bg-muted{ class: "[&::-webkit-details-marker]:hidden" }
+      %span.mesa-label Query syntax
+      = mesa_icon(:chevron, size: 12, css: "text-fg-muted")
+    .border-t.border-border-subtle.p-5.space-y-5
 
-      %p
-        will find all test instances for versionsin the range of 10000-10200 that are for either the <samp>wd2</samp> or <samp>1M_thermohaline</samp> test cases.
-  .row
-    .col
-      %h4 Available Search Options
-  .row
-    .col-md-6.col-12
-      %ul
-        %li
-          %samp.font-weight-bold test_case
-          name of a valid test case
-        %li
-          %samp.font-weight-bold version
-          number of a valid mesa revision
-        %li
-          %samp.font-weight-bold passed
-          whether the test passed or failed. Anything starting with "t" will search for passing instances, and any value starting with "f" will search for failing instances.
-        %li
-          %samp.font-weight-bold computer
-          name of a computer
-        %li
-          %samp.font-weight-bold user
-          name of a user
-        %li
-          %samp.font-weight-bold date
-          date test was submitted; use format YYYY/MM/DD. All dates are relative to UTC, so use with caution.
-        %li
-          %samp.font-weight-bold datetime
-          date and time test was submitted; use format YYYY/MM/DD hh:mm:ss. To escape from UTC requirements, you can add a timezone, like "PST" to the end as well.
-        %li
-          %samp.font-weight-bold platform
-          platform of the computer in use, like <samp>macOS</samp> or <samp>linux</samp>. Does <emph>not</emph> include any version string
-    .col-md-6.col-12
-      %ul
-        %li
-          %samp.font-weight-bold platform_version
-          version of the computer's platform, like <samp>10.14.2</samp> or <samp>Arch</samp>
-        %li
-          %samp.font-weight-bold rn_runtime/re_runtime/runtime
-          Runtime for <samp>rn</samp>/<samp>re</samp> scripts or for entire process including compilation. Instances run before early 2019 will only have <samp>rn_runtime</samp> available. Format this time either as an integer of seconds, or you can specify hours, minutes and seconds via something like <samp>1 hr 30 min</samp> or <samp>2.3 hours</samp>.
-        %li
-          %samp.font-weight-bold rn_RAM/re_RAM
-          maximum memory used in <samp>rn</samp>/<samp>re</samp> script, in GB.
-        %li
-          %samp.font-weight-bold threads
-          Number of OpenMP threads in use.
-        %li
-          %samp.font-weight-bold compiler
-          Compiler in use, not including version. For example, <samp>SDK</samp>, <samp>gfortran</samp>, or <samp>ifort</samp>.
-        %li
-          %samp.font-weight-bold compiler_version
-          Version of compiler in use. The format will vary as this is not a standardzied input, though SDK submissions since some time in 2018 follow the format given by the version-reporting script in the SDK itself, like <samp>x86_64-osx-10.10-10.14-20190408</samp>.
+      -# Three usage patterns side-by-side at lg+.
+      .grid.gap-5{ class: "grid-cols-1 lg:grid-cols-3 text-[13px]" }
+        .min-w-0
+          %h4.font-semibold.text-fg.mb-2{ class: "text-[13px]" } Simple queries
+          %p.text-fg-muted
+            Enter key-value pairs separated by a colon. For example
+          %p.mt-2
+            %code.font-mono.text-fg{ class: "rounded-md bg-bg-muted px-2 py-0.5 text-[12px]" } user: Bill Wolf
+          %p.mt-2.text-fg-muted
+            returns every test instance submitted by Bill Wolf.
+            Always put a space after the colon.
 
-- unless @test_instances.nil? || @test_instances.empty?
-  .spacer
-  %h2 Search Results
-  %p
-    %i= page_entries_info @test_instances
-  .my-3
-    = paginate @test_instances
+        .min-w-0
+          %h4.font-semibold.text-fg.mb-2{ class: "text-[13px]" } Compound queries
+          %p.text-fg-muted
+            String multiple pairs together with semicolons:
+          %p.mt-2
+            %code.font-mono.text-fg{ class: "rounded-md bg-bg-muted px-2 py-0.5 text-[12px]" } user: Bill Wolf; version: 10000
+          %p.mt-2.text-fg-muted
+            All conditions are combined with AND.
 
-  = render 'search_table'
+        .min-w-0
+          %h4.font-semibold.text-fg.mb-2{ class: "text-[13px]" } Ranges and lists
+          %p.text-fg-muted
+            Comma-separate values for OR, or use a dash for ranges:
+          %p.mt-2
+            %code.font-mono.text-fg{ class: "rounded-md bg-bg-muted px-2 py-0.5 text-[12px]" } version: 10000-10200; test_case: wd2, 1M_thermohaline
 
-  .row.mb-4
-    .col
-      = paginate @test_instances
-    
+      -# Available fields, two columns.
+      %div
+        %h4.font-semibold.text-fg.mb-3{ class: "text-[13px]" } Available fields
+        .grid.gap-x-8.gap-y-1{ class: "grid-cols-1 md:grid-cols-2 text-[13px]" }
+          %dl.space-y-2
+            = render "field_row", field: "test_case", desc: "Name of a valid test case."
+            = render "field_row", field: "version", desc: "Number of a valid MESA revision."
+            = render "field_row", field: "passed", desc: %q{"t" / "true" / "f" / "false" — match passing or failing instances.}
+            = render "field_row", field: "computer", desc: "Name of a computer."
+            = render "field_row", field: "user", desc: "Name of a user (maintainer)."
+            = render "field_row", field: "date", desc: "Submission date — YYYY/MM/DD, UTC."
+            = render "field_row", field: "datetime", desc: "Submission date and time — YYYY/MM/DD hh:mm:ss; append e.g. 'PST' for a non-UTC timezone."
+            = render "field_row", field: "platform", desc: "Computer platform: macOS or linux. No version string."
+          %dl.space-y-2
+            = render "field_row", field: "platform_version", desc: "Platform version, e.g. 14.5 or Ubuntu 22.04."
+            = render "field_row", field: "rn_runtime / re_runtime / runtime", desc: "Runtime for rn / re scripts or whole test. Integer seconds or '1 hr 30 min', '2.3 hours', etc."
+            = render "field_row", field: "rn_RAM / re_RAM", desc: "Peak memory for rn / re scripts, in GB."
+            = render "field_row", field: "threads", desc: "Number of OpenMP threads used."
+            = render "field_row", field: "compiler", desc: "Compiler family, e.g. SDK, gfortran, ifort."
+            = render "field_row", field: "compiler_version", desc: "Compiler version string. Format varies; SDK uses e.g. x86_64-osx-10.10-10.14-20190408."
+
+  -# Results.
+  - if @test_instances.nil?
+    -# No query yet. The syntax-reference details panel is already
+    -# auto-open via @show_instructions=true; no extra empty state
+    -# needed here.
+  - elsif @test_instances.empty?
+    .rounded-lg.border.border-border.bg-bg-elev.p-10.text-center.text-fg-muted.text-sm{ style: "box-shadow: var(--shadow-card-sm);" }
+      No test instances matched the query.
+      - if flash.now[:warning].present?
+        .mt-2.text-fg-subtle{ class: "text-[12px]" }= flash.now[:warning]
+  - else
+    .rounded-lg.border.border-border.bg-bg-elev.overflow-hidden{ style: "box-shadow: var(--shadow-card-sm);" }
+      .flex.flex-wrap.items-baseline.justify-between.gap-3.px-4.py-3.border-b.border-border-subtle
+        %div
+          %span.mesa-label Results
+          %span.ml-2.text-fg{ class: "text-[14px]" }
+            = pluralize(@test_instances.total_count, "test instance")
+            matched
+        - if @test_instances.total_pages > 1
+          %span.text-fg-subtle.tabular-nums{ class: "text-[11px]" }
+            = page_entries_info @test_instances
+
+      %div{ style: "overflow-x: auto;" }
+        %table.w-full.border-collapse{ style: "min-width: 1000px;" }
+          %thead.bg-bg-subtle
+            %tr.text-fg-muted{ class: "text-[11px] uppercase tracking-wide" }
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Commit
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Test case
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Status
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Computer
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap User
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Submitted
+              %th.text-right.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Runtime (s)
+              %th.text-right.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap RAM (GB)
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Compiler
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Platform
+              %th.text-right.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Threads
+          %tbody
+            - @test_instances.each do |ti|
+              - next unless ti.commit
+              %tr.border-b.border-border-subtle.align-middle.hover:bg-bg-subtle{ class: "[&>td]:py-2" }
+                %td.px-3.font-mono.whitespace-nowrap{ class: "text-[12px]" }
+                  = link_to ti.commit.short_sha,
+                           commit_path(branch: "main", sha: ti.commit.short_sha),
+                           class: "text-brand font-semibold no-underline hover:underline"
+                %td.px-3.font-mono.whitespace-nowrap{ class: "text-[12px]" }
+                  = link_to ti.test_case.name,
+                           test_case_commit_path(branch: "main", module: ti.test_case.module, test_case: ti.test_case.name, sha: ti.commit.short_sha),
+                           class: "text-fg-muted hover:text-brand no-underline"
+                %td.px-3.whitespace-nowrap{ class: "text-[12px]" }
+                  - if ti.passed
+                    %span.inline-flex.items-center.gap-1.rounded-md.bg-success-soft.text-success-soft-text{ class: "text-[11px] font-medium", style: "padding: 1px 8px;" }
+                      = mesa_icon(:check, size: 11)
+                      %span= ti.passage_status
+                  - else
+                    %span.inline-flex.items-center.gap-1.rounded-md.bg-danger-soft.text-danger-soft-text{ class: "text-[11px] font-medium", style: "padding: 1px 8px;" }
+                      = mesa_icon(:x, size: 11)
+                      %span= ti.passage_status
+                %td.px-3.whitespace-nowrap{ class: "text-[12px]" }
+                  = link_to ti.computer.name,
+                           user_computer_path(ti.computer.user, ti.computer),
+                           class: "font-mono text-fg hover:text-brand no-underline"
+                %td.px-3.whitespace-nowrap{ class: "text-[12px]" }
+                  = link_to ti.computer.user.name, user_path(ti.computer.user),
+                           class: "text-fg-muted hover:text-brand no-underline"
+                %td.px-3.text-fg-muted.whitespace-nowrap{ class: "text-[12px] tabular-nums" }
+                  = format_time_tag(ti.created_at)
+                %td.px-3.text-right.font-mono.tabular-nums.whitespace-nowrap{ class: "text-[12px]" }
+                  = ti.runtime_seconds || 0
+                  %span.text-fg-subtle  /
+                  = ti.re_time || 0
+                  %span.text-fg-subtle  /
+                  = ti.total_runtime_seconds || 0
+                %td.px-3.text-right.font-mono.tabular-nums.whitespace-nowrap{ class: "text-[12px]" }
+                  = sprintf('%.2f', ti.rn_mem_GB || 0)
+                  %span.text-fg-subtle  /
+                  = sprintf('%.2f', ti.re_mem_GB || 0)
+                %td.px-3.font-mono.text-fg-muted.whitespace-nowrap{ class: "text-[12px]" }
+                  = [ti.compiler, ti.compiler_version].compact_blank.join(' ').presence || content_tag(:span, "—", class: "text-fg-subtle")
+                %td.px-3.font-mono.text-fg-muted.whitespace-nowrap{ class: "text-[12px]" }
+                  = [ti.computer.platform, ti.platform_version].compact_blank.join(' ').presence || content_tag(:span, "—", class: "text-fg-subtle")
+                %td.px-3.text-right.font-mono.tabular-nums.whitespace-nowrap{ class: "text-[12px]" }
+                  = ti.omp_num_threads || content_tag(:span, "—", class: "text-fg-subtle")
+
+    - if @test_instances.total_pages > 1
+      .pt-2
+        = paginate @test_instances, theme: "modern"

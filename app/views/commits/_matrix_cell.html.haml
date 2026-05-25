@@ -1,0 +1,23 @@
+-# One cell in the Test × Computer matrix. Wraps the visual cell
+-# (rendered by `_matrix_cell_visual`) in a link to the test-on-commit
+-# page focused on this computer. The visual partial is reused
+-# unwrapped in places like the Diff tab where the row itself is the
+-# link target.
+-#
+-# Locals:
+-#   cell:      hash from `Commit#test_computer_matrix` with
+-#              `status:` and `flags:` keys.
+-#   test_case: TestCase row — used to build the link.
+-#   computer:  Computer row — used to build the link.
+-#   branch:    Branch the commit lives on (for routing).
+-#   sha:       Short SHA of the commit (for routing).
+
+- link_target = test_case_commit_path(branch: branch.name, sha: sha, module: test_case.module, test_case: test_case.name)
+- attrs = matrix_cell_attrs(cell)
+- cell_label = "#{test_case.module}/#{test_case.name} on #{computer.name} — #{attrs[:label]}"
+
+= link_to link_target,
+         title: cell_label,
+         class: "block hover:opacity-80 transition-opacity",
+         style: "width: 22px; height: 22px;" do
+  = matrix_cell_visual(cell, label: cell_label)

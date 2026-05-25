@@ -149,9 +149,12 @@ class TestCaseCommit < ApplicationRecord
     # determine if this test case in this commit is in a passing, failing,
     # mixed, multiple checksum, or untested state. DO THIS AFTER ALL OTHER
     # UPDATE_* METHODS TO ENSURE ACCURACY
-    
-    # assume untested unless there is at least one submission
-    self.status ||= @@status_encoder[:untested]
+    #
+    # Reset to untested unconditionally so that a TCC whose submissions
+    # were all destroyed flips back to untested rather than carrying its
+    # stale previous status — the legacy `status ||= :untested` only
+    # fired when status was nil, which it never is after the first save.
+    self.status = @@status_encoder[:untested]
     return unless submission_count.positive?
 
     outcomes = test_instances.pluck(:passed).uniq
@@ -181,6 +184,84 @@ class TestCaseCommit < ApplicationRecord
   def failing
     test_instances.where(passed: false)
   end
+
+  # Display payload for the test-on-commit page. Returns one hash per
+  # test_instance, ordered by computer name and then by created_at so
+  # multiple-instance computers (fresh + photo restart, multiple
+  # inlists, etc.) stay grouped. The view layer can pick which columns
+  # to render via its column picker; everything the design's column
+  # picker can show is present in each hash so the picker is a pure
+  # client-side toggle.
+  def instances_for_display
+    rows = test_instances
+             .includes(:computer, instance_inlists: :inlist_data)
+             .order('computers.name ASC, test_instances.created_at ASC')
+             .references(:computers)
+             .to_a
+
+    rows.map { |ti| _instance_row(ti) }
+  end
+
+  private
+
+  def _instance_row(ti)
+    inlist_rows = ti.instance_inlists.to_a
+    {
+      id: ti.id,
+      computer: ti.computer,
+      computer_name: ti.computer_name || ti.computer&.name,
+      computer_specification: ti.computer_specification,
+      variant: ti.run_optional ? :full : :default,
+      status: ti.passed ? :pass : :fail,
+      flags: {
+        fpe: !!ti.fpe_checks,
+        # Checksum divergence is a TCC-level signal in the current
+        # model; surface it on every row so the view can flag the
+        # whole table.
+        checksum: checksum_count.to_i > 1,
+        inlists_full: !!ti.run_optional
+      },
+      checksum: ti.checksum,
+      restart_checksum: ti.restart_checksum,
+      compiler: ti.compiler,
+      compiler_version: ti.compiler_version,
+      sdk_version: ti.sdk_version,
+      math_backend: ti.math_backend,
+      threads: ti.omp_num_threads,
+      runtime_seconds: ti.runtime_seconds,
+      runtime_minutes: ti.runtime_minutes,
+      total_runtime_seconds: ti.total_runtime_seconds,
+      re_time: ti.re_time,
+      mem_rn: ti.mem_rn,
+      mem_re: ti.mem_re,
+      steps: ti.steps,
+      retries: ti.retries,
+      redos: ti.redos,
+      solver_iterations: ti.solver_iterations,
+      solver_calls_made: ti.solver_calls_made,
+      solver_calls_failed: ti.solver_calls_failed,
+      log_rel_run_E_err: ti.log_rel_run_E_err,
+      failure_type: ti.failure_type,
+      success_type: ti.success_type,
+      created_at: ti.created_at,
+      inlists: inlist_rows.map do |ii|
+        {
+          order: ii.order,
+          model_number: ii.model_number,
+          star_age: ii.star_age,
+          retries: ii.retries,
+          num_retries: ii.num_retries,
+          solver_iterations: ii.solver_iterations,
+          solver_calls_made: ii.solver_calls_made,
+          solver_calls_failed: ii.solver_calls_failed,
+          redos: ii.redos,
+          log_rel_run_E_err: ii.log_rel_run_E_err
+        }
+      end
+    }
+  end
+
+  public
 
   # TODO: update all methods below to work with a specified branch, and thus
   # query for the proper depth of commits in that branch

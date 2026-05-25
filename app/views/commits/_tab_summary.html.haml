@@ -1,0 +1,30 @@
+-# Summary tab — matrix + docked detail rail.
+-# On xl+ viewports the layout is two columns: matrix on the left,
+-# a sticky detail rail on the right that absorbs the empty space
+-# wide screens would otherwise leave. Below xl the rail
+-# (`hidden xl:block`) collapses out and the matrix gets full
+-# width; the popover controller falls back to its floating panel
+-# on those viewports automatically.
+-#
+-# The `popover` controller lives here (not on the matrix panel)
+-# because its `dockedContent` target sits in the rail — both
+-# matrix cells (triggers) and the rail (target) must be inside
+-# the controller's scope. `matrix-filter` + `matrix-scroll` stay
+-# on the matrix panel where their targets live.
+-#
+-# `items-stretch` (default) — NOT `items-start` — lets the rail
+-# column grow to the height of the matrix column, giving the
+-# sticky inner panel room to pin against. With items-start, the
+-# rail wrapper sits at its content height (~400px) and sticky
+-# has nothing to track, so the rail scrolls off-screen on tall
+-# matrices.
+.xl:flex.xl:gap-4{ data: { controller: "popover" } }
+  .xl:flex-1.xl:min-w-0
+    = render "commits/matrix",
+             per_test: @per_test,
+             per_computer: @per_computer,
+             popover_data: @popover_data,
+             branch: @selected_branch,
+             sha: @commit.short_sha,
+             active_filter: @active_filter
+  = render "commits/matrix_rail", per_computer: @per_computer

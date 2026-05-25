@@ -1,4 +1,6 @@
 class UsersController < ApplicationController
+  layout "modern", only: %i[index show new create edit update admin]
+
   before_action :set_user, only: %i[show edit update destroy]
   before_action :authorize_user
   before_action :authorize_admin, only: %i[new create admin destroy
@@ -6,7 +8,7 @@ class UsersController < ApplicationController
   before_action :authorize_self_or_admin, only: %i[edit update]
 
   def index
-    @users = User.all.order(:name)
+    @users = User.includes(:computers).order(:name)
   end
 
   def new
@@ -22,7 +24,7 @@ class UsersController < ApplicationController
     if @user.save
       redirect_to users_path, notice: "Successfully set up #{@user.name}."
     else
-      render "new"
+      render "new", status: :unprocessable_content
     end
   end
 
@@ -42,7 +44,7 @@ class UsersController < ApplicationController
         end
         format.json { render :show, status: :ok, location: @user }
       else
-        format.html { render :edit }
+        format.html { render :edit, status: :unprocessable_content }
         format.json { render json: @user.errors, status: :unprocessable_content }
       end
     end

@@ -9,6 +9,12 @@ Rails.application.configure do
   config.cache_classes = false
   config.action_view.cache_template_loading = true
 
+  # sassc-rails auto-enables :sass as the CSS compressor outside development;
+  # SassC chokes on Tailwind v4's modern color syntax (rgb(from red r g b)).
+  # Keep the stylesheet pipeline pass-through in tests so the modern layout
+  # can render tailwind.css without crashing.
+  config.assets.css_compressor = nil
+
   # Do not eager load code on boot. This avoids loading your whole application
   # just for the purpose of running a single test. If you are using a tool that
   # preloads Rails for running tests, you may have to set it to true.

@@ -1,0 +1,92 @@
+-# Logs tab. Server-side proxy + lazy-loaded viewer for the three
+-# per-test log files on the Flatiron host (out / mk / err).
+-#
+-# The view sets up the picker UI and hands off to the `test-logs`
+-# Stimulus controller. Lazy fetch on first tab activation (or
+-# explicit `?tab=logs` deep link from a per-row link). Picker has
+-# two axes: computer (worst-first row of buttons, status-dotted)
+-# and log type (mono segmented control).
+-#
+-# When the controller's HEAD probe says no upstream logs exist for
+-# *any* (computer, type) combination on this test+commit, the
+-# tab strip's Logs link gets aria-disabled with a tooltip.
+
+- default_name = @default_log_computer
+- default_type = "out"
+- url_template = test_case_commit_log_path(branch: @selected_branch.name,
+                                           sha: @commit.short_sha,
+                                           module: @test_case.module,
+                                           test_case: @test_case.name,
+                                           computer: "__COMPUTER__",
+                                           type: "__TYPE__")
+- status_template = test_case_commit_log_status_path(branch: @selected_branch.name,
+                                                     sha: @commit.short_sha,
+                                                     module: @test_case.module,
+                                                     test_case: @test_case.name,
+                                                     computer: "__COMPUTER__")
+- type_specs = [["out", "out"], ["mk", "mk"], ["err", "err"]]
+
+.rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);",
+                                              data: { controller: "test-logs",
+                                                      test_logs_url_template_value: url_template,
+                                                      test_logs_status_url_template_value: status_template,
+                                                      test_logs_default_computer_value: default_name.to_s,
+                                                      test_logs_default_type_value: default_type,
+                                                      test_logs_active_tab_value: @active_tab.to_s,
+                                                      test_logs_short_sha_value: @commit.short_sha,
+                                                      test_logs_test_name_value: @test_case.name } }
+
+  - if @log_computers.empty?
+    .px-4.py-10.text-center.text-fg-muted.text-sm
+      No computers have submitted for this test on this commit.
+  - else
+    -# Toolbar — two axes. Computer row on the left, mono type
+    -# segmented control on the right.
+    .flex.flex-wrap.items-center.justify-between.gap-3.border-b.border-border-subtle.px-4.py-3
+      .flex.flex-wrap.items-center.gap-2
+        %span.text-fg-muted.text-sm Computer:
+        - @log_computers.each do |computer|
+          - active = (computer.name == default_name)
+          %button{ type: "button",
+                   class: "rounded-md border px-2 py-1 font-mono cursor-pointer transition-colors " \
+                          "#{active ? 'border-brand bg-brand-soft text-brand-soft-text' : 'border-border bg-bg-elev text-fg-muted hover:bg-bg-muted'}",
+                   style: "font-size: 11px;",
+                   data: { test_logs_target: "computerButton",
+                           computer: computer.name,
+                           action: "click->test-logs#selectComputer" } }
+            = computer.name
+
+      .flex.items-center.gap-2
+        %span.text-fg-muted.text-sm Type:
+        .inline-flex.rounded-md.border.border-border.bg-bg-elev.p-0.5.gap-0.5
+          - type_specs.each do |id, label|
+            - active = (id == default_type)
+            %button{ type: "button",
+                     class: "rounded-sm px-2 py-1 font-mono cursor-pointer transition-colors " \
+                            "#{active ? 'bg-brand-soft text-brand-soft-text' : 'text-fg-muted hover:bg-bg-muted'}",
+                     style: "font-size: 11px;",
+                     data: { test_logs_target: "typeButton",
+                             type: id,
+                             action: "click->test-logs#selectType" } }
+              = label
+
+    -# Log content frame. Same look as commit-show's Logs tab.
+    .px-4.py-4
+      .relative.rounded-md.border.border-border-subtle.bg-bg-subtle.overflow-hidden{ data: { test_logs_target: "frame" } }
+        - if default_name
+          = link_to test_case_commit_log_path(branch: @selected_branch.name,
+                                              sha: @commit.short_sha,
+                                              module: @test_case.module,
+                                              test_case: @test_case.name,
+                                              computer: default_name,
+                                              type: default_type),
+                   download: "#{@test_case.name}_#{@commit.short_sha}_#{default_name}_#{default_type}.txt",
+                   title: "Download this log",
+                   class: "absolute top-2 right-2 z-10 inline-flex items-center gap-1 rounded-md border border-border bg-bg-elev px-2 py-1 text-fg-muted hover:bg-bg-muted hover:text-fg no-underline",
+                   style: "box-shadow: var(--shadow-card-sm); font-size: 11px;",
+                   data: { test_logs_target: "downloadLink" } do
+            = mesa_icon(:download, size: 13)
+            %span Download
+        .py-12.text-center.text-fg-muted.text-sm{ data: { test_logs_target: "placeholder" } }
+          %span Click the Logs tab to load the log…
+        %pre.hidden.overflow-auto.p-4.font-mono.leading-relaxed.text-fg{ data: { test_logs_target: "content" }, class: "text-[12px] whitespace-pre-wrap break-words", style: "max-height: 60vh;" }

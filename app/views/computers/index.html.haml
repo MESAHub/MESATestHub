@@ -1,50 +1,162 @@
-.row
-  .col
-    %h1 
-      = @owner_prefix
-      Computers
-    %p
-      %i=page_entries_info @computers
+- content_for :title, "#{@owner_prefix} computers"
 
-.row
-  .col
-    .table-responsive
-      %table.table
-        %thead.thead-default
-          %tr
-            %th Name
-            - if @show_users
-              %th User
-            %th Platform
-            %th Processor
-            %th Ram [GB]
-            %th
-            -if self_or_admin?
-              %th
-              %th
+.space-y-4
+  -# Breadcrumb. Back arrow goes to the most-natural "up": the user's
+  -# profile when we're scoped to one user, or the admin index when
+  -# this is the admin all-computers view. Mirrors the back-arrow +
+  -# right-aligned slug pattern from the test-on-commit breadcrumb.
+  %nav.flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+    - if @user
+      = link_to user_path(@user),
+               class: "inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-bg-muted hover:text-fg no-underline",
+               title: "Back to #{@user.name}" do
+        = mesa_icon(:arrow_left, size: 14)
+        %span= @user.name
+    - elsif admin?
+      = link_to admin_path,
+               class: "inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-bg-muted hover:text-fg no-underline",
+               title: "Back to admin" do
+        = mesa_icon(:arrow_left, size: 14)
+        %span Admin
+    %span.text-fg-subtle /
+    %span.text-fg Computers
 
-        %tbody
-          - @computers.each do |computer|
-            %tr
-              %td.align-middle= computer.name
+  -# Headline card. Status sentence on top, Sort dropdown + (when
+  -# allowed) "Add computer" CTA in the top-right. Matches the
+  -# single-tier headline pattern from test_cases#show; the Sort
+  -# dropdown mirrors the picker pattern used by the test_cases#show
+  -# submissions tab's Computer dropdown.
+  .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+    .flex.flex-wrap.items-start.justify-between.gap-3
+      %div.min-w-0
+        %div{ class: "text-[20px] font-medium leading-snug tracking-tight text-fg" }
+          - count = @computers.total_count
+          %strong.font-semibold.tabular-nums= count
+          %span.text-fg-muted<>
+            = " #{'computer'.pluralize(count)} "
+          - if @user
+            %span.text-fg-muted maintained by
+            = link_to @user.name, user_path(@user),
+                     class: "ml-1 font-semibold text-brand no-underline hover:underline"
+          - else
+            %span.text-fg-muted across all users
+
+        - if @computers.total_pages > 1
+          .mt-2.text-fg-subtle{ class: "text-[12px] tabular-nums" }
+            = page_entries_info @computers
+
+      .shrink-0.flex.items-center.gap-2
+        -# Sort picker. Reuses dropdown_controller (the same one the
+        -# test_cases submissions Computer picker uses). Active row
+        -# carries `aria-selected="true"` + brand-soft tint. Picking
+        -# a sort always resets pagination back to page 1.
+        .relative{ data: { controller: "dropdown", open: "false" } }
+          %button.inline-flex.items-center.gap-2.rounded-md.border.border-border.bg-bg-elev.px-2.py-1.text-fg.cursor-pointer.hover:bg-bg-muted{
+            type: "button",
+            "aria-haspopup": "listbox",
+            "aria-label": "Sort computers",
+            class: "text-[12px]",
+            data: { dropdown_target: "trigger", action: "click->dropdown#toggle" } }
+            %span.text-fg-subtle Sort
+            %span.font-semibold= computer_sort_label(@sort)
+            = mesa_icon(:chevron, size: 10)
+
+          .absolute.right-0.top-full.z-30.mt-1.rounded-md.border.border-border.bg-bg-elev.shadow-md{
+            hidden: true,
+            role: "listbox",
+            style: "min-width: 220px;",
+            data: { dropdown_target: "menu" } }
+            - computer_sort_options(include_maintainer: @show_users).each do |value, label|
+              - active = @sort == value
+              - sort_param = value == "recent" ? nil : value
+              = link_to url_for(only_path: true, sort: sort_param, page: nil),
+                       role: "option",
+                       "aria-selected": active.to_s,
+                       class: "block px-3 py-1.5 no-underline #{active ? 'bg-brand-soft text-brand-soft-text' : 'text-fg hover:bg-bg-muted'}",
+                       style: "font-size: 12px;" do
+                = label
+
+        - if @user && self_or_admin?
+          = link_to new_user_computer_path(@user),
+                   class: "mesa-btn mesa-btn-primary",
+                   style: "padding: 6px 12px; font-size: 12px;" do
+            = mesa_icon(:plus, size: 12)
+            %span Add computer
+
+  -# Table card. Modeled on the test-on-commit instances table:
+  -# sticky header, narrow row padding, mono column names. When the
+  -# admin view is rendering (@show_users true), an extra Maintainer
+  -# column slots in after the name.
+  - if @computers.empty?
+    .rounded-lg.border.border-border.bg-bg-elev.p-10.text-center.text-fg-muted.text-sm{ style: "box-shadow: var(--shadow-card-sm);" }
+      No computers
+      - if @user
+        for
+        %span.font-mono.text-fg= @user.name
+      yet.
+      - if @user && self_or_admin?
+        .mt-3
+          = link_to "Add the first one →", new_user_computer_path(@user),
+                   class: "text-brand no-underline hover:underline"
+  - else
+    .rounded-lg.border.border-border.bg-bg-elev.overflow-hidden{ style: "box-shadow: var(--shadow-card-sm);" }
+      %div{ style: "overflow-x: auto;" }
+        %table.w-full.border-collapse{ style: "min-width: 720px;" }
+          %thead.bg-bg-subtle
+            %tr.text-fg-muted{ class: "text-[11px] uppercase tracking-wide" }
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Name
               - if @show_users
-                %td.align_middle= link_to computer.user.name, user_computer_path(computer.user, computer)
-              %td.align-middle= computer.platform
-              %td.align-middle= computer.processor
-              %td.align-middle= computer.ram_gb
-              %td.align-middle= link_to 'Show', user_computer_path(computer.user, computer), class: 'btn btn-sm btn-secondary text-light'
-              - if self_or_admin?
-                %td.align-middle= link_to 'Edit', edit_user_computer_path(computer.user, computer), class: 'btn btn-sm btn-primary text-light'
-                %td.align-middle= link_to 'Delete', user_computer_path(computer.user, computer), method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-sm btn-danger text-light'
+                %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Maintainer
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Platform
+              %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle Processor
+              %th.text-right.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap RAM
+              %th.text-right.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap
+                %span.sr-only Actions
+          %tbody
+            - @computers.each do |computer|
+              - owner = computer.user
+              %tr.border-b.border-border-subtle.align-middle.hover:bg-bg-subtle{ class: "[&>td]:py-2" }
+                %td.px-3
+                  = link_to user_computer_path(owner, computer),
+                           class: "font-mono font-semibold text-brand no-underline hover:underline"  do
+                    = computer.name
+                - if @show_users
+                  %td.px-3.whitespace-nowrap{ class: "text-[12px]" }
+                    - if owner
+                      = link_to owner.name, user_path(owner),
+                               class: "text-fg hover:text-brand no-underline"
+                    - else
+                      %span.text-fg-subtle —
+                %td.px-3{ class: "text-[12px]" }
+                  - if computer.platform.present?
+                    %span.inline-flex.items-center.gap-1.rounded-md.border.border-border.bg-bg-muted.px-2.py-0.5.font-mono.text-fg{ class: "text-[11px]" }= computer.platform
+                  - else
+                    %span.text-fg-subtle —
+                %td.px-3.text-fg-muted{ class: "text-[12px]" }
+                  = computer.processor.presence || content_tag(:span, "—", class: "text-fg-subtle")
+                %td.px-3.text-right.font-mono.tabular-nums.whitespace-nowrap{ class: "text-[12px]" }
+                  - if computer.ram_gb.present?
+                    = computer.ram_gb
+                    %span.text-fg-subtle  GB
+                  - else
+                    %span.text-fg-subtle —
+                %td.px-3.text-right.whitespace-nowrap
+                  .inline-flex.items-center.gap-1
+                    = link_to "Show", user_computer_path(owner, computer),
+                             class: "mesa-btn",
+                             style: "padding: 3px 8px; font-size: 11px;"
+                    - if admin? || (current_user && owner && current_user.id == owner.id)
+                      = link_to "Edit", edit_user_computer_path(owner, computer),
+                               class: "mesa-btn",
+                               style: "padding: 3px 8px; font-size: 11px;"
+                      = button_to user_computer_path(owner, computer),
+                                 method: :delete,
+                                 form: { data: { turbo_confirm: "Delete #{computer.name}? This removes all associated submissions and test instances." } },
+                                 class: "mesa-btn",
+                                 style: "padding: 3px 8px; font-size: 11px; color: var(--color-danger-soft-text); border-color: var(--color-danger-soft); background: transparent;" do
+                        Delete
 
-.row
-  .col
-    = paginate @computers
-
-- if @user
-  .row
-    .col.text-center
-      .btn-group
-        - if self_or_admin?
-          = link_to 'New Computer', new_user_computer_path(@user), class: 'btn btn-primary btn-lg text-light'
-        = link_to 'View User', user_path(@user), class: 'btn btn-secondary btn-lg text-light'
+  -# Pagination row. Hidden when the page fits in one screen.
+  - if @computers.total_pages > 1
+    .pt-2
+      = paginate @computers, theme: "modern"

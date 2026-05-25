@@ -1,231 +1,87 @@
 class TestCaseCommitsController < ApplicationController
-  before_action :set_test_case_commit, only: %i[show]
+  include TestCaseCommitsHelper
+  include LogProxy
+
+  # Log-type whitelist + per-type display vocabulary for the
+  # per-test log proxy. Keys match the `:type` route segment;
+  # values are the upstream file extension and a human-friendly
+  # name that lands in 404/error messages.
+  LOG_TYPES = {
+    "out" => { file: "out.txt", label: "stdout (out.txt)" },
+    "mk"  => { file: "mk.txt",  label: "build (mk.txt)" },
+    "err" => { file: "err.txt", label: "stderr (err.txt)" }
+  }.freeze
+
+  layout "modern", only: :show
+
+  before_action :set_test_case_commit, only: %i[show log log_status]
+  before_action :set_log_computer, only: %i[log log_status]
 
   def show
-    # set up branch/commit selector
     @selected_branch = Branch.named(params[:branch])
     return render_404("Branch '#{params[:branch]}' not found") unless @selected_branch
-    
-    @other_branches = @commit.branches.reject do |branch|
-      branch == @selected_branch
-    end
-    @branches = [@selected_branch, @other_branches].flatten
-    @not_in_branches = @commit.not_in_branches
-    
 
-    # populating test case commit dropdown menu. In the future, might want to
-    # move this to happen via asynchronous request from javascript to speed up
-    # rendering (no need to wait for github api call in determining nearby
-    # commits)
+    # Other branches that contain this commit, for the breadcrumb's
+    # branch picker. Mirrors the pattern used on commits#show.
+    other_branches = @commit.branches.reject { |b| b == @selected_branch }
+                                     .sort_by(&:updated_at)
+    @branches = [@selected_branch, other_branches].flatten
 
-    # get nearby commits for populating dropdown menu
-    # @nearby_commits = @selected_branch.nearby_commits(@commit)
-    @nearby_tccs = @selected_branch.nearby_test_case_commits(@test_case_commit)
-    return render_404("No test case commits found for #{@test_case.module}/#{@test_case.name} on branch #{@selected_branch.name}") unless @nearby_tccs && !@nearby_tccs.empty?
+    # Pre-rendered row data for the instances table — all 20 columns'
+    # worth of fields. The view layer renders every column; the column
+    # picker is a pure client-side toggle, so we don't need to know
+    # which columns are active server-side.
+    @instances = @test_case_commit.test_instances
+                                  .includes(:computer, instance_inlists: :inlist_data)
+                                  .order("computers.name ASC, test_instances.created_at ASC")
+                                  .references(:computers)
+                                  .to_a
+    @instance_rows = @test_case_commit.instances_for_display
 
-    @next_tcc, @previous_tcc = nil, nil
-    loc = @nearby_tccs.pluck(:id).index(@test_case_commit.id)
-    return render_404("Test case commit not found in branch commit history") unless loc
+    @unique_checksums = @test_case_commit.unique_checksums
 
-    # we've reversed nearby commits, so the "next" one is later in time, and
-    # thus EARLIER in the array. Clunky, but I think it works in practice
-    @next_tcc = @nearby_tccs[loc - 1] if loc.positive?
-    if loc < @nearby_tccs.length - 1
-      @previous_tcc = @nearby_tccs[loc + 1]
-    end
+    # Optional focus highlight when the user came from a specific
+    # matrix cell (e.g. via `?computer=rusty`). Renders the matching
+    # row in a brand-tinted background.
+    @focus_computer_name = params[:computer].to_s.presence
 
+    # Status-word / color for the headline ("is passing in <sha>").
+    @status_word, @status_class = headline_status(@test_case_commit)
+    @checksum_word, @checksum_class, @checksum_n = headline_checksum(@test_case_commit)
 
-    # used for shading commit selector options according to passage status of
-    # THIS test
-    @commit_classes = Hash.new('list-group-item-info')
-    @btn_classes = Hash.new('btn-info')
-    @extra_symbols = Hash.new([])
-    @nearby_tccs.each do |tcc|
-      @commit_classes[tcc.commit] = case tcc.status
-      when 0 then 'list-group-item-success'
-      when 1 then 'list-group-item-danger'
-      when 2 then 'list-group-item-primary'
-      when 3 then 'list-group-item-warning'
-      else
-        'list-group-item-info'
-      end
-      @btn_classes[tcc.commit] = case tcc.status
-      when 0 then 'btn-success'
-      when 1 then 'btn-danger'
-      when 2 then 'btn-primary'
-      when 3 then 'btn-warning'
-      else
-        'btn-info'
-      end
+    # In-commit test picker — every test case that has a TCC on this
+    # commit, sorted worst-first (failing → mixed → checksum-only →
+    # passing → untested), then by module (star → binary → astero
+    # per `TestCase.modules`), then alphabetically by test name.
+    # Drives the dropdown wired to the headline's test pill.
+    @commit_tccs = sorted_commit_tccs(
+      @commit.test_case_commits.includes(:test_case).to_a
+    )
 
-      # prepare for adding plus or wrench symbol for optional inlists/FPEs
-      if tcc.test_instances.where(run_optional: true).count > 0
-        @extra_symbols[tcc] += [['plus-square', 'Optional Inlists Run']]
-      end
-      if tcc.test_instances.where(fpe_checks: true).count > 0
-        @extra_symbols[tcc] += [['wrench', 'FPE Checks Run']]
-      end
-      if tcc.test_instances.where(resolution_factor: 0..0.99).count > 0
-        @extra_symbols[tcc] += [['search-plus', 'Finer Resolution']]
-      end
-    end
+    # Subway map data — a focused window of nearby commits on this
+    # branch (newest-first, anchor in the middle) paired with the
+    # TCC for this test on each commit. Commits where the test
+    # wasn't tested still render as a gray "untested" station so the
+    # spacing stays consistent across the map.
+    @subway_window = @selected_branch.focused_commit_window(@commit, size: 5)
+    @subway_tccs_by_commit = TestCaseCommit
+                              .where(commit_id: @subway_window.map(&:id),
+                                     test_case_id: @test_case.id)
+                              .index_by(&:commit_id)
 
-    # other test case commits for this commit
-    unsorted = @test_case_commit.commit.test_case_commits.includes(:test_case).each
-    @commit_tccs = []
+    # Unique computers that reported instances for this TCC, ordered
+    # worst-first by their best result on this test. The Logs tab's
+    # picker row reads off this list; @focus_computer_name (if set
+    # by the matrix cell handoff or `?computer=`) primes the default
+    # selection.
+    @log_computers = computers_for_log_picker(@instances)
+    @default_log_computer = @focus_computer_name.presence ||
+                            @log_computers.first&.name
 
-    # set up picky ordering for test case commits: mixed, then checksums, then
-    # failing, then passing, then untested. Within each of those, order
-    # according to order of modules in TestCase.modules. Within that subset,
-    # arrange alphabetically
-    [3, 2, 1, 0, -1].each do |status|
-      TestCase.modules.each do |mod|
-        @commit_tccs += unsorted.select do |tcc|
-          (tcc.status == status) && (tcc.test_case.module == mod)
-        end.sort { |tcc1, tcc2| tcc1.test_case.name <=> tcc2.test_case.name }
-      end
-    end
-    
-
-    # all test instances, sorted by upload date
-    @instance_limit = 100
-    @test_instance_classes = {}
-
-    # @test_case_version isn't getting set properly. Need to investigate...
-
-    @test_case_commit.test_instances.ascending.each do |instance|
-      @test_instance_classes[instance] =
-        if instance.passed
-          'table-success'
-        else
-          'table-danger'
-        end
-    end
-
-    @checksum_count = @test_case_commit.checksum_count
-
-    # text and class for last commit test status
-    @commit_status, @commit_class = passing_status_and_class
-
-
-    # names of default columns in the table of instances, can be toggled on
-    # and off
-    @default_columns = {
-      'status' => true,
-      'computer' => true,
-      'date' => false,
-      'runtime' => true,
-      'ram' => false,
-      'checksum' => true,
-      'model_number' => true,
-      'threads' => false,
-      'spec' => false,
-      'steps' => true,
-      'retries' => true,
-      'redos' => false,
-      'solver_iterations' => false,
-      'solver_calls_made' => false,
-      'solver_calls_failed' => false,
-      'log_rel_run_E_err' => false,
-      'model_number' => false,
-      'star_age' => false,
-      'num_retries' => true
-    }
-
-    @specific_columns = {}
-    inlist_data = @test_case_commit.inlist_data
-    return render_404("No inlist data found for this test case commit") unless inlist_data
-    data_names = inlist_data.pluck(:name).uniq
-
-    # only show special data by default if we only have one or two. Otherwise
-    # rely on users to click the checkboxes they want to use
-    data_names.each do |data_name|
-      @specific_columns[data_name] = data_names.length < 3
-    end
-
-    # gather all inlists from the instances already in memory
-    # default scope of InstanceInlist should ensure they are read off in the
-    # proper order. Not sure how this would work if one instance skipped an
-    # inlist. Hopefully that doesn't happen.
-    @raw_inlists = []
-    @inlists = []
-    @test_case_commit.test_instances.ascending.each do |ti|
-      if ti.instance_inlists.count > @inlists.count
-        @inlists = ti.instance_inlists.map do |inlist|
-          inlist.inlist.sub(/^inlist_/, '').sub(/_header$/, '')
-        end
-        # puts "setting raw_inlists"
-        @raw_inlists = ti.instance_inlists.map(&:inlist)
-        # puts "raw inlists now set to"
-        # @raw_inlists.each { |inl| puts "- #{inl}"}
-      end
-    end
-
-    # need to gather data for each instance inlist. Should be simple, but a few
-    # pieces of data are tricky, so doing this here rather than making the view
-    # horrendous
-    #
-    # Create a hash with inlist names as keys and lists of data hashes as values
-    # each element in the values will encode all of the table data needed for
-    # one computer's submission of that inlist
-    @inlist_data = Hash.new([])
-    @test_case_commit.test_instances.ascending.each do |ti|
-      @inlists.zip(@raw_inlists).each do |inlist_short, inlist_full|
-        # puts "Gathering data for computer #{ti.computer} and inlist #{inlist_full}"
-        inlist = ti.instance_inlists.select do |inl|
-          inl.inlist == inlist_full
-        end
-        next if inlist.empty?
-        
-        inlist = inlist.first
-        data_hash = {}
-
-        # inlist "passed" if the next one exists OR this is the last one and
-        # the overall test passed
-        data_hash[:passed] = false
-        if inlist_short == @inlists.last
-          data_hash[:passed] = ti.passed
-        elsif ti.instance_inlists.pluck(:order).include? inlist.order + 1
-          data_hash[:passed] = true
-        end
-
-        data_hash[:computer] = ti.computer
-        data_hash[:runtime] = inlist.runtime_minutes
-        data_hash[:threads] = ti.omp_num_threads
-        data_hash[:spec] = ti.computer_specification
-        data_hash[:fpe_checks] = ti.fpe_checks
-        data_hash[:run_optional] = ti.run_optional
-        data_hash[:resolution_factor] = ti.resolution_factor
-        data_hash[:model_number] = inlist.model_number || -1
-        data_hash[:star_age] = inlist.star_age || -1
-        data_hash[:num_retries] = inlist.num_retries || -1
-
-        @specific_columns.each do |col_name, visible|
-          data_hash[col_name] = if ti.get_data(col_name)
-                                  format('%0.3g', ti.get_data(col_name))
-                                else
-                                  ''
-                                end
-        end
-
-        # all other useful data just comes straight from the inlist object
-        data_hash = inlist.serializable_hash.to_hash.merge(data_hash)
-        # puts "keys are"
-        # data_hash.keys.each { |key| puts "- #{key}" }
-
-        # puts "created at is #{data_hash[:created_at]}"
-        # puts "runtime is #{data_hash[:runtime_minutes]}"
-        # puts "runtime should be #{inlist.serializable_hash['runtime_minutes']}"
-
-        @inlist_data[inlist_short] = [@inlist_data[inlist_short], data_hash].flatten
-      end
-    end
-
-    # puts "keys to inlist_data, and the length of their each's arrays"
-    # @inlist_data.each do |key, val|
-      # puts "#{key}: #{val.length}"
-    # end
-
+    # Active tab selection — honors `?tab=summary|logs` so deep
+    # links work; defaults to Summary.
+    requested = params[:tab].to_s.to_sym
+    @active_tab = %i[summary logs].include?(requested) ? requested : :summary
   end
 
   def show_test_case_commit
@@ -234,45 +90,140 @@ class TestCaseCommitsController < ApplicationController
     )
   end
 
+  # Proxy a single per-test log file from the Flatiron logs server.
+  # Path: /<sha>/<computer>/<test_name>/<type>.txt. Validates that
+  # the named computer actually submitted instances for this TCC, so
+  # a URL-guessing user can't make us fetch arbitrary files.
+  def log
+    type = params[:type].to_s
+    type_meta = LOG_TYPES[type]
+    return render(plain: "Unknown log type", status: :bad_request) unless type_meta
+
+    log_uri = log_uri_for(type_meta[:file])
+
+    begin
+      body = LogProxy.fetch_log(log_uri)
+      response.headers["Cache-Control"] = "private, max-age=300"
+      render plain: body, content_type: "text/plain; charset=utf-8"
+    rescue LogProxy::LogNotFound
+      render plain: log_not_found_message(type_meta),
+             status: :not_found, content_type: "text/plain; charset=utf-8"
+    rescue LogProxy::LogTooLarge
+      render plain: "#{type_meta[:label]} exceeds #{LogProxy::LOG_BYTES_MAX / 1.megabyte} MB; download directly: #{log_uri}",
+             status: :payload_too_large, content_type: "text/plain; charset=utf-8"
+    rescue LogProxy::LogFetchError => e
+      render plain: "Could not fetch #{type_meta[:label]} (#{e.message}). Direct URL: #{log_uri}",
+             status: :bad_gateway, content_type: "text/plain; charset=utf-8"
+    end
+  end
+
+  # HEAD-probe whether ANY log file exists for this (commit, computer,
+  # test). Returns `{ available: bool, types: {out:bool, mk:bool, err:bool} }`
+  # so callers can both gate visibility AND choose a sensible default
+  # type. Probes all three types in parallel and caches the combined
+  # result for 10 minutes (per LogProxy::LOG_STATUS_CACHE_TTL).
+  def log_status
+    cache_key = ["test_log_exists", @commit.sha, @log_computer_name,
+                 @test_case.module, @test_case.name].join(":")
+    types = Rails.cache.fetch(cache_key, expires_in: LogProxy::LOG_STATUS_CACHE_TTL) do
+      LOG_TYPES.keys.each_with_object({}) do |type, h|
+        h[type] = LogProxy.probe_log_url(log_uri_for(LOG_TYPES[type][:file]))
+      end
+    end
+    any_available = types.values.any?
+    render json: { available: any_available,
+                   types: types,
+                   computer: @log_computer_name }
+  end
+
   private
 
-  # Use callbacks to share common setup or constraints between actions.
   def set_test_case_commit
     @commit = parse_sha(includes: { test_case_commits: :test_case })
     return render_404("Commit '#{params[:sha]}' not found") unless @commit
-    
+
     @test_case = TestCase.find_by(name: params[:test_case], module: params[:module])
     return render_404("Test case '#{params[:module]}/#{params[:test_case]}' not found") unless @test_case
-    
-    @test_case_commit = TestCaseCommit.includes(
-      test_instances: { instance_inlists: :inlist_data, computer: :user }
-    ).find_by(commit: @commit, test_case: @test_case)
+
+    # For #show we want eager loading of test_instances. For the log
+    # proxy actions we only need the basic association — keep this
+    # path tight (a single LIMIT-1 lookup) so probing N computers
+    # doesn't N+1 instance loads.
+    if action_name == "show"
+      @test_case_commit = TestCaseCommit.includes(
+        test_instances: { instance_inlists: :inlist_data, computer: :user }
+      ).find_by(commit: @commit, test_case: @test_case)
+    else
+      @test_case_commit = TestCaseCommit.find_by(commit: @commit, test_case: @test_case)
+    end
     return render_404("No test results found for '#{@test_case.module}/#{@test_case.name}' on commit '#{@commit.short_sha}'") unless @test_case_commit
   end
-  
-  # get a bootstrap text class and an appropriate string to convert integer
-  # passing status to useful web output
 
-  def passing_status_and_class
-    sts = 'ERROR'
-    cls = 'text-danger'
-    if @test_case_commit.status == 0
-      sts = 'Passing'
-      cls = 'text-success'
-    elsif @test_case_commit.status == 1
-      sts = 'Failing'
-      cls = 'text-danger'
-    elsif @test_case_commit.status == 2
-      sts = 'Checksum mismatch'
-      cls = 'text-primary'
-    elsif @test_case_commit.status == 3
-      sts = 'Mixed'
-      cls = 'text-warning'
-    elsif @test_case_commit.status == -1
-      sts = 'Not yet run'
-      cls = 'text-info'
+  # Validate the computer named in the URL actually has instances on
+  # this TCC. Defends against URL-guessing the way commits#build_log
+  # validates against submissions.
+  def set_log_computer
+    name = params[:computer].to_s
+    has_instance = @test_case_commit.test_instances
+                                    .joins(:computer)
+                                    .where(computers: { name: name })
+                                    .exists?
+    unless has_instance
+      respond_to do |format|
+        format.text { render plain: "No instances on #{name} for this test on this commit", status: :not_found }
+        format.json { render json: { available: false, reason: "computer_not_associated" }, status: :not_found }
+        format.any  { render plain: "No instances on #{name} for this test on this commit", status: :not_found }
+      end
+      return
     end
-    return sts, cls
+    @log_computer_name = name
   end
 
+  # Upstream URI for one log file of this (commit, computer, test).
+  def log_uri_for(filename)
+    URI.parse(
+      "https://mesa-logs.flatironinstitute.org/" \
+      "#{@commit.sha}/" \
+      "#{ERB::Util.url_encode(@log_computer_name)}/" \
+      "#{ERB::Util.url_encode(@test_case.name)}/" \
+      "#{filename}"
+    )
+  end
+
+  # User-facing message when a specific log type 404s. Names the
+  # exact file the user asked for so they know whether to try a
+  # sibling type. Doesn't mention "test suite" or other internals
+  # — the user is already in context.
+  def log_not_found_message(type_meta)
+    other_labels = LOG_TYPES
+                     .reject { |k, _| LOG_TYPES[k][:file] == type_meta[:file] }
+                     .map { |_, v| v[:file] }
+    <<~MSG
+      No #{type_meta[:label]} log uploaded for #{@log_computer_name}
+      on #{@test_case.module}/#{@test_case.name} at #{@commit.short_sha}.
+
+      Try the sibling types: #{other_labels.join(', ')}.
+      Or check the Computers list — this computer may not have run
+      this test on this commit at all.
+    MSG
+  end
+
+  # Build the computer picker list for the Logs tab. One row per
+  # unique computer that submitted instances for this TCC, sorted
+  # worst-first so a failing computer floats to position 0 and
+  # becomes the default selection.
+  def computers_for_log_picker(instances)
+    by_computer = instances.group_by(&:computer).reject { |c, _| c.nil? }
+    rank = ->(insts) do
+      passed = insts.count(&:passed)
+      failed = insts.size - passed
+      if failed.positive? && passed.zero? then 0       # all failed
+      elsif failed.positive?              then 1       # mixed
+      elsif passed.positive?              then 3       # all passed
+      else                                     4
+      end
+    end
+    by_computer.sort_by { |c, insts| [rank.call(insts), c.name.to_s] }
+               .map(&:first)
+  end
 end

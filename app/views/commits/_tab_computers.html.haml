@@ -1,0 +1,95 @@
+-# Computers tab — per-computer cards, sorted worst-first. Each card
+-# shows: status dot + computer name + maintainer line (header),
+-# SDK/compiler spec chip, per-state mini-stat grid (built cards) or
+-# a build-failure box with last-successful-build link (no-build
+-# cards). The bottom row exposes a "logs ↗" link routed through the
+-# in-page Logs tab; a small Stimulus controller probes the upstream
+-# log host on connect and hides the link if nothing's available.
+-# Column count auto-fills from viewport width so words like
+-# "CHECKSUM" never bleed past a card edge. The 5-mini-stat grid
+-# inside each card needs ~5 × 78px = 390px just for the labels +
+-# numbers, plus 28px of card padding. 420px is the minimum that
+-# fits without text overflow; below that we drop to one column.
+.grid.gap-3{ style: "grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));" }
+  - @per_computer.each do |row|
+    - computer = row[:computer]
+    - accent = computer_state_color(row[:state])
+    - sdk_label = computer_sdk_label(row)
+    - log_link_href = computer ? "?tab=logs&computer=#{computer.name}" : nil
+    - status_url = computer ? commit_build_log_status_path(branch: @selected_branch.name, sha: @commit.short_sha, computer: computer.name) : nil
+    - last_good = (!row[:built] && computer) ? @commit.last_successful_build_commit_for(computer) : nil
+    .rounded-lg.border.border-border.bg-bg-elev.p-4{
+      style: "box-shadow: var(--shadow-card-sm); border-left: 3px solid var(--color-#{accent});",
+      data: { controller: "computer-card", computer_card_status_url_value: status_url.to_s } }
+      -# Header: dot, computer name, maintainer line, OS pill.
+      .flex.items-start.justify-between.gap-2.mb-2
+        .flex.items-start.gap-2.min-w-0
+          %span.inline-block.h-2.w-2.rounded-full.shrink-0.mt-1.5{ class: status_dot_class_for_computer(row[:state]) }
+          .min-w-0
+            %div.font-mono.text-fg.truncate{ class: "text-[13px] font-semibold" }= computer&.name || "computer ##{row[:computer_id]}"
+            - if computer&.user
+              .text-fg-muted{ class: "text-[11px]" }
+                maintained by
+                = link_to computer.user.name,
+                          user_path(computer.user),
+                          class: "text-fg hover:text-brand no-underline"
+        - if computer&.platform
+          %span.text-fg-muted.font-mono.lowercase.shrink-0{ class: "rounded-md bg-bg-subtle px-1.5 py-0.5 text-[10px]" }= computer.platform
+
+      -# SDK / compiler chip. Mono, muted, subtle background. Hidden
+      -# when no submission carries enough metadata to produce a
+      -# non-empty spec string.
+      - if sdk_label
+        %div.font-mono.text-fg-muted.rounded-md.bg-bg-subtle.px-2.py-1.mb-2.truncate{ class: "text-[11px]", title: sdk_label }
+          = sdk_label
+
+      - if row[:built]
+        .grid.grid-cols-5.gap-2
+          - %i[pass fail pending fpe checksum].each do |key|
+            .rounded-md.bg-bg-subtle.px-2.py-1.text-center
+              %div.text-fg-subtle.uppercase.tracking-wide{ class: "text-[10px]" }= key.to_s.upcase
+              %div.font-mono.tabular-nums.text-fg{ class: "text-[14px]" }= row[:counts][key]
+        -# Bottom row: compile-status caption + (probe-gated) log link.
+        .mt-3.flex.items-center.justify-between.gap-2{ class: "text-[11px]" }
+          %span.text-fg-muted
+            Compilation:
+            %span.text-success-soft-text Succeeded
+            - if row[:counts][:inlists_full].positive?
+              ·
+              %span.text-info-soft-text{ class: "inline-flex items-center gap-1" }
+                = mesa_icon(:plus, size: 10)
+                = "#{row[:counts][:inlists_full]} full-inlist"
+          - if log_link_href
+            = link_to log_link_href,
+                     class: "text-brand hover:opacity-80 no-underline",
+                     data: { computer_card_target: "link", action: "click->tabs#switchFromLink" } do
+              logs ↗
+            %span.text-fg-subtle{ hidden: true,
+                                  data: { computer_card_target: "noLog" },
+                                  title: "No build log was uploaded for this commit/computer." }
+              no log uploaded
+      - else
+        .rounded-md.bg-buildfail-soft.px-3.py-2.text-buildfail-soft-text.text-xs{ class: "flex items-center gap-2" }
+          = mesa_icon(:x, size: 13)
+          %span
+            %strong Compilation failed.
+            No test data.
+        -# Last-successful-build link + log link, side by side.
+        .mt-3.flex.items-center.justify-between.gap-2{ class: "text-[11px]" }
+          - if last_good
+            %span.text-fg-muted
+              Last successful build:
+              = link_to last_good.short_sha,
+                       commit_path(branch: @selected_branch.name, sha: last_good.short_sha),
+                       class: "font-mono text-fg hover:text-brand no-underline"
+          - else
+            %span.text-fg-subtle No prior successful build on record
+          - if log_link_href
+            = link_to log_link_href,
+                     class: "text-brand hover:opacity-80 no-underline",
+                     data: { computer_card_target: "link", action: "click->tabs#switchFromLink" } do
+              build logs ↗
+            %span.text-fg-subtle{ hidden: true,
+                                  data: { computer_card_target: "noLog" },
+                                  title: "No build log was uploaded for this commit/computer." }
+              no log uploaded

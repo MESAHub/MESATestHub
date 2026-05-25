@@ -1,0 +1,78 @@
+-# Reusable form field for the modern Tailwind layer. Renders a
+-# label + input + inline error message. Branches on `type` to pick
+-# the right input helper.
+-#
+-# Locals:
+-#   form        — the FormBuilder
+-#   attribute   — the model attribute (symbol)
+-#   type        — :text (default), :email, :password, :select,
+-#                 :checkbox, :textarea, :url, :tel
+-#   label       — override the auto-generated label
+-#   hint        — optional helper text rendered below the input
+-#   placeholder — input placeholder
+-#   options     — array of [label, value] pairs (required for :select)
+-#   include_blank — passed through to f.select (default false)
+-#   required    — adds required + aria-required (default false)
+-#   field_html  — extra hash merged onto the input element
+-#   wrapper_class — extra class on the outer wrapper
+
+- type ||= :text
+- label ||= nil
+- hint ||= nil
+- placeholder ||= nil
+- options ||= nil
+- include_blank ||= false
+- required ||= false
+- field_html ||= {}
+- wrapper_class ||= nil
+
+- has_errors = form.object && form.object.errors[attribute].any?
+- error_messages = has_errors ? form.object.errors[attribute] : []
+- error_id = "#{form.object_name}_#{attribute}_error" if has_errors
+- input_attrs = field_html.deep_dup
+- input_attrs[:class] = [input_attrs[:class], "mesa-input"].compact.join(" ") unless type == :checkbox
+- input_attrs[:placeholder] = placeholder if placeholder
+- input_attrs[:required] = true if required
+- input_attrs["aria-required"] = "true" if required
+- if has_errors
+  - input_attrs["aria-invalid"] = "true"
+  - input_attrs["aria-describedby"] = [input_attrs["aria-describedby"], error_id].compact.join(" ")
+
+- if type == :checkbox
+  -# Inline layout: checkbox on the left, label on the right. Hint
+  -# wraps to a new line below.
+  %div{ class: wrapper_class }
+    %label.inline-flex.items-start.gap-2.cursor-pointer
+      = form.check_box attribute, input_attrs.merge(class: "mesa-checkbox mt-0.5")
+      %span.text-sm.text-fg= label || attribute.to_s.humanize
+    - if hint
+      %p.mt-1.text-fg-subtle{ class: "text-[12px]" }= hint
+    - if has_errors
+      %p.mt-1.text-danger-soft-text{ id: error_id, class: "text-[12px]" }
+        = error_messages.first
+
+- else
+  %div{ class: wrapper_class }
+    = form.label attribute, label, class: "mesa-label mb-1"
+    - case type
+    - when :select
+      = form.select attribute, options || [], { include_blank: include_blank }, input_attrs
+    - when :textarea
+      = form.text_area attribute, input_attrs.merge(rows: input_attrs[:rows] || 4)
+    - when :email
+      = form.email_field attribute, input_attrs
+    - when :password
+      = form.password_field attribute, input_attrs
+    - when :url
+      = form.url_field attribute, input_attrs
+    - when :tel
+      = form.telephone_field attribute, input_attrs
+    - when :number
+      = form.number_field attribute, input_attrs
+    - else
+      = form.text_field attribute, input_attrs
+    - if hint
+      %p.mt-1.text-fg-subtle{ class: "text-[12px]" }= hint
+    - if has_errors
+      %p.mt-1.text-danger-soft-text{ id: error_id, class: "text-[12px]" }
+        = error_messages.first

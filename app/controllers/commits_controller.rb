@@ -1,183 +1,61 @@
 class CommitsController < ApplicationController
+  include LogProxy
+
   skip_before_action :authorize_user, only: :show, if: :root_page?
   before_action :set_commit, only: :show
+  layout "modern", only: [:index, :show]
 
+  # Branch lookup for the commit detail page. The :branch URL segment
+  # might disagree with where the commit actually lives — old branch
+  # got merged, user typed a typo, etc. If we can't find the branch
+  # named in the URL but the commit does live on `main`, prefer that;
+  # otherwise fall back to whatever branch first claims the commit.
+  # In either fallback case we redirect so the URL agrees with the
+  # branch we ended up using.
   def show
-    @test_case_commits = [@problem_tccs, @skimpy_tccs].flatten.sort_by(&:test_case)
-
-    # populate branch/commit selection menus
-    # get all branches that contain this commit, this will be first dropdown
     @selected_branch = Branch.includes(:head).named(CGI.unescape(params[:branch]))
     unless @selected_branch
-      # show commit on main if it is there (most likely the old branch was merged into main)
       @selected_branch = Branch.main if @commit.branches.include?(Branch.main)
-      
-      # didn't find the commit in main? Then just use the first branch we can find.
       @selected_branch ||= @commit.branches.first
-      
-      # redirect to working path if the specified branch is wrong
       redirect_to(commit_path(sha: @commit.short_sha, branch: @selected_branch.name), alert: "Branch <span class='text-monospace'>#{CGI.unescape(params[:branch])}</span> does not exist. Found commit in <span class='text-monospace'>#{@selected_branch}</span>.") and return
     end
-    @other_branches = @commit.branches.reject do |branch|
-      branch == @selected_branch
-    end.sort_by { |c| c.updated_at }
-    @branches = [@selected_branch, @other_branches].flatten
 
-    # branches that do not contain this commit. Want these for easy navigation,
-    # but they will redirect to the head commits of their respective branches
-    # — so filter out any branches with no head_id (they'd crash the view
-    # when it asks for branch.head.short_sha).
-    @branches_off_recent = Branch.recent.where.not(id: @branches.map(&:id))
-                                        .where.not(head_id: nil)
-    @branches_off_older  = Branch.older.where.not(id: @branches.map(&:id))
-                                       .where.not(head_id: nil)
+    other_branches = @commit.branches.reject { |b| b == @selected_branch }
+                                     .sort_by(&:updated_at)
+    @branches = [@selected_branch, other_branches].flatten
 
-    # Get array of commits made in the same branch around the same time of this
-    # commit. For now, get no more than five commits, ideally centered
-    # at current commit in time in the branch. That is, if this is the head
-    # commit, get ten last commits. If this is the first commit of a branch,
-    # get the next ten. If it is in the middle, get five on either side.
+    @commit_state    = @commit.commit_state
+    @matrix          = @commit.test_computer_matrix
+    @per_computer    = @commit.per_computer_summary
+    @per_test        = @commit.per_test_summary
+    @popover_data    = @commit.cell_popover_data
+    @neighbors       = @selected_branch.commit_neighbors(@commit)
+    @hero_window     = @selected_branch.focused_commit_window(@commit, size: 5)
 
-    @next_commit, @previous_commit = nil, nil
+    @last_clean_commit = @selected_branch.last_clean_commit_before(@commit)
+    @diff_rows         = @commit.cells_changed_since(@last_clean_commit)
 
-    @others = @test_case_commits.select { |tcc| !(0..3).include? tcc.status }
-    @mixed = @test_case_commits.select { |tcc| tcc.status == 3 }
-    @checksums = @test_case_commits.select { |tcc| tcc.status == 2 }
-    @failing = @test_case_commits.select { |tcc| tcc.status == 1 }
-    @passing = @test_case_commits.select { |tcc| tcc.status == 0 }
-    @test_case_commits = [@others, @mixed, @checksums, @failing, @passing].flatten
+    @default_tab = @commit.default_detail_tab(state: @commit_state)
+    requested = params[:tab].to_s.to_sym
+    # Legacy `?tab=tests` redirects to the merged Summary panel,
+    # carrying any `?filter=` chip override through. Banner action
+    # buttons + bookmarks from the brief lifetime of the Tests tab
+    # still land on the right chip.
+    requested = :summary if requested == :tests
+    @active_tab = if %i[summary computers diff logs].include?(requested)
+                    requested
+                  else
+                    @default_tab
+                  end
 
-    @specs = @commit.computer_info
-    @statistics = {
-      passing: @test_case_commits.select { |tcc| tcc.status.zero? }.count,
-      mixed: @test_case_commits.select { |tcc| tcc.status == 3 }.count,
-      failing: @test_case_commits.select { |tcc| tcc.status == 1 }.count,
-      checksums: @test_case_commits.select { |tcc| tcc.status == 2 }.count,
-      other: @test_case_commits.select { |tcc| !(0..3).include? tcc.status }.count
-    }
-
-    # giant structure that holds all relevant counts for displaying badges next
-    # to test case commits
-    @counts = {}
-    @failing_instances = {}
-    @failure_types = {}
-    @checksum_groups = {}
-    @test_case_commits.each do |tcc|
-      if tcc.checksum_count > 1
-        unique_checksums = tcc.unique_checksums
-        @checksum_groups[tcc] = {}
-        unique_checksums.each do |checksum|
-          # more than one checksum? group computers, sorted by name, as values
-          # in a hash accessed by their matching checksums
-          @checksum_groups[tcc][checksum] = tcc.test_instances.select do |ti|
-            ti.checksum == checksum
-          end.map { |ti| ti.computer }.uniq.sort_by { |comp| comp.name.downcase }
-          # puts '########################################'
-          # puts "just assigned checksum #{checksum}"
-          # puts '########################################'
-        end
-      end
-
-      if tcc.failed_count.positive?
-        @failing_instances[tcc] = tcc.test_instances.reject(&:passed)
-        @failure_types[tcc] = {}
-        # create hash that has failure types as keys and arrays of computers,
-        # sorted by name, as values
-        @failing_instances[tcc].pluck(:failure_type).uniq.each do |failure_type|
-          @failure_types[tcc][failure_type] = @failing_instances[tcc].select do |ti|
-            ti.failure_type == failure_type
-          end.map do |ti| 
-            { 
-              computer: ti.computer.name,
-              run_optional: ti.run_optional,
-              fpe_checks: ti.fpe_checks,
-              resolution_factor: ti.resolution_factor
-            }
-          end.uniq.sort_by do |failure_config|
-            [failure_config[:run_optional] ? 0 : 1,
-             failure_config[:fpe_checks] ? 0 : 1,
-             failure_config[:computer]]
-          end
-        end
-      end
-      @counts[tcc] = {}
-      @counts[tcc][:computers] = tcc.computer_count
-      @counts[tcc][:passes] = tcc.passed_count
-      @counts[tcc][:failures] = tcc.failed_count
-      @counts[tcc][:checksums] = tcc.checksum_count
-    end
-
-    @commit_status = case @commit.status
-                      when 0 then :passing
-                      when 1 then :failing
-                      when 2 then :checksum
-                      when 3 then :mixed
-                      when -1 then :other
-                      else
-                        :untested
-                      end
-
-    @status_text = case @commit_status
-                   when :passing then 'All tests passing on all computers.'
-                   when :mixed
-                     'Some tests fail on some computers and pass on others.'
-                   when :failing then 'Some tests fail with all computers.'
-                   when :checksum then 'Some tests pass with different ' \
-                     'checksums on different computers.'
-                   when :other then 'At least some test cases not tested.'
-                   else
-                     'No tests have been run for this commit.'
-                   end
-
-    @status_class = case @commit_status
-                    when :passing then 'text-success'
-                    when :mixed then 'text-warning'
-                    when :failing then 'text-danger'
-                    when :checksum then 'text-primary'
-                    else
-                      'text-info'
-                    end
-    @compilation_text = case @commit.compilation_status
-                        when 0 then 'Successfully compiling on ' +
-                                    "#{@commit.compile_success_count} " +
-                                    'machines.'
-                        when 1 then 'Failing to compile on ' \
-                                    "#{@commit.compile_fail_count} machines."
-                        when 2 then 'Successfully compiling on ' \
-                                    "#{@commit.compile_success_count} and " \
-                                    'failing to compile on ' \
-                                    "#{@commit.compile_fail_count} machines."
-                        else
-                          'No compilation information'
-                        end
-
-    @compilation_class = case @commit.compilation_status
-                         when 0 then 'text-success'
-                         when 1 then  'text-danger'
-                         when 2 then 'text-warning'
-                         else
-                           'text-info'
-                         end
-
-    # set up colored table rows depending on passage status
-    @row_classes = {}
-    @last_tested = {}
-    @test_case_commits.each do |tcc|
-      @last_tested[tcc] = tcc.last_tested
-      @row_classes[tcc] =
-        case tcc.status
-        when 0 then 'table-success'
-        when 1 then 'table-danger'
-        when 2 then 'table-primary'
-        when 3 then 'table-warning'
-        else
-          'table-info'
-        end
-    end
+    # Matrix filter chip pre-selection. Banner action buttons hand
+    # off via `?filter=<tag>`; the same URL works for direct deep
+    # links. Unknown values fall through to the worst-first default
+    # picked in the view (`default_matrix_filter`).
+    @active_filter = params[:filter].presence
   end
 
   def index
-    @page_length = 25
     @branches = Branch.includes(:head).order(:name)
     @branch_names = @branches.pluck(:name)
     @branch = if @branch_names.include? CGI.unescape(params[:branch])
@@ -185,127 +63,185 @@ class CommitsController < ApplicationController
               else
                 redirect_to(commits_path(branch: 'main'), alert: "Branch <span class='text-monospace'>#{CGI.unescape(params[:branch])}</span> does not exist; showing commits on <span class='text-monospace'>main</span>.") and return
               end
-    # @branch = params[:branch] ? Branch.named(params[:branch]) : Branch.main
-    @branches_recent = Branch.recent
-    @branches_older = Branch.older
-    # which page of commits do we want?
-    @page = (params[:page] || 1).to_i
 
-    @commits = @branch.ordered_commits.page(@page).per(@page_length)
+    # Cursor pagination by commit_time. Two URL params drive it:
+    #
+    #   ?before=X   page of newest 25 commits with commit_time < X.
+    #               Map initializes at the "newest" view (commits
+    #               0..12 of the 25 visible on the left).
+    #   ?after=Y    page of oldest 25 commits with commit_time > Y,
+    #               displayed newest-first. Map initializes at the
+    #               "oldest" view (commits 12..24) — i.e., the
+    #               bridge between this page and the older one the
+    #               user just panned from.
+    #
+    # Bare dates parse to end-of-day for `before` (so the picked day
+    # is included) and beginning-of-day for `after` (so the picked
+    # day is also included). Either form is bookmarkable.
+    #
+    # The headline + date chip always show "on or before <newest
+    # visible>" regardless of which param produced the page, so the
+    # `?after=` form is a navigation detail rather than a different
+    # mental model for the user.
+    @page_size = (params[:per_page] || 25).to_i.clamp(5, 200)
 
-    # # grab commits for that page (which also includes how many pages there are)
-    # commit_shas = Commit.api_commits(
-    #   auto_paginate: false,
-    #   sha: @branch.head.sha,
-    #   per_page: @page_length,
-    #   page: @page).map { |c| c[:sha] }
-    
-    # # determine number of pages through tortured exploration of the "last" link
-    # # provided by the api client
-    # @num_pages = if Commit.api(auto_paginate: false).last_response.rels[:last]
-    #                link = Commit.api(auto_paginate: false).last_response
-    #                             .rels[:last].href
-    #                m = %r{api.github.com/.*\?page=(?<num_pages>\d+)}.match(link)
-    #                m[:num_pages]
-    #              else
-    #                @page
-    #              end.to_i
-    
-    # # subset = commit_shas[@page_length * (@page - 1), @page_length]
-    # @commits = @branch.commits.where(sha: commit_shas).to_a
-    #   .sort! { |a, b| commit_shas.index(a.sha) <=> commit_shas.index(b.sha) }      
+    if params[:after].present?
+      @after_time = parse_after_param(params[:after])
+      rows = @branch.ordered_commits
+                    .where('commits.commit_time > ?', @after_time)
+                    .reorder('commits.commit_time ASC')
+                    .limit(@page_size + 1)
+                    .includes(:submissions,
+                              test_case_commits: { test_instances: [] })
+                    .to_a
+      @has_more_newer = rows.size > @page_size
+      rows.pop if @has_more_newer
+      @commits = rows.reverse
+      @map_initial_view = :oldest
+      @at_head_of_history = false
+    else
+      @before_time_param = parse_before_param(params[:before])
+      @before_explicit = params[:before].present?
+      rows = @branch.ordered_commits
+                    .where('commits.commit_time < ?', @before_time_param)
+                    .limit(@page_size + 1)
+                    .includes(:submissions,
+                              test_case_commits: { test_instances: [] })
+                    .to_a
+      @has_more_older_via_main_fetch = rows.size > @page_size
+      rows.pop if @has_more_older_via_main_fetch
+      @commits = rows
+      @map_initial_view = :newest
+      @at_head_of_history = !@before_explicit
+    end
 
-    @start_num = 1 + (@page - 1) * @commits.limit_value
-    @stop_num = @start_num + @commits.length - 1
+    # Whether the opposite-direction page exists. The main fetch
+    # already told us about one direction (via the +1 trick); for
+    # the other we run a cheap EXISTS against the same recursive
+    # CTE. On a multi-thousand-commit branch this stays sub-ms.
+    if @commits.any?
+      newest_visible_time = @commits.first.commit_time
+      oldest_visible_time = @commits.last.commit_time
+      @has_more_older =
+        if defined?(@has_more_older_via_main_fetch)
+          @has_more_older_via_main_fetch
+        else
+          Commit.from("(#{@branch.reachable_commits_sql}) AS commits")
+                .where('commits.commit_time < ?', oldest_visible_time)
+                .exists?
+        end
+      @has_more_newer ||=
+        if @at_head_of_history
+          false
+        else
+          Commit.from("(#{@branch.reachable_commits_sql}) AS commits")
+                .where('commits.commit_time > ?', newest_visible_time)
+                .exists?
+        end
+    else
+      @has_more_older = false
+      @has_more_newer = false
+    end
+
+    # Effective display cursor — what the headline + date chip read.
+    @before_time = @commits.first&.commit_time || @before_time_param || Time.zone.now
+
+    @older_href =
+      if @has_more_older
+        commits_path(branch: @branch.name, before: (@commits.last.commit_time - 1.second).iso8601)
+      end
+    @newer_href =
+      if @has_more_newer
+        commits_path(branch: @branch.name, after: @commits.first.commit_time.iso8601)
+      end
+
     @max_num = @branch.reachable_commit_count
 
-    # @start_num = 1 + (@page - 1) * @page_length
-    # @stop_num = @start_num + @commits.length
-
-    # # set buttons for pages
-    # @page_button_data = []
-    # @page_button_data << if @page > 1
-    #                        {
-    #                          label: 'First',
-    #                          href: commits_path(branch: @branch.name, page: 1),
-    #                          klass: '',
-    #                          disabled: false
-    #                        }
-    #                      else
-    #                        {
-    #                          label: 'First',
-    #                          href: '#',
-    #                          klass: ' disabled',
-    #                          disabled: true
-    #                        }
-    #                      end
-    # 1.upto(@num_pages) do |page|
-    #   next unless (page - @page).abs <= 3
-
-    #   @page_button_data << case (page - @page).abs
-    #   when 0
-    #     {
-    #       label: page.to_s,
-    #       href: commits_path(branch: @branch.name, page: page),
-    #       klass: ' active',
-    #       disabled: false
-    #     }
-    #   when 1..2
-    #     {
-    #       label: page.to_s,
-    #       href: commits_path(branch: @branch.name, page: page),
-    #       klass: '',
-    #       disabled: false
-    #     }
-    #   when 3
-    #     {
-    #       label: '<i class="fa fa-ellipsis-h" aria-hidden="true"></i>'.html_safe,
-    #       href: '#',
-    #       klass: ' disabled',
-    #       disabled: true
-    #     }
-    #   end
-
-    # end
-
-    # # add "Last" button
-    # @page_button_data << if @page < @num_pages
-    #                        {
-    #                          label: 'Last',
-    #                          href: commits_path(branch: @branch.name, page: @num_pages),
-    #                          klass: '',
-    #                          disabled: false
-    #                        }
-    #                      else
-    #                        {
-    #                          label: 'Last',
-    #                          href: '#',
-    #                          klass: ' disabled',
-    #                          disabled: true
-    #                        }
-    #                      end
-
-    @row_classes = {}
-    @btn_classes = {}
-    @commits.each do |commit|
-      @row_classes[commit] = case commit.status
-      when 3 then 'list-group-item-warning'
-      when 2 then 'list-group-item-primary'
-      when 1 then 'list-group-item-danger'
-      when 0 then 'list-group-item-success'
-      else
-        'list-group-item-info'
-      end
-      @btn_classes[commit] = case commit.status
-      when 3 then 'btn-warning'
-      when 2 then 'btn-primary'
-      when 1 then 'btn-danger'
-      when 0 then 'btn-success'
-      else
-        'btn-info'
-      end
-
+    # Per-commit aggregated state — feeds the status dot, pills, flag
+    # chips, and the subway map. The CommitState concern memoizes its
+    # queries on each Commit instance, so calling these helpers across
+    # views in the same request stays cheap.
+    @commit_states = @commits.each_with_object({}) do |commit, h|
+      h[commit.id] = commit.commit_state
     end
+
+    @last_activity_at = @commits.first&.commit_time
+  end
+
+  # Proxy build logs hosted at the Flatiron logs server. Two reasons
+  # to fetch server-side: (1) the Railway-hosted app can't read the
+  # logs cross-origin via fetch() — that bridge gets re-built when
+  # `testhub.mesastar.org` repoints at Railway — and (2) we want a
+  # narrow allow-list so a logged-in user can't trick the page into
+  # fetching an arbitrary file (the computer name must come from a
+  # real submission for this commit).
+  #
+  # Returns plain text. Capped at LogProxy::LOG_BYTES_MAX so a
+  # runaway log can't OOM the server or hammer the user's browser.
+  def build_log
+    sha = params[:sha]
+    commit = Commit.where('sha LIKE ?', "#{sha}%").first
+    return render(plain: "Commit not found", status: :not_found) unless commit
+
+    computer_name = params[:computer].to_s
+    has_submission = commit.submissions
+                           .joins(:computer)
+                           .where(computers: { name: computer_name })
+                           .exists?
+    unless has_submission
+      return render(plain: "Computer #{computer_name} has no submissions for this commit",
+                    status: :not_found)
+    end
+
+    log_uri = URI.parse(
+      "https://mesa-logs.flatironinstitute.org/" \
+      "#{commit.sha}/#{ERB::Util.url_encode(computer_name)}/build.log"
+    )
+
+    begin
+      body = LogProxy.fetch_log(log_uri)
+      response.headers["Cache-Control"] = "private, max-age=300"
+      render plain: body, content_type: "text/plain; charset=utf-8"
+    rescue LogProxy::LogNotFound
+      render plain: "Build log not found on Flatiron server.",
+             status: :not_found, content_type: "text/plain; charset=utf-8"
+    rescue LogProxy::LogTooLarge
+      render plain: "Build log exceeds #{LogProxy::LOG_BYTES_MAX / 1.megabyte} MB; download directly: #{log_uri}",
+             status: :payload_too_large, content_type: "text/plain; charset=utf-8"
+    rescue LogProxy::LogFetchError => e
+      render plain: "Could not fetch log (#{e.message}). Direct URL: #{log_uri}",
+             status: :bad_gateway, content_type: "text/plain; charset=utf-8"
+    end
+  end
+
+  # Lightweight upstream-existence check for the Logs tab. Returns
+  # `{ available: bool }` so the client can disable the tab before
+  # the user spends a click discovering there's no log. Server-side
+  # cache TTL lives on the LogProxy concern.
+  def build_log_status
+    sha = params[:sha]
+    commit = Commit.where('sha LIKE ?', "#{sha}%").first
+    return render(json: { available: false, reason: "commit_not_found" }, status: :not_found) unless commit
+
+    computer_name = params[:computer].to_s
+    has_submission = commit.submissions
+                           .joins(:computer)
+                           .where(computers: { name: computer_name })
+                           .exists?
+    unless has_submission
+      return render(json: { available: false, reason: "computer_not_associated" })
+    end
+
+    log_uri = URI.parse(
+      "https://mesa-logs.flatironinstitute.org/" \
+      "#{commit.sha}/#{ERB::Util.url_encode(computer_name)}/build.log"
+    )
+    cache_key = ["build_log_exists", commit.sha, computer_name].join(":")
+    available = Rails.cache.fetch(cache_key, expires_in: LogProxy::LOG_STATUS_CACHE_TTL) do
+      LogProxy.probe_log_url(log_uri)
+    end
+
+    render json: { available: !!available, computer: computer_name }
   end
 
   # API call to allow asynchronous loading of nearby commits
@@ -341,30 +277,53 @@ class CommitsController < ApplicationController
 
   private
 
+  # Parse the `before=` URL parameter for cursor pagination.
+  #
+  #   blank        → "now" (latest commits)
+  #   "2026-03-05" → end of Mar 5 in the request's time zone so the
+  #                  whole day is included
+  #   ISO 8601 ts  → exact moment, as produced by the Older/Newer link
+  #                  builders
+  #
+  # Bad input falls back to "now" rather than 422-ing — this is a
+  # navigation parameter, not data.
+  def parse_before_param(value)
+    return Time.zone.now if value.blank?
+
+    if value.to_s.match?(/[T:]/)
+      Time.zone.parse(value.to_s) || Time.zone.now
+    else
+      Date.parse(value.to_s).in_time_zone.end_of_day
+    end
+  rescue ArgumentError, Date::Error
+    Time.zone.now
+  end
+
+  # Sister parser for the `after=` URL parameter — the lower-bound
+  # cursor used when navigating from a page to its newer neighbor.
+  # Bare dates parse to beginning-of-day so the picked day itself is
+  # included in the result set.
+  def parse_after_param(value)
+    return nil if value.blank?
+
+    if value.to_s.match?(/[T:]/)
+      Time.zone.parse(value.to_s)
+    else
+      Date.parse(value.to_s).in_time_zone.beginning_of_day
+    end
+  rescue ArgumentError, Date::Error
+    nil
+  end
+
   def root_page?
     params[:sha] == 'head' && params[:branch] == 'main'
   end
 
   def set_commit
-    # @commit = parse_sha(includes: {test_case_commits: [:test_case, {test_instances: [:computer, instance_inlists: :inlist_data]}]})
     @commit = parse_sha(includes: :branches)
 
-    # bail to commits index if the commit doesn't exist
     unless @commit
       redirect_to(commits_path(branch: 'main'), alert: "Could not locate commit <span class='text-monospace'>#{params[:sha]}</span> in any branch. Showing commits in <span class='text-monospace'>main</span>.") and return
     end
-
-    # avoid polling db for tons of instances and instance data if they passed
-    # or haven't been tested. Results in an extra call, but avoiding a dragnet
-    # of instance data is worth it (I think)
-    #
-    # First get test cases that are failing, have multiple checksums, or are
-    # mixed, for which we will need more information
-    @problem_tccs = @commit.test_case_commits.includes(
-      :test_case,
-      { test_instances: [:computer, { instance_inlists: :inlist_data }] }
-    ).where.not(status: -1..0).to_a
-    @skimpy_tccs = @commit.test_case_commits.includes(:test_case)
-                          .where(status: -1..0).to_a
   end
 end

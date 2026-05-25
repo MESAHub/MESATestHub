@@ -1,0 +1,170 @@
+-# Submissions tab — per-instance table for one computer's runs
+-# within the current window. The toolbar's anchor + window size
+-# scope which commits are eligible; this tab adds a computer
+-# picker on top so the user can switch focus without leaving the
+-# page. URL contract: ?computer=<name> (server picks the most
+-# active in the window when omitted).
+-#
+-# Columns are fixed in v2 — the legacy column-picker was the
+-# Bootstrap show's most-complex UI and most of its toggles
+-# duplicated the chips on the History matrix's popover. Keep what
+-# scrolls in the table, push everything else to the popover.
+
+- payload = @submissions_payload
+- options = payload[:options]
+- chosen  = payload[:chosen]
+- instances = payload[:instances]
+- commit_for = payload[:commit_for]
+
+- if options.empty?
+  .rounded-lg.border.border-border.bg-bg-elev.p-10.text-center.text-fg-muted.text-sm{ style: "box-shadow: var(--shadow-card-sm);" }
+    No submissions for this test in the current window.
+    Try a wider window or pan toward HEAD.
+- else
+  .rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);" }
+
+    -# Toolbar.
+    .flex.flex-wrap.items-center.gap-3.px-4.py-3.border-b.border-border-subtle
+
+      -# Computer picker. Dropdown over every computer that has
+      -# instances in the window, sorted by activity. Each row
+      -# links to the same page with `?computer=<name>` set; the
+      -# toolbar_path helper round-trips everything else (tab,
+      -# window, center, metric).
+      .relative{ data: { controller: "dropdown", open: "false" } }
+        %button.inline-flex.items-center.gap-2.rounded-md.border.border-border.bg-bg-elev.px-2.py-1.text-fg.cursor-pointer.hover:bg-bg-muted{
+          type: "button",
+          "aria-haspopup": "listbox",
+          "aria-label": "Pick a computer",
+          class: "text-[12px]",
+          data: { dropdown_target: "trigger", action: "click->dropdown#toggle" } }
+          %span.text-fg-subtle Computer
+          - if chosen
+            %span.font-mono.font-semibold= chosen.name
+          - else
+            %span.text-fg-muted not in window
+          = mesa_icon(:chevron, size: 10)
+
+        .absolute.left-0.top-full.z-30.mt-1.rounded-md.border.border-border.bg-bg-elev.shadow-md{
+          hidden: true,
+          role: "listbox",
+          style: "min-width: 240px; max-height: 320px; overflow-y: auto;",
+          data: { dropdown_target: "menu" } }
+          - options.each do |opt|
+            - active = chosen && chosen.name == opt[:name]
+            = link_to toolbar_path(computer: opt[:name]),
+                     role: "option",
+                     "aria-selected": active.to_s,
+                     class: "flex items-center justify-between gap-3 px-3 py-1.5 no-underline #{active ? 'bg-brand-soft text-brand-soft-text' : 'text-fg hover:bg-bg-muted'}",
+                     style: "font-size: 12px;" do
+              %span.font-mono.truncate= opt[:name]
+              %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= opt[:count]
+
+      .grow
+
+      - if chosen
+        %span.text-fg-subtle.tabular-nums{ class: "text-[11px]" }
+          = pluralize(instances.size, "instance")
+          on
+          %span.font-mono.text-fg= chosen.name
+
+    -# Table.
+    - if chosen.nil?
+      .px-4.py-10.text-center.text-fg-muted.text-sm
+        Computer
+        %code.font-mono= params[:computer]
+        has no submissions in this window.
+    - elsif instances.empty?
+      .px-4.py-10.text-center.text-fg-muted.text-sm
+        No instances from
+        %span.font-mono= chosen.name
+        in this window.
+    - else
+      %div{ style: "overflow-x: auto;" }
+        %table.w-full.border-collapse{ style: "min-width: 1000px;", class: "submissions-table" }
+          %thead.sticky.top-0.bg-bg-subtle.z-10
+            %tr.text-fg-muted{ class: "text-[11px] uppercase tracking-wide" }
+              %th.text-left.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Status
+              %th.text-left.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Commit
+              %th.text-left.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Submitted
+              %th.text-right.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Runtime
+              %th.text-right.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap RAM (rn)
+              %th.text-right.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Threads
+              %th.text-right.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Steps
+              %th.text-right.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Retries
+              %th.text-right.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Redos
+              %th.text-right.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Solver Iters
+              %th.text-right.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap log Rel E
+              %th.text-left.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Checksum
+              %th.text-left.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Re Checksum
+              %th.text-left.px-2.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap SDK
+          %tbody
+            - instances.each do |ti|
+              - commit = commit_for[ti.id]
+              - passed = ti.passed
+              - status_word = passed ? "PASS" : "FAIL"
+              - status_class = passed ? "text-success-soft-text" : "text-danger-soft-text"
+              %tr.border-b.border-border-subtle.align-middle.hover:bg-bg-subtle{ class: "[&>td]:py-1.5" }
+                %td.px-2{ style: "min-width: 110px;" }
+                  .flex.items-center.gap-1.5
+                    %span{ class: "inline-block h-2 w-2 rounded-full shrink-0 #{passed ? 'bg-success' : 'bg-danger'}" }
+                    %span.font-medium{ class: "text-[11px] #{status_class}" }= status_word
+                    - if ti.fpe_checks
+                      %span.text-warning-soft-text{ title: "FPE checks" }
+                        = mesa_icon(:wrench, size: 11)
+                    - if ti.run_optional
+                      %span.text-info-soft-text{ title: "Ran full inlist set" }
+                        = mesa_icon(:plus, size: 11)
+                %td.px-2.font-mono{ class: "text-[12px]" }
+                  - if commit
+                    .flex.items-center.gap-2
+                      = link_to commit.short_sha,
+                               test_case_commit_path(branch: @selected_branch.name,
+                                                     sha: commit.short_sha,
+                                                     module: @test_case.module,
+                                                     test_case: @test_case.name,
+                                                     computer: chosen.name),
+                               class: "text-brand font-semibold no-underline hover:underline",
+                               title: commit.message_first_line(120)
+                      %span.text-fg-subtle.tabular-nums{ class: "text-[10px]" }= time_ago_compact(commit.commit_time)
+                  - else
+                    %span.text-fg-subtle —
+                %td.px-2.text-fg-muted{ class: "text-[11px] tabular-nums whitespace-nowrap" }
+                  = format_time_tag(ti.created_at)
+                %td.px-2.text-right.font-mono.tabular-nums{ class: "text-[12px]" }
+                  - if ti.runtime_minutes
+                    = format("%.2f m", ti.runtime_minutes)
+                  - else
+                    %span.text-fg-subtle —
+                %td.px-2.text-right.font-mono.tabular-nums{ class: "text-[12px]" }
+                  - if ti.mem_rn && ti.mem_rn.to_i.positive?
+                    = format("%.2f GB", ti.rn_mem_GB)
+                  - else
+                    %span.text-fg-subtle —
+                %td.px-2.text-right.font-mono.tabular-nums{ class: "text-[12px]" }
+                  = ti.omp_num_threads || content_tag(:span, "—", class: "text-fg-subtle")
+                %td.px-2.text-right.font-mono.tabular-nums{ class: "text-[12px]" }
+                  = ti.steps || content_tag(:span, "—", class: "text-fg-subtle")
+                %td.px-2.text-right.font-mono.tabular-nums{ class: "text-[12px]" }
+                  = ti.retries || content_tag(:span, "—", class: "text-fg-subtle")
+                %td.px-2.text-right.font-mono.tabular-nums{ class: "text-[12px]" }
+                  = ti.redos || content_tag(:span, "—", class: "text-fg-subtle")
+                %td.px-2.text-right.font-mono.tabular-nums{ class: "text-[12px]" }
+                  = ti.solver_iterations || content_tag(:span, "—", class: "text-fg-subtle")
+                %td.px-2.text-right.font-mono.tabular-nums{ class: "text-[12px]" }
+                  - if ti.log_rel_run_E_err
+                    = format("%.3g", ti.log_rel_run_E_err)
+                  - else
+                    %span.text-fg-subtle —
+                %td.px-2.font-mono{ class: "text-[12px]" }
+                  - if ti.checksum.present?
+                    %span{ title: ti.checksum }= ti.checksum[-7..-1] || ti.checksum
+                  - else
+                    %span.text-fg-subtle —
+                %td.px-2.font-mono{ class: "text-[12px]" }
+                  - if ti.restart_checksum.present?
+                    %span{ title: ti.restart_checksum }= ti.restart_checksum[-7..-1] || ti.restart_checksum
+                  - else
+                    %span.text-fg-subtle —
+                %td.px-2.text-fg-muted.font-mono{ class: "text-[11px] whitespace-nowrap" }
+                  = ti.sdk_version || content_tag(:span, "—", class: "text-fg-subtle")

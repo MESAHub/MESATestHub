@@ -1,29 +1,47 @@
-= bootstrap_form_for [@user, @computer] do |f|
-  - if @computer.errors.any?  
-    .form-row
-      .col.alert.alert-danger
-        %h4.alert-heading= "#{pluralize(@computer.errors.count, "error")} prohibited this test instance from being saved:"
-        %p
-          %ul
-            - @computer.errors.full_messages.each do |message|
-              %li= message
-  .form-row
-    .col.field
-      = f.text_field :name, placeholder: "Compy 5000"
-    .col.field
-      = f.select :user_id, User.all.order(:name).collect { |user| [user.name, user.id] }, selected: @user.id
-      -# = f.text_field :user, placeholder: "Bill Paxton"
-  .form-row
-    .col.field
-      = f.select :platform, options_for_select(Computer.platforms, Computer.platforms)
-    .col.field
-      = f.text_field :processor, placeholder: "2.7 GHz 12-Core Intel Xeon E5"
-    .col.field
-      = f.number_field :ram_gb, placeholder: 16
-  .form-row.text-center
-    .col.actions
-      .btn-group
-        = link_to 'View My Computers', user_computers_path(@user), class: 'btn btn-secondary btn-lg text-light'
-        - if @show_path
-          = link_to 'Show', @show_path, class: 'btn btn-secondary btn-lg text-light'
-        = f.submit 'Save', class: 'btn btn-primary btn-lg'
+-# Shared computer form, rendered by computers#new and #edit. The
+-# wrapper view supplies the breadcrumb + headline; this partial is
+-# just the form card.
+-#
+-# Locals:
+-#   cancel_path — where Cancel returns to
+-#   submit_label — text on the submit button
+
+= form_with model: [@user, @computer], local: true, class: "rounded-lg border border-border bg-bg-elev p-5 space-y-4", html: { style: "box-shadow: var(--shadow-card-sm);" } do |f|
+  = render "shared/form_errors", model: @computer, resource: "computer"
+
+  = render "shared/field", form: f, attribute: :name, required: true,
+                           placeholder: "Compy 5000",
+                           hint: "Has to be unique across the whole site. Pick something memorable."
+
+  - if admin?
+    -# Admins can reassign a computer to a different maintainer.
+    -# Non-admins are pinned to themselves; the user_id is sent as
+    -# a hidden field so the controller's authorization check
+    -# (which expects `params[:computer][:user_id]`) still passes.
+    = render "shared/field", form: f, attribute: :user_id, type: :select,
+                             label: "Maintainer",
+                             options: User.order(:name).pluck(:name, :id),
+                             include_blank: false
+  - else
+    = f.hidden_field :user_id, value: @user.id
+
+  = render "shared/field", form: f, attribute: :platform, type: :select,
+                           options: Computer::PLATFORMS.map { |p| [p, p] },
+                           include_blank: false
+
+  .grid.gap-4{ class: "grid-cols-1 md:grid-cols-2" }
+    = render "shared/field", form: f, attribute: :processor,
+                             placeholder: "2.7 GHz 12-Core Intel Xeon E5"
+    = render "shared/field", form: f, attribute: :ram_gb, type: :number,
+                             label: "RAM (GB)",
+                             placeholder: "16",
+                             field_html: { inputmode: "numeric", min: 0 }
+
+  .pt-2.border-t.border-border-subtle
+    .flex.flex-wrap.items-center.justify-end.gap-2
+      = link_to "Cancel", cancel_path,
+               class: "mesa-btn",
+               style: "padding: 6px 14px; font-size: 13px;"
+      = f.submit submit_label,
+                class: "mesa-btn mesa-btn-primary",
+                style: "padding: 6px 14px; font-size: 13px;"

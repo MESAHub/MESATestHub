@@ -1,0 +1,131 @@
+-# Compact subway map for the commit detail hero. Up to 5 stations
+-# centered on the focused commit (with that station enlarged and
+-# brand-ringed). The whole element fills the available column
+-# width up to its natural size, then `mx-auto` centers what's left
+-# on wider screens. Content scales uniformly with the wrapper so
+-# popover positioning (in `%` of wrapper width) keeps tracking the
+-# stations exactly as the SVG scales.
+-#
+-# Hover popovers reuse the index page's `subway-map` Stimulus
+-# controller (same data-commit-id ↔ popover lookup). Focused
+-# station gets no popover — the user is already on its page.
+-#
+-# Locals:
+-#   window:      Array of Commit, newest-first (output of
+-#                `Branch#focused_commit_window`). May be shorter
+-#                than 5 on stubby branches.
+-#   focused_sha: full SHA of the commit to mark as "current."
+
+- count = window.size
+- if count.zero?
+  %p.text-fg-subtle{ class: "text-[11px]" } no recent activity
+- else
+  - build_colors = { all_ok: "var(--color-success)", some_fail: "var(--color-warning)", all_fail: "var(--color-buildfail)", unknown: "var(--color-skipped)" }
+  - tests_colors = { all_pass: "var(--color-success)", mixed: "var(--color-warning)", fail: "var(--color-danger)", pending_partial: "var(--color-info)", pending: "var(--color-skipped)", not_run: "var(--color-skipped)" }
+  - # Natural viewBox dimensions. The wrapper grows up to this
+  - # width and the SVG fills it uniformly; on wider columns the
+  - # whole content scales up proportionally rather than getting
+  - # left-anchored with whitespace.
+  - station_spacing = 100
+  - pad_x = 40
+  - panel_h = 72
+  - center_y = 30
+  - outer_r = 9
+  - inner_r = 6
+  - core_r  = 4
+  - f_outer_r = 13
+  - f_inner_r = 9
+  - f_core_r  = 6
+  - f_ring_r  = 16
+  - width = pad_x * 2 + station_spacing * [count - 1, 0].max
+  - # Stop the SVG from blowing up on very wide hero columns; ~1.4×
+  - # the natural width is comfortably "spread" without text growing
+  - # large enough to read differently from the rest of the card.
+  - max_w = (width * 1.4).round
+
+  .relative.mx-auto{ data: { controller: "subway-map" },
+                     style: "width: 100%; max-width: #{max_w}px;" }
+    %svg{ viewBox: "0 0 #{width} #{panel_h}",
+          preserveAspectRatio: "xMidYMid meet",
+          role: "img",
+          "aria-label": "Recent #{count} commits, current outlined",
+          class: "block w-full",
+          style: "height: auto;" }
+      - if count > 1
+        -# Connecting line — no end-cap arrow now. The per-segment
+        -# arrowheads below carry the direction-of-time signal.
+        %line{ x1: pad_x, y1: center_y,
+               x2: pad_x + station_spacing * (count - 1),
+               y2: center_y,
+               stroke: "var(--color-border-strong)",
+               "stroke-width": 2 }
+        -# Midpoint arrowheads: one small filled triangle centered
+        -# between consecutive stations, pointing LEFT (older →
+        -# newer). The map is newest-on-left to match the index
+        -# page's ordering, so the arrows now reinforce that
+        -# direction (time flows leftward in this view) instead of
+        -# fighting it. Each triangle is ~9×8px. Inline `<polygon>`
+        -# rather than a `marker-mid` because `<line>` elements
+        -# don't accept mid markers and a `<polyline>` would put
+        -# markers AT stations, not BETWEEN them.
+        - (0...count - 1).each do |i|
+          - mx = pad_x + station_spacing * (i + 0.5)
+          %polygon{ points: "#{mx + 4},#{center_y - 4} #{mx - 5},#{center_y} #{mx + 4},#{center_y + 4}",
+                    fill: "var(--color-border-strong)" }
+      - window.each_with_index do |commit, i|
+        - state = commit.commit_state
+        - x = pad_x + station_spacing * i
+        - ring_color = tests_colors[state[:tests][:status]] || tests_colors[:not_run]
+        - core_color = build_colors[state[:build][:status]] || build_colors[:unknown]
+        - focused = (commit.sha == focused_sha)
+        - r_outer = focused ? f_outer_r : outer_r
+        - r_inner = focused ? f_inner_r : inner_r
+        - r_core  = focused ? f_core_r  : core_r
+        %g
+          - if focused
+            %circle{ cx: x, cy: center_y, r: f_ring_r,
+                     fill: "none",
+                     stroke: "var(--color-brand)",
+                     "stroke-width": 1.75 }
+            %circle{ cx: x, cy: center_y, r: r_outer, fill: ring_color }
+            %circle{ cx: x, cy: center_y, r: r_inner, fill: "var(--color-bg-elev)" }
+            %circle{ cx: x, cy: center_y, r: r_core,  fill: core_color }
+            %title= "#{commit.short_sha} · current · build #{state[:build][:status]} · tests #{state[:tests][:status]}"
+          - else
+            %a{ href: commit_path(branch: @selected_branch.name, sha: commit.short_sha),
+                data: { commit_id: commit.id,
+                        action: "mouseenter->subway-map#show mouseleave->subway-map#hide focus->subway-map#show blur->subway-map#hide" } }
+              %circle{ cx: x, cy: center_y, r: r_outer, fill: ring_color }
+              %circle{ cx: x, cy: center_y, r: r_inner, fill: "var(--color-bg-elev)" }
+              %circle{ cx: x, cy: center_y, r: r_core,  fill: core_color }
+              %title= "#{commit.short_sha} · build #{state[:build][:status]} · tests #{state[:tests][:status]}"
+          %text{ x: x, y: panel_h - 6,
+                 "text-anchor": "middle",
+                 "font-family": "var(--font-mono)",
+                 "font-size": "10",
+                 fill: focused ? "var(--color-fg)" : "var(--color-fg-subtle)" }
+            = commit.short_sha
+
+    -# Popover layer. One per non-focused commit; the controller
+    -# shows the matching popover on hover/focus via data-commit-id.
+    -# Positioned in percent of natural SVG width so popovers track
+    -# correctly as the SVG scales.
+    .pointer-events-none.absolute.inset-0
+      - window.each_with_index do |commit, i|
+        - next if commit.sha == focused_sha
+        - state = commit.commit_state
+        - x_pct = ((pad_x + station_spacing * i).to_f / width * 100).round(2)
+        .absolute.z-20.rounded-md.border.border-border.bg-bg-elev.p-2.text-xs{ hidden: true,
+            style: "box-shadow: var(--shadow-card-md); width: 240px; left: #{x_pct}%; bottom: 100%; transform: translateX(-50%); margin-bottom: 8px;",
+            data: { subway_map_target: "popover", commit_id: commit.id } }
+          .flex.items-center.gap-2.mb-1.text-fg
+            %span.font-mono.text-brand{ class: "text-[12px]" }= commit.short_sha
+            %span.text-fg-subtle ·
+            %span.text-fg-subtle.tabular-nums{ class: "text-[11px]" }= time_ago_compact(commit.commit_time)
+          .font-medium.text-fg.mb-1.line-clamp-2= commit.message_first_line(80)
+          .flex.items-center.gap-2.text-fg-muted{ class: "text-[11px]" }
+            = commit_avatar(commit.author, size: 16)
+            %span.truncate= commit.author
+          .mt-2.flex.flex-wrap.gap-1
+            = build_status_pill(state, size: :sm)
+            = test_status_pill(state, size: :sm)

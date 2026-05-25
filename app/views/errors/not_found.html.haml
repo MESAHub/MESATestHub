@@ -1,38 +1,55 @@
-- content_for :title, 'Page Not Found'
+- content_for :title, "Page not found"
 
-.container-fluid.mt-4
-  .row
-    .col-12
-      .card
-        .card-header
-          %h1.h3.mb-0
-            %i.fa.fa-exclamation-triangle.text-warning.me-2
-            Page Not Found
-        .card-body
-          %p.lead
-            We couldn't find what you were looking for.
-          
-          %p
-            This could happen for several reasons:
-          %ul
-            %li The commit SHA you're looking for doesn't exist
-            %li The branch name is incorrect
-            %li The test case name or module is misspelled
-            %li No test results have been submitted for this combination yet
-          
-          %p
-            %strong What you can try:
-          %ul
-            %li Check that the commit SHA is correct and exists in the repository
-            %li Verify the branch name is spelled correctly
-            %li Make sure the test case and module names are accurate
-            %li Browse available test results from the main page
-          
-          - if @fallback_links && @fallback_links.any?
-            .mt-4
-              %strong Suggested actions:
-              .btn-group.mt-2{ role: 'group', aria: { label: 'Suggested actions' } }
-                - @fallback_links.each_with_index do |link, index|
-                  = link_to link[:path], class: "btn #{index == 0 ? 'btn-outline-primary' : 'btn-outline-secondary'}" do
-                    %i.fa{ class: "fa-#{link[:icon]}" }<>
-                    = link[:text]
+.mx-auto.max-w-3xl
+  .rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-md);" }
+    .border-b.border-border-subtle.px-6.py-4
+      %h1.flex.items-center.gap-2.text-xl.font-semibold.tracking-tight.text-fg
+        %span.inline-flex.h-5.w-5.items-center.justify-center.rounded-full.bg-warning-soft.text-warning-soft-text
+          %svg{ xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 16 16", fill: "currentColor", width: 12, height: 12, "aria-hidden": true }
+            %path{ d: "M8 1.5a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5A.75.75 0 0 1 8 1.5Zm0 9.25a.875.875 0 1 1 0 1.75.875.875 0 0 1 0-1.75Z" }
+        Page not found
+
+    .space-y-6.px-6.py-6
+      %p.text-base.text-fg
+        We couldn't find what you were looking for.
+
+      %section.space-y-2
+        %h2.text-xs.font-semibold.uppercase.tracking-wide.text-fg-subtle This could happen because
+        %ul.space-y-1.text-sm.text-fg-muted
+          %li.flex.gap-2
+            %span.text-fg-subtle ·
+            The commit SHA you're looking for doesn't exist
+          %li.flex.gap-2
+            %span.text-fg-subtle ·
+            The branch name is incorrect
+          %li.flex.gap-2
+            %span.text-fg-subtle ·
+            The test case name or module is misspelled
+          %li.flex.gap-2
+            %span.text-fg-subtle ·
+            No test results have been submitted for this combination yet
+
+      %section.space-y-2
+        %h2.text-xs.font-semibold.uppercase.tracking-wide.text-fg-subtle What you can try
+        %ul.space-y-1.text-sm.text-fg-muted
+          %li.flex.gap-2
+            %span.text-fg-subtle ·
+            Check the commit SHA exists in the repository
+          %li.flex.gap-2
+            %span.text-fg-subtle ·
+            Verify the branch name is spelled correctly
+          %li.flex.gap-2
+            %span.text-fg-subtle ·
+            Make sure the test case and module names match
+          %li.flex.gap-2
+            %span.text-fg-subtle ·
+            Browse available results from the main page
+
+      - if @fallback_links && @fallback_links.any?
+        %section.space-y-2
+          %h2.text-xs.font-semibold.uppercase.tracking-wide.text-fg-subtle Suggested actions
+          .flex.flex-wrap.gap-2
+            - @fallback_links.each_with_index do |link, index|
+              - classes = index.zero? ? "border-brand bg-brand text-fg-on-brand hover:bg-brand-hover" : "border-border bg-bg-elev text-fg hover:bg-bg-muted"
+              = link_to link[:path], class: "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium no-underline #{classes}" do
+                = link[:text]

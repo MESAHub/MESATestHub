@@ -1,0 +1,63 @@
+-# Column picker dropdown. Three sections:
+-#   Presets: pill row, click a preset to swap the visible set.
+-#   Grouped checkboxes: one row per Run/Output/Convergence group, with
+-#     an "all/none" toggle on the right.
+-#   Footer: "Reset to default" + a quiet "saved per browser" note.
+-#
+-# Locals:
+-#   preset_keys: list of preset name strings, in display order.
+-#
+-# The whole dropdown stays in the DOM (no Turbo Frame). The
+-# `column-picker` Stimulus controller listens to clicks, updates its
+-# `active` value, fans out to every `<th>` / `<td>` carrying a
+-# matching `data-col` attribute, and persists to localStorage.
+
+%div.absolute.right-0.mt-1.rounded-md.border.border-border.bg-bg-elev.shadow-md.z-30{
+  hidden: true,
+  role: "dialog",
+  "aria-label": "Choose visible columns",
+  style: "width: 460px; padding: 14px;",
+  data: { dropdown_target: "menu" } }
+
+  -# Presets.
+  .mb-3
+    .mesa-label.mb-1 Presets
+    .flex.flex-wrap.gap-1.5
+      - preset_keys.each do |preset|
+        %button{ type: "button",
+                 class: "rounded-full border border-border bg-bg-elev px-3 py-1 text-xs font-medium text-fg-muted hover:bg-bg-muted cursor-pointer capitalize",
+                 data: { column_picker_target: "preset",
+                         preset: preset,
+                         action: "click->column-picker#applyPreset" } }
+          = preset
+
+  -# Grouped checkbox grid.
+  - TestCaseCommitsHelper::INSTANCE_COLUMN_GROUPS.each do |group|
+    - cols_in_group = TestCaseCommitsHelper::INSTANCE_COLUMNS.select { |c| c[:group] == group }
+    .mb-2.5
+      .flex.items-center.justify-between.mb-1
+        .mesa-label= group
+        %button.text-brand.cursor-pointer.bg-transparent.border-0{ type: "button",
+                                                                   class: "text-[10px]",
+                                                                   data: { column_picker_target: "groupToggle",
+                                                                           group_columns: cols_in_group.map { |c| c[:id] }.join(" "),
+                                                                           action: "click->column-picker#toggleGroup" } }
+          all/none
+      .grid.gap-1{ style: "grid-template-columns: repeat(3, minmax(0, 1fr));" }
+        - cols_in_group.each do |col|
+          %label.flex.items-center.gap-2.px-1.py-1.rounded.cursor-pointer.hover:bg-bg-muted{ class: "text-[12px]" }
+            %input{ type: "checkbox",
+                    value: col[:id],
+                    style: "accent-color: var(--color-brand);",
+                    data: { column_picker_target: "checkbox",
+                            column: col[:id],
+                            action: "change->column-picker#toggleColumn" } }
+            %span.text-fg-muted{ data: { column_picker_target: "label", column: col[:id] } }= col[:label]
+
+  -# Footer.
+  .mt-3.pt-3.flex.justify-between.items-center.border-t.border-border-subtle
+    %button{ type: "button",
+             class: "text-xs text-fg-muted hover:text-fg cursor-pointer bg-transparent border-0 px-0",
+             data: { action: "click->column-picker#resetToDefault" } }
+      Reset to default
+    %span.text-fg-subtle{ class: "text-[11px]" } Saved per browser

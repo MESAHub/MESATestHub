@@ -1,0 +1,19 @@
+-# Tab strip for the test-case-history page. Three tabs:
+-#   history     — per-commit TCC rows with per-row mini-matrix (default)
+-#   trend       — chart of a chosen metric vs commit index
+-#   submissions — raw instances for a chosen computer
+-#
+-# The Stimulus tabs controller does the show/hide + replaceState.
+
+%nav.flex.gap-1.border-b.border-border-subtle{ role: "tablist", "aria-label": "Test history tabs" }
+  - show_tab_specs.each do |id, label|
+    - active = (id == @active_tab)
+    - href = toolbar_path(tab: id)
+    - active_class = active ? "text-fg border-brand -mb-px" : "text-fg-muted border-transparent hover:text-fg"
+    - link_class = "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium no-underline border-b-2 #{active_class}"
+    = link_to href,
+              role: "tab",
+              "aria-selected": active.to_s,
+              class: link_class,
+              data: { tabs_target: "link", tab: id, action: "click->tabs#switch" } do
+      = label

@@ -1,0 +1,28 @@
+-# Same test passes on some computers, fails on others.
+- mixed_cells = state[:tests][:mixed_cells]
+- count = state[:tests][:mixed_tests]
+- tccs_by_id = @per_test.each_with_object({}) { |row, h| h[row[:test_case]&.id] = row[:test_case] if row[:test_case] }
+.rounded-md.p-3{ style: "background: var(--color-warning-soft); border: 1px solid var(--color-warning);" }
+  .flex.items-start.gap-3
+    %span.text-warning-soft-text.shrink-0= mesa_icon(:warn, size: 16)
+    .flex-1.min-w-0.space-y-1.text-warning-soft-text
+      %p.text-sm
+        %span.font-semibold= pluralize(count, "test")
+        in mixed state — same test passes on some computers, fails on others. Often points to a computer-specific issue.
+      - if mixed_cells.any?
+        %p.opacity-80{ class: "text-[11px]" }
+          - mixed_cells.first(3).each_with_index do |cell, i|
+            - test_case = tccs_by_id[cell[:test_id]]
+            - computer = computers_by_id[cell[:computer_id]]
+            %span.font-mono.ml-1
+              = test_case&.name || "test ##{cell[:test_id]}"
+              fails on
+              %span.font-semibold= computer&.name || "computer ##{cell[:computer_id]}"
+              = ',' unless i == [mixed_cells.size, 3].min - 1
+          - if mixed_cells.size > 3
+            %span.ml-1 + #{mixed_cells.size - 3} more
+    %a.mesa-btn.shrink-0{ href: "?tab=summary&filter=mixed",
+                          style: "padding: 4px 10px; font-size: 12px;",
+                          data: { action: "click->tabs#switchFromLink" } }
+      See mixed tests
+      = mesa_icon(:arrow_right, size: 12)

@@ -1,0 +1,29 @@
+-# Top-of-form error summary banner. Render at the top of a form
+-# inside a model-bound block — checks `model.errors` and renders a
+-# soft-danger card listing every error (field-level messages stay
+-# inline next to their input via the _field partial, so the banner
+-# acts as the "what's wrong" overview rather than the only place
+-# errors surface).
+-#
+-# Locals:
+-#   model       — the AR model (or any object that responds to
+-#                 :errors with full_messages support)
+-#   resource    — optional human-readable noun ("user", "computer";
+-#                 default derived from the model's class.name)
+
+- return unless model && model.respond_to?(:errors) && model.errors.any?
+- count = model.errors.count
+- resource ||= model.class.model_name.human.downcase
+
+.rounded-md.border.border-danger-soft.bg-danger-soft.p-3.text-danger-soft-text{ role: "alert", "aria-live": "polite" }
+  %div.flex.items-start.gap-2
+    = mesa_icon(:warn, size: 14, css: "mt-0.5 shrink-0")
+    %div.min-w-0
+      %p.font-semibold{ class: "text-[13px]" }
+        = pluralize(count, "error")
+        prevented this
+        = resource
+        from being saved.
+      %ul.mt-1.list-disc.pl-5.space-y-0.5{ class: "text-[12px]" }
+        - model.errors.full_messages.each do |message|
+          %li= message

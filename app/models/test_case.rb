@@ -363,6 +363,330 @@ class TestCase < ApplicationRecord
     version_status(last_version)
   end
 
+  ###############################################
+  # Modern test_cases#show — branch-scoped helpers.
+  #
+  # These are intentionally narrow: they exist to feed the redesigned
+  # page's headline (status sentence + counts), passage strip (~60
+  # commit overview), and History tab (paginated TCC list). The legacy
+  # `#find_test_case_commits` / `#find_instances` pair stays around
+  # for the legacy show until that file is replaced; nothing here
+  # shares state with it.
+  ###############################################
+
+  # Worst-first headline status word + Tailwind text-color class for
+  # the headline sentence ("`black_hole` is **passing** on main").
+  # The classification follows the most-recent TCC on the branch
+  # rather than rolling up everything in the date window — the user
+  # cares "what's the current state?", not "what's the average."
+  HEADLINE_STATUSES = {
+    1  => ["failing",  "text-danger-soft-text"],
+    3  => ["mixed",    "text-warning-soft-text"],
+    2  => ["checksum-divergent", "text-warning-soft-text"],
+    0  => ["passing",  "text-success-soft-text"],
+    -1 => ["untested", "text-fg-muted"]
+  }.freeze
+
+  # Pull together everything the modern show page's headline + Tier 2
+  # summary need in one round trip. Returns:
+  #
+  #   {
+  #     counts:        { passing:, failing:, mixed:, checksum:, untested:, total: },
+  #     last_run:      TestCaseCommit | nil,   # most-recent TESTED TCC (status != -1)
+  #     last_passing:  TestCaseCommit | nil,   # most-recent fully-passing TCC
+  #     pending_on_head: TestCaseCommit | nil, # untested TCC newer than last_run
+  #     headline_word: "passing" | "failing" | ... | "never run",
+  #     headline_class: Tailwind text-color class
+  #   }
+  #
+  # An "untested" TCC is one that exists in the DB but has no
+  # submitted instances yet — `status = -1`. It doesn't count as a
+  # "run" for headline purposes: the user wants the state of the
+  # most recent commit *that has results*. When a newer commit
+  # exists but is still pending, `pending_on_head` surfaces that
+  # separately so the subline can say "Pending on aa27a08."
+  #
+  # Heavy queries are scoped through the branch's reachable commits
+  # via `branch.ordered_commits.pluck(:id)` so divergent branches
+  # don't pollute each other's counts.
+  def status_summary_for(branch)
+    commit_ids = branch.ordered_commits.pluck(:id)
+    scope = test_case_commits.where(commit_id: commit_ids)
+
+    raw_counts = scope.group(:status).count
+    counts = {
+      passing:  raw_counts[0].to_i,
+      failing:  raw_counts[1].to_i,
+      checksum: raw_counts[2].to_i,
+      mixed:    raw_counts[3].to_i,
+      untested: raw_counts[-1].to_i
+    }
+    counts[:total] = counts.values.sum
+
+    last_run = scope.joins(:commit)
+                    .where.not(status: -1)
+                    .reorder("commits.commit_time DESC")
+                    .first
+
+    last_passing = scope.joins(:commit)
+                        .where(status: 0)
+                        .reorder("commits.commit_time DESC")
+                        .first
+
+    # If newer commits exist that haven't been tested yet, surface
+    # the most recent one so the user knows the chart is waiting on
+    # results. Skip when last_run is nil — there's no "newer than"
+    # comparison to make.
+    pending_on_head = if last_run
+                        scope.joins(:commit)
+                             .where(status: -1)
+                             .where("commits.commit_time > ?", last_run.commit.commit_time)
+                             .reorder("commits.commit_time DESC")
+                             .first
+                      end
+
+    if last_run
+      word, klass = HEADLINE_STATUSES.fetch(last_run.status, HEADLINE_STATUSES[-1])
+    else
+      word, klass = ["never run", "text-fg-muted"]
+    end
+
+    {
+      counts: counts,
+      last_run: last_run,
+      last_passing: last_passing,
+      pending_on_head: pending_on_head,
+      headline_word: word,
+      headline_class: klass
+    }
+  end
+
+  # Allowed window sizes for the shared time-window toolbar. Anything
+  # else gets coerced to the default. The toolbar's selector reads
+  # off this list too so values stay in sync.
+  WINDOW_SIZES = [25, 50, 100, 250].freeze
+  DEFAULT_WINDOW_SIZE = 50
+
+  # Single window of commits centered on `anchor_commit` for both the
+  # History tab and (in the next commit) the Trend chart. Replaces the
+  # earlier separate passage-strip + Kaminari-paginated history helpers
+  # — investigation flows want one consistent navigation primitive, not
+  # two unrelated lists.
+  #
+  # Returns:
+  #
+  #   {
+  #     size:             actual window size used (coerced from input),
+  #     anchor_commit:    Commit at the center of the window,
+  #     at_head:          true when anchor_commit is the branch HEAD,
+  #     entries:          [{ commit:, tcc:, status: }, ...], newest first,
+  #     older_anchor_sha: short_sha to pass back as ?anchor= to pan older
+  #                       by half a window (nil when no older commits left),
+  #     newer_anchor_sha: short_sha to pass back to pan newer (nil at HEAD),
+  #     window_counts:    { status_int => count } over the window only
+  #   }
+  #
+  # Eager-loads test_instances + computers on every TCC so the
+  # per-row mini-matrix renders without N+1.
+  def commit_window(branch, anchor_commit:, size: DEFAULT_WINDOW_SIZE)
+    size = size.to_i
+    size = DEFAULT_WINDOW_SIZE unless WINDOW_SIZES.include?(size)
+
+    return empty_commit_window(size) if anchor_commit.nil?
+
+    commits = branch.focused_commit_window(anchor_commit, size: size)
+    return empty_commit_window(size, anchor_commit) if commits.empty?
+
+    # Eager-load everything every per-tab payload needs:
+    #   - History matrix:   :computer (per-cell)
+    #   - History popover:  :computer + instance_inlists/inlist_data (metrics)
+    #   - Trend payload:    instance_inlists/inlist_data (custom-name
+    #                       discovery + scalar metric extraction)
+    # One pre-load is cheap; the N+1 alternative inside
+    # _trend_metric_specs hit ~1500 queries on a 100-commit window.
+    tccs_by_commit = test_case_commits
+                       .includes(test_instances: [:computer, { instance_inlists: :inlist_data }])
+                       .where(commit_id: commits.map(&:id))
+                       .index_by(&:commit_id)
+
+    entries = commits.map do |commit|
+      tcc = tccs_by_commit[commit.id]
+      { commit: commit, tcc: tcc, status: tcc&.status || -1 }
+    end
+
+    # Pan targets — the commit that should become the new anchor when
+    # the user clicks "Older" / "Newer". `half` matches what the
+    # window's edge would land on after a half-window pan, so the user
+    # sees an overlap of half the previous window on each step
+    # (continuity beats teleporting).
+    half = [size / 2, 1].max
+    older_target = branch.ordered_commits
+                         .where("commits.commit_time < ?", anchor_commit.commit_time)
+                         .limit(half)
+                         .last
+    newer_target = branch.ordered_commits
+                         .where("commits.commit_time > ?", anchor_commit.commit_time)
+                         .reorder("commits.commit_time ASC")
+                         .limit(half)
+                         .last
+
+    {
+      size: size,
+      anchor_commit: anchor_commit,
+      at_head: anchor_commit.id == branch.head_id,
+      entries: entries,
+      older_anchor_sha: older_target&.short_sha,
+      newer_anchor_sha: newer_target&.short_sha,
+      window_counts: entries.each_with_object(Hash.new(0)) { |e, h| h[e[:status]] += 1 }
+    }
+  end
+
+  # Three perceptually distinct hues for the Trend chart's top-N
+  # config series. Deliberately *not* the status palette (success /
+  # warning / danger / info) so a "passing config's runtime" line
+  # doesn't read as a status-encoded color. Indexed: configs[0]
+  # gets [0], etc.
+  TREND_SERIES_COLORS = ["#5b8def", "#ad55c0", "#2b9b87"].freeze
+
+  # Top-N config tuples to show as separate series on the Trend
+  # chart. The user explicitly chose 3 — few enough to keep the
+  # chart readable, enough to cover the common heavy-testing
+  # computers without forcing aggregation.
+  TREND_TOP_CONFIGS = 3
+
+  DEFAULT_TREND_METRIC = "runtime_minutes".freeze
+
+  # Build the JSON payload for the Trend chart. Consumed by the
+  # uPlot-backed `trend-chart` Stimulus controller via a
+  # `<script type="application/json">` block in the Trend tab.
+  #
+  # Inputs:
+  #   entries  — the same { commit:, tcc:, status: } array from
+  #              #commit_window. We don't re-resolve the window
+  #              here so all tabs stay in lockstep with the toolbar.
+  #   top_n    — defaults to TREND_TOP_CONFIGS (3).
+  #
+  # Output (JSON-ready hash):
+  #
+  #   {
+  #     default_metric: "runtime_minutes",
+  #     metrics: [
+  #       { id:, label:, source: "instance"|"inlist_first"|"inlist_data" }
+  #     ],
+  #     configs: [
+  #       { key:, label:, computer:, threads:, run_optional:, count:, color: }
+  #     ],
+  #     commits: [
+  #       { id:, sha:, t:, time_ago:, message:, status:, href: }
+  #     ],   # oldest first — chart X axis goes left-to-right with time
+  #     series: {
+  #       "<metric_id>" => { "<config_key>" => [val | null, ...] }
+  #     }
+  #   }
+  #
+  # A `null` in a series array means "this (config, commit) pair
+  # has no submitted instance" — uPlot draws a gap. Skipped
+  # instances (success_type='skip') are treated as nulls too; their
+  # runtime/RAM aren't meaningful comparisons.
+  #
+  # Returns a degenerate-but-renderable payload (empty configs,
+  # empty series, but metrics/commits populated) when the window
+  # has no instances. The controller renders an "not enough data"
+  # empty state for that case.
+  def trend_payload(branch, entries, top_n: TREND_TOP_CONFIGS)
+    chrono = entries.reverse  # oldest first for the X axis
+    tccs   = entries.map { |e| e[:tcc] }.compact
+
+    # Count (computer_id, threads, run_optional) tuples across all
+    # non-skipped instances in the window. Memoize a sample
+    # TestInstance per tuple so we can build labels without a
+    # separate Computer lookup.
+    config_counts = Hash.new(0)
+    config_sample = {}
+    tccs.each do |tcc|
+      tcc.test_instances.each do |ti|
+        next if ti.success_type == "skip"
+        next if ti.computer_id.nil?
+        key = [ti.computer_id, ti.omp_num_threads, ti.run_optional]
+        config_counts[key] += 1
+        config_sample[key] ||= ti
+      end
+    end
+
+    top_keys = config_counts.sort_by { |_, c| -c }.first(top_n).map(&:first)
+    configs = top_keys.each_with_index.map do |key, idx|
+      sample = config_sample[key]
+      cname  = sample.computer&.name || "computer ##{key[0]}"
+      threads = key[1] || "?"
+      mode    = key[2] ? "full" : "partial"
+      {
+        key:          _trend_config_key(key),
+        label:        "#{cname} · #{threads}t · #{mode}",
+        computer:     cname,
+        threads:      key[1],
+        run_optional: key[2],
+        count:        config_counts[key],
+        color:        TREND_SERIES_COLORS[idx % TREND_SERIES_COLORS.size]
+      }
+    end
+
+    commits_payload = chrono.map do |entry|
+      c = entry[:commit]
+      {
+        id:       c.id,
+        sha:      c.short_sha,
+        t:        c.commit_time.to_i,
+        time_ago: nil, # filled by view (helper-only context)
+        message:  c.message_first_line(80),
+        status:   entry[:status]
+      }
+    end
+
+    metrics = _trend_metric_specs(tccs)
+
+    # Bucket every non-skip instance once: { config_key =>
+    # { commit_id => latest_instance } }. Later loops over metrics
+    # read from this index without re-scanning TCCs.
+    bucket = top_keys.each_with_object({}) { |k, h| h[_trend_config_key(k)] = {} }
+    chrono.each do |entry|
+      tcc = entry[:tcc]
+      next unless tcc
+      tcc.test_instances.each do |ti|
+        next if ti.success_type == "skip"
+        next if ti.computer_id.nil?
+        key = [ti.computer_id, ti.omp_num_threads, ti.run_optional]
+        next unless top_keys.include?(key)
+        ck = _trend_config_key(key)
+        # If multiple instances for the same (config, commit) — rare
+        # but happens with re-runs — keep the most recent. The chart
+        # is showing "what value did this config most recently
+        # produce for this commit?"
+        existing = bucket[ck][entry[:commit].id]
+        bucket[ck][entry[:commit].id] = ti if existing.nil? || (ti.created_at && ti.created_at >= (existing.created_at || Time.at(0)))
+      end
+    end
+
+    series = {}
+    metrics.each do |m|
+      series[m[:id]] = {}
+      top_keys.each do |key|
+        ck = _trend_config_key(key)
+        series[m[:id]][ck] = chrono.map do |entry|
+          ti = bucket[ck][entry[:commit].id]
+          ti ? _trend_extract_value(ti, m) : nil
+        end
+      end
+    end
+
+    {
+      default_metric: DEFAULT_TREND_METRIC,
+      metrics:        metrics,
+      configs:        configs,
+      commits:        commits_payload,
+      series:         series
+    }
+  end
+
   # ease transition from versions being hard coded to using new Version model
   def update_version_created
     return if version_id
@@ -372,5 +696,89 @@ class TestCase < ApplicationRecord
     new_version.number
   end
 
+  private
 
+  def empty_commit_window(size, anchor_commit = nil)
+    {
+      size: size,
+      anchor_commit: anchor_commit,
+      at_head: false,
+      entries: [],
+      older_anchor_sha: nil,
+      newer_anchor_sha: nil,
+      window_counts: {}
+    }
+  end
+
+  # Stable string key for a (computer_id, threads, run_optional)
+  # tuple. Used as the series key in the trend payload's `series`
+  # hash so the Stimulus controller can address each series by a
+  # string rather than coordinating array indices.
+  def _trend_config_key(key)
+    "c#{key[0]}-t#{key[1] || 'x'}-#{key[2] ? 'full' : 'partial'}"
+  end
+
+  # Available metrics for the Trend chart. Combines hard-coded
+  # instance scalars with whatever inlist-data names are present
+  # across the window's TCCs (so a test case's custom data shows
+  # up automatically; nothing else to register).
+  #
+  # `source` tells the value extractor where to pull from:
+  #   - "instance":     direct attribute on TestInstance
+  #   - "inlist_first": first instance_inlist that has the named field
+  #   - "inlist_data":  first inlist's inlist_data row with the given name
+  def _trend_metric_specs(tccs)
+    base = [
+      { id: "runtime_minutes",     label: "Runtime [min]",         source: "instance" },
+      { id: "mem_rn",              label: "RAM rn [GB]",           source: "instance" },
+      { id: "cpu_hours",           label: "CPU hours",             source: "instance" },
+      { id: "steps",               label: "Steps",                 source: "instance" },
+      { id: "retries",             label: "Retries",               source: "instance" },
+      { id: "redos",               label: "Redos",                 source: "instance" },
+      { id: "solver_iterations",   label: "Solver iterations",     source: "instance" },
+      { id: "solver_calls_made",   label: "Solver calls made",     source: "instance" },
+      { id: "solver_calls_failed", label: "Solver calls failed",   source: "instance" },
+      { id: "log_rel_run_E_err",   label: "log rel E err",         source: "inlist_first" }
+    ]
+
+    custom_names = Set.new
+    tccs.each do |tcc|
+      tcc.test_instances.each do |ti|
+        ti.instance_inlists.each do |ii|
+          ii.inlist_data.each { |d| custom_names << d.name if d.name.present? }
+        end
+      end
+    end
+
+    base + custom_names.to_a.sort.map do |name|
+      { id: "inlist_data:#{name}", label: "#{name} (inlist)", source: "inlist_data" }
+    end
+  end
+
+  # Pull a single metric value off an instance, honoring the
+  # metric spec's `source`. Returns nil if the value isn't present
+  # — the Stimulus controller turns nil into a gap on the chart.
+  def _trend_extract_value(instance, metric)
+    case metric[:source]
+    when "instance"
+      val = instance.public_send(metric[:id])
+      # rn_mem_GB conversion lives on the model; mem_rn is in KB
+      if metric[:id] == "mem_rn" && val
+        instance.respond_to?(:rn_mem_GB) ? instance.rn_mem_GB : val / 1_048_576.0
+      else
+        val
+      end
+    when "inlist_first"
+      # First inlist that has the field set (typically only one).
+      target = instance.instance_inlists.find { |ii| ii.public_send(metric[:id]) }
+      target&.public_send(metric[:id])
+    when "inlist_data"
+      datum_name = metric[:id].split(":", 2).last
+      instance.instance_inlists.each do |ii|
+        d = ii.inlist_data.find { |x| x.name == datum_name }
+        return d.val if d
+      end
+      nil
+    end
+  end
 end

@@ -1,0 +1,7 @@
+- if page.current?
+  %span{ class: "inline-flex items-center justify-center rounded-md border border-brand bg-brand px-2.5 py-1 text-xs font-medium text-fg-on-brand tabular-nums", "aria-current": "page" }= page
+- else
+  = link_to page, url,
+           remote: remote,
+           rel: (page.next? ? 'next' : (page.prev? ? 'prev' : nil)),
+           class: "inline-flex items-center justify-center rounded-md border border-border bg-bg-elev px-2.5 py-1 text-xs font-medium text-fg-muted hover:bg-bg-muted hover:text-fg no-underline tabular-nums"

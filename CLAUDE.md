@@ -32,13 +32,61 @@ Before doing non-trivial work, read the appropriate doc:
   GitHub sync rewrite (topology-driven ordering, webhook payload-driven
   sync). Complete on the `perf-sync-topology` branch.
 - **[`docs/frontend-modernization.md`](docs/frontend-modernization.md)**
-  — plan for the Phase 4 frontend rewrite (Bootstrap+jQuery →
-  Tailwind+Turbo+Stimulus, plus port of the design in
-  `docs/design_handoff_mesa_testhub/`). Spans multiple sessions on
-  the `frontend-tailwind` branch (not yet created).
-
+  — record of the Phase 4 frontend rewrite (Bootstrap + jQuery
+  + Sprockets + Turbolinks → Tailwind + Turbo + Stimulus +
+  Importmap). **Complete** as of the legacy purge in Step 9b
+  on the `frontend-tailwind` branch. The doc lists every step,
+  every page, and every architectural decision; consult it when
+  you need history on why a given layout / partial / helper
+  looks the way it does. Active design tokens live in
+  `app/assets/tailwind/application.css` and the Stimulus
+  controllers under `app/javascript/controllers/`.
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.
+
+## Frontend architecture (post-Phase 4)
+
+Single layout: [`app/views/layouts/modern.html.haml`](app/views/layouts/modern.html.haml).
+Stack: Tailwind v4 (standalone CLI, output at
+`app/assets/builds/tailwind.css`), Turbo, Stimulus, Importmap.
+Sprockets-rails still in place to serve the Tailwind build and
+wire `tailwindcss:build` into `assets:precompile` at deploy.
+
+Shared design primitives:
+
+- **Reusable form fields** —
+  [`app/views/shared/_field.html.haml`](app/views/shared/_field.html.haml)
+  wraps label + input + inline error for `:text` / `:email` /
+  `:password` / `:select` / `:checkbox` / `:textarea` /
+  `:number` / `:url` / `:tel`. Top-of-form summary banner at
+  [`app/views/shared/_form_errors.html.haml`](app/views/shared/_form_errors.html.haml).
+- **CSS vocabulary** in
+  [`app/assets/tailwind/application.css`](app/assets/tailwind/application.css):
+  `.mesa-input` (with `.is-invalid` / `[aria-invalid="true"]`
+  error state), `.mesa-checkbox`, `.mesa-label`, `.mesa-btn`,
+  `.mesa-btn-primary`. Rules apply directly to elements + class
+  names without any additional scope (the `.mesa-modern` body
+  prefix from the dual-stack era was removed in Phase 4 wrap-up).
+- **Inline SVG icons** via `mesa_icon(name, size:, css:)` in
+  [`CommitsHelper`](app/helpers/commits_helper.rb) — small
+  curated set (check / x / chevron / arrow_left / search / warn
+  / plus / file / github / etc.). Replaces font-awesome.
+- **Pagination** via the `modern` Kaminari theme at
+  [`app/views/kaminari/modern/`](app/views/kaminari/modern/).
+  Pages opt in with `paginate @scope, theme: "modern"`.
+- **Turbo wrinkles** the agent will hit:
+  - Form re-renders on validation failure MUST use
+    `status: :unprocessable_content` (or `:unprocessable_entity`
+    on Rack 2). Turbo silently no-ops the default 200 + render
+    pattern and the user sees no feedback.
+  - Destructive actions use `button_to` (Turbo-aware) instead of
+    `link_to method: :delete` — the legacy `data-method=delete`
+    via rails-ujs is no longer loaded.
+
+The detailed history of how each page was migrated lives in
+[`docs/frontend-modernization.md`](docs/frontend-modernization.md).
+Reach for it when you need to understand *why* a particular
+helper or partial exists.
 
 ## Reality checks (things the codebase *looks* like but isn't)
 
@@ -49,20 +97,85 @@ that makes the change.
   from the original plan — Rack 3's `:unprocessable_entity` →
   `:unprocessable_content` rename, `show_exceptions` becoming an enum,
   and the gems that needed bumps or removal for the resolver to settle.
-- **The test suite is small but real.** 158 specs (request + model + job)
-  cover auth, submissions API, GitHub webhook (now async via
-  `BranchSyncJob`, payload-driven), branch deletion, the Octokit
-  middleware wiring, `TestInstance.query`, `Commit#computer_info`, the
-  Phase 3.5 ingestion + topology + ordering + reconcile path, and
-  high-traffic page renders. They are the regression safety net for
-  upcoming work — build on this rather than starting fresh.
+- **The test suite is small but real.** 263 specs (request + model +
+  helper + job) cover auth, submissions API, GitHub webhook (now
+  async via `BranchSyncJob`, payload-driven), branch deletion, the
+  Octokit middleware wiring, `TestInstance.query`,
+  `Commit#computer_info`, the Phase 3.5 ingestion + topology +
+  ordering + reconcile path, the test_cases#show branch-scoped
+  helpers (`#commit_window`, `#status_summary_for`,
+  `#trend_payload`) + the `TestCasesHelper#submissions_payload`
+  picker logic, the computers#show bulk-delete + filter +
+  permissions matrix, the Submission destroy cascade scalar
+  refresh, the User destroy cascade chain, and high-traffic page
+  renders. They are the regression safety net for upcoming work —
+  build on this rather than starting fresh.
 - **No Cucumber.** The old Cucumber suite is preserved at
   `features.deprecated/` and `spec/features.deprecated/`. RSpec request
   specs replace it. Do not add `.feature` files.
-- **No CoffeeScript.** All `.coffee` files were converted to plain ES2015+
-  JavaScript in the `frontend/drop-coffeescript` branch. `coffee-rails` and
-  `barista` are gone from the Gemfile. The remaining frontend stack
-  (Bootstrap 4, jQuery, Sprockets, Turbolinks) gets replaced in Phase 4.
+- **No CoffeeScript / Bootstrap / jQuery / Turbolinks / Sprockets-pipeline
+  legacy.** All `.coffee` files were converted to plain ES2015+
+  JavaScript in the `frontend/drop-coffeescript` branch. The
+  Bootstrap + jQuery + Sprockets + Turbolinks stack itself was
+  ripped out in Phase 4 Step 9b (commits leading up to `bf21d3f`
+  on `frontend-tailwind`). The only frontend stack now is the
+  one described in the "Frontend architecture" section above.
+- **Tailwind rebuild after class changes.** Tailwind v4's standalone
+  CLI scans view files at build time and only emits utilities it
+  actually saw. After adding new utility classes to a view, run
+  `DISABLE_SPRING=1 bin/rails tailwindcss:build`. The Rails dev
+  server *will not* pick up new class names on its own — Sprockets
+  serves the existing `tailwind.css` build until it's rewritten.
+- **HAML class shorthand can't hold Tailwind brackets *or* decimal
+  class names.** `.text-[10px]` in the dotted-shorthand fails to parse
+  (HAML thinks `[` opens an attribute), and `.h-1\.5` doesn't work
+  either — `\.` is not a valid escape; HAML eats `h-1` as one class
+  and dumps the rest of the line as text content. Any utility with
+  brackets (`text-[10px]`, `grid-cols-[12px_minmax(0,2.4fr)]`) or
+  decimal names (`h-1.5`, `w-2.5`, `gap-0.5`) must live in the
+  explicit `{ class: "…" }` hash. Same goes for empty tags — write
+  `%span &nbsp;` or give the tag content; bare `%span` followed by
+  sibling tags trips an "illegal nesting" error.
+- **Cursor pagination on the commits index, two URL params.**
+  `commits#index` accepts two mutually-exclusive cursors:
+  `?before=X` (default mental model — show commits with
+  `commit_time < X`, newest first, subway map initializes at
+  its newest end) and `?after=Y` (show commits with
+  `commit_time > Y`, then reversed, map initializes at its
+  oldest end). The `?after=` param exists so navigating from
+  page N to N-1 (newer) lands the user on the older slice of
+  N-1's commits — the bridge between the two pages — instead
+  of skipping forward by `page_size - 12` commits. Calendar
+  date picks always emit `?before=`. Parsing helpers:
+  `parse_before_param` (end-of-day default) and
+  `parse_after_param` (beginning-of-day) in
+  [`commits_controller.rb`](app/controllers/commits_controller.rb).
+  No Kaminari for this index; no `?page=` param.
+- **Commit detail tabs are server-pre-rendered, not Turbo Frames.**
+  `commits#show` renders every panel (Summary / Tests / Computers /
+  Diff / Logs) on each request; the `tabs_controller.js` Stimulus
+  controller toggles `hidden` between them and replaceState's the
+  URL to `?tab=<id>`. Banner action buttons route through the same
+  controller via `data-action="click->tabs#switchFromLink"`. The
+  controller's `aria-selected` + border-brand updates have to stay
+  in sync with `_show_tab_strip.html.haml`'s class list — both
+  control the underline.
+- **`Branch#last_clean_commit_before` is bounded at 25 commits.**
+  Walking the recursive-CTE result and calling `commit_state` on
+  each is several queries per step, so an unbounded walk on a stale
+  branch could fan out. When nothing turns up the Diff tab gets
+  rendered with `aria-disabled="true"` and `pointer-events-none`,
+  not hidden — so users see why the comparison is missing.
+- **Multi-line Ruby in HAML attribute hashes does not work.**
+  Each `- …` line is its own Ruby statement; assignments,
+  conditionals, and arrays must fit on one line or move to a
+  helper. The tab strip's badge logic + array of tab specs lives
+  in
+  [`app/helpers/commits_helper.rb`](app/helpers/commits_helper.rb)
+  (`tests_tab_badge`, `computers_tab_badge`,
+  `computer_state_color`, etc.) precisely because trying to inline
+  multi-line `case` and ternaries in HAML threw "indented N levels
+  deeper than the previous line" errors.
 - **No user-facing Active Storage**. The default `:local` service is
   scaffolding only. The high-severity Active Storage CVEs are unreachable
   in this codebase.
@@ -72,6 +185,30 @@ that makes the change.
 - **Bootsnap caches load paths** in `tmp/cache/bootsnap`. If you remove or
   rename a gem and immediately see `cannot load such file`, clear the cache
   with `rm -rf tmp/cache/bootsnap`.
+- **Submission destroy refreshes TCC + Commit scalars in a specific
+  order.** `Submission` carries `before_destroy
+  :remember_affected_tcc_ids, prepend: true` (the `prepend` is
+  load-bearing — without it the capture fires AFTER the
+  `dependent: :destroy` cascade and the through-association is
+  already empty). `after_commit :update_commit` then refreshes
+  the captured TCCs first, then `commit.update_scalars` — order
+  matters since the commit's counts read TCC statuses. Don't
+  re-add `dependent: :destroy` to associations under Submission
+  without thinking about whether the capture needs extending.
+  And don't write `self.status ||= :untested` in any
+  scalar-recompute method — `||=` won't reset a previously-set
+  status; use `self.status = :untested` then override based on
+  outcomes.
+- **User destroy cascades all the way down.** `User has_many
+  :computers, dependent: :destroy`, which chains through
+  computers → submissions → test_instances → instance_inlists →
+  inlist_data. Belt-and-suspenders: `computers.user_id` carries a
+  real FK with `ON DELETE CASCADE`, so even a callback-bypassing
+  `User.where(id: X).delete_all` keeps the table consistent. The
+  Submission scalar-refresh cascade above fires once per
+  destroyed submission during this walk, so a heavy user can
+  produce thousands of after_commit invocations — slow but
+  correct. See [`spec/models/user_destroy_cascade_spec.rb`](spec/models/user_destroy_cascade_spec.rb).
 
 ## Development commands
 

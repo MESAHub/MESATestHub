@@ -1,0 +1,91 @@
+-# Single-tier headline. The status sentence is the headline; the
+-# branch-wide status-count chips sit inline as compact context.
+-# No Tier 2 — the time-window toolbar lives between this card and
+-# the tab strip, so the right-column "history capsule" pattern from
+-# the test-on-commit page would be redundant here.
+-#
+-# Sub-sentence below the headline carries the three navigational
+-# anchors a user typically wants when landing on this page:
+-#   - Pending on <sha>:   newest commit awaiting submissions (if any)
+-#   - Last run <sha>:     most-recent commit with submitted instances
+-#   - Last passed <sha>:  most-recent fully-passing commit
+-# Each links into the test-on-commit page for that SHA.
+
+- summary   = @status_summary
+- counts    = summary[:counts]
+- last_run  = summary[:last_run]
+- last_pass = summary[:last_passing]
+- pending   = summary[:pending_on_head]
+
+.rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+
+  -# Headline status sentence.
+  %div{ class: "text-[22px] font-medium leading-snug tracking-tight text-fg" }
+    = render "test_cases/test_picker"
+    %span.text-fg-muted{ class: "text-[20px]" }<>
+      = " is "
+    %strong{ class: "font-semibold #{summary[:headline_class]}" }= summary[:headline_word]
+    %span.text-fg-muted{ class: "text-[20px]" }<>
+      = " on "
+    = render "test_cases/branch_picker"
+
+  -# Inline status-count chips. Branch-wide (not window-scoped) so the
+  -# user always sees the total volume of activity for this test on
+  -# this branch. Window-scoped counts live in the toolbar below.
+  - chip_specs = headline_status_chips(counts).reject { |_, count, _, _| count.zero? }
+  - if chip_specs.any?
+    .mt-3.flex.flex-wrap.items-center.gap-1.5
+      %span.mesa-label{ class: "mr-1" }= "#{counts[:total]} total"
+      - chip_specs.each do |label, count, dot, text_color|
+        %span.inline-flex.items-center.gap-1.5.rounded-md.border.border-border.bg-bg-muted.px-2.py-1{ class: "text-[12px]" }
+          %span{ class: "inline-block h-1.5 w-1.5 rounded-full #{dot}" }
+          %span.font-mono.tabular-nums.text-fg= count
+          %span{ class: text_color }= label
+
+  -# Sub-sentence — pending / last run / last passed anchors.
+  - if last_run || pending
+    .mt-3.flex.flex-wrap.items-center.gap-x-3.gap-y-1.text-fg-muted{ class: "text-[12px]" }
+      - if pending
+        %span.flex.items-center.gap-1
+          = mesa_icon(:clock, size: 11)
+          %span Pending on
+          = link_to pending.commit.short_sha,
+                   test_case_commit_path(branch: @selected_branch.name,
+                                         sha: pending.commit.short_sha,
+                                         module: @test_case.module,
+                                         test_case: @test_case.name),
+                   class: "font-mono font-semibold text-brand no-underline hover:underline"
+          %span.text-fg-subtle= "(#{time_ago_compact(pending.commit.commit_time)})"
+      - if last_run
+        - if pending
+          %span.text-fg-subtle ·
+        %span.flex.items-center.gap-1
+          = mesa_icon(:clock, size: 11)
+          %span Last run
+          = link_to last_run.commit.short_sha,
+                   test_case_commit_path(branch: @selected_branch.name,
+                                         sha: last_run.commit.short_sha,
+                                         module: @test_case.module,
+                                         test_case: @test_case.name),
+                   class: "font-mono font-semibold text-brand no-underline hover:underline"
+          %span.text-fg-subtle= "(#{time_ago_compact(last_run.commit.commit_time)})"
+      - if last_pass && (last_run.nil? || last_pass.id != last_run.id)
+        %span.text-fg-subtle ·
+        %span.flex.items-center.gap-1
+          = mesa_icon(:check, size: 11)
+          %span Last passed
+          = link_to last_pass.commit.short_sha,
+                   test_case_commit_path(branch: @selected_branch.name,
+                                         sha: last_pass.commit.short_sha,
+                                         module: @test_case.module,
+                                         test_case: @test_case.name),
+                   class: "font-mono font-semibold text-success-soft-text no-underline hover:underline"
+          %span.text-fg-subtle= "(#{time_ago_compact(last_pass.commit.commit_time)})"
+      - elsif last_pass.nil? && last_run && summary[:headline_word] != "passing"
+        %span.text-fg-subtle ·
+        %span.text-fg-muted Never passed on this branch.
+  - else
+    .mt-3.text-fg-muted{ class: "text-[12px]" }
+      No runs of this test on
+      %span.font-mono.text-fg= @selected_branch.name
+      yet.

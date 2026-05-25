@@ -1,5 +1,6 @@
 class Commit < ApplicationRecord
-  
+  include CommitState
+
   # Git structure
   has_many :branch_memberships, dependent: :destroy
   has_many :branches, through: :branch_memberships

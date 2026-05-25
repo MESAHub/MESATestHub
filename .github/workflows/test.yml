@@ -37,18 +37,19 @@ jobs:
           ruby-version: 3.2.2
           bundler-cache: true
 
-      # package.json pins "node": "18.x" and yarn's --frozen-lockfile enforces it.
-      # Bump this alongside engines when modernizing the frontend stack.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: yarn
-
-      - name: Install JS deps
-        run: yarn install --frozen-lockfile
-
       - name: Set up database
         run: bundle exec rails db:schema:load
+
+      # Tailwind v4's standalone CLI emits app/assets/builds/tailwind.css,
+      # which Sprockets serves via the manifest at
+      # app/assets/config/manifest.js and the modern layout links via
+      # `stylesheet_link_tag "tailwind"`. Without this build the layout
+      # raises `Sprockets::Rails::Helper::AssetNotFound` and every page-
+      # render spec fails. Production runs the equivalent step
+      # transparently because tailwindcss-rails hooks `tailwindcss:build`
+      # into `assets:precompile`.
+      - name: Build Tailwind CSS
+        run: bundle exec rails tailwindcss:build
 
       - name: Run RSpec
         run: bundle exec rspec --format progress

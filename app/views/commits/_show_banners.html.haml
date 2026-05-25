@@ -1,0 +1,36 @@
+-# Conditional banners. May stack — render order matches the
+-# prototype: BuildFail, BuildPartial, Failing, Mixed, Pending. Empty
+-# space when none apply.
+- state = @commit_state
+- tests = state[:tests]
+- build_status = state[:build][:status]
+- failed_ids = state[:build][:failed_build_computer_ids]
+- built_ids = state[:build][:built_computer_ids]
+- total_computers = (failed_ids + built_ids).uniq.size
+- computers_by_id = @per_computer.each_with_object({}) { |row, h| h[row[:computer_id]] = row[:computer] }
+
+- banners = []
+
+- if build_status == :all_fail
+  - banners << :build_fail
+- elsif build_status == :some_fail
+  - banners << :build_partial
+
+- if tests[:has_uniform_fail] && @last_clean_commit
+  - banners << :failing
+
+- if tests[:has_mixed]
+  - banners << :mixed
+
+- if tests[:has_pending] && !tests[:has_uniform_fail] && !tests[:has_mixed]
+  - banners << :pending
+
+- if banners.any?
+  .space-y-2
+    - banners.each do |kind|
+      = render "commits/banner_#{kind}",
+        state: state,
+        failed_ids: failed_ids,
+        built_ids: built_ids,
+        total_computers: total_computers,
+        computers_by_id: computers_by_id

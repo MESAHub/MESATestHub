@@ -21,8 +21,39 @@ class ApplicationController < ActionController::Base
     'Pacific Time (US & Canada)'
   end
 
+  # Plain-string timestamp. Used by JSON API callers (where HTML
+  # would pollute the response) and any caller that just wants a
+  # human-readable string. The visible representation always
+  # uses Rails' :short locale format.
   def format_time(time)
+    return "" if time.nil?
     I18n.l time.to_time.in_time_zone(time_zone), format: :short
+  end
+
+  # HTML <time> tag wrapper for modern views. Three improvements
+  # over `format_time` for screen rendering:
+  #   - visible text augmented with the year ("11 May 2024 04:41")
+  #     when the timestamp is from any year prior to the current
+  #     one in the user's time zone — so older rows aren't ambiguous;
+  #   - `datetime` attribute carrying the canonical ISO-8601
+  #     timestamp, useful for browsers and assistive tech;
+  #   - `title` attribute carrying a full, second-precision
+  #     timestamp for the hover tooltip.
+  def format_time_tag(time, css: "whitespace-nowrap tabular-nums")
+    return "" if time.nil?
+
+    zoned   = time.to_time.in_time_zone(time_zone)
+    visible = if zoned.year < Time.current.in_time_zone(time_zone).year
+                I18n.l(zoned, format: "%-d %b %Y %H:%M")
+              else
+                I18n.l(zoned, format: :short)
+              end
+    tooltip = I18n.l(zoned, format: "%Y-%m-%d %H:%M:%S %Z")
+
+    helpers.content_tag(:time, visible,
+                        datetime: zoned.iso8601,
+                        title: tooltip,
+                        class: css)
   end
 
   def format_date(time)
@@ -95,12 +126,13 @@ class ApplicationController < ActionController::Base
       icon: "home"
     }
     
-    render template: "errors/not_found", status: :not_found, layout: "application"
+    render template: "errors/not_found", status: :not_found, layout: "modern"
   end
 
   helper_method :current_user
   helper_method :time_zone
   helper_method :format_time
+  helper_method :format_time_tag
   helper_method :format_date
   helper_method :admin?
   helper_method :self?

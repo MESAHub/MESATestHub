@@ -1,0 +1,19 @@
+-# Build failed on some computers, succeeded on others. Tests ran on the others.
+.rounded-md.p-3{ style: "background: var(--color-warning-soft); border: 1px solid var(--color-warning);" }
+  .flex.items-start.gap-3
+    %span.text-warning-soft-text.shrink-0= mesa_icon(:warn, size: 16)
+    .flex-1.min-w-0.space-y-1.text-warning-soft-text
+      %p.text-sm
+        Build failed on
+        %span.font-semibold #{failed_ids.size}
+        of #{total_computers} computers · tests still ran on the others.
+      - if failed_ids.any?
+        %p.opacity-80{ class: "text-[11px]" }
+          %span No build:
+          - failed_ids.each do |id|
+            %span.font-mono.font-semibold.ml-1= computers_by_id[id]&.name || "computer ##{id}"
+    %a.mesa-btn.shrink-0{ href: "?tab=computers",
+                          style: "padding: 4px 10px; font-size: 12px;",
+                          data: { action: "click->tabs#switchFromLink" } }
+      See computers
+      = mesa_icon(:arrow_right, size: 12)

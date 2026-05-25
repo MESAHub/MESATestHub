@@ -48,8 +48,10 @@ class Branch < ApplicationRecord
     SQL
   end
 
-  private
-
+  # Raw SQL for the recursive CTE that finds every commit reachable from
+  # this branch's head. Public so callers can wrap it in their own
+  # subquery — the commits index, for example, layers cursor-pagination
+  # WHERE clauses on top to get the "newer than" lookahead it needs.
   def reachable_commits_sql
     return 'SELECT * FROM commits WHERE 1 = 0' unless head_id
 
@@ -66,8 +68,6 @@ class Branch < ApplicationRecord
         JOIN reachable ON commits.id = reachable.id
     SQL
   end
-
-  public
 
   ###############################################
   # PHASE 3.5 RECONCILE-WITH-GITHUB ENTRY POINT #
@@ -255,6 +255,105 @@ class Branch < ApplicationRecord
 
   def self.older(weeks: 4)
     Branch.where('updated_at <= ?', weeks.weeks.ago).order(:name)
+  end
+
+  # Adjacent commits on this branch by commit_time. Older = the most
+  # recent commit with `commit_time < commit.commit_time`. Newer = the
+  # least-recent commit with `commit_time > commit.commit_time`. Either
+  # can be nil at the ends of the branch. Returns `{older:, newer:}`.
+  def commit_neighbors(commit)
+    older = ordered_commits.where('commits.commit_time < ?', commit.commit_time)
+                           .first
+    newer = ordered_commits.where('commits.commit_time > ?', commit.commit_time)
+                           .reorder('commits.commit_time ASC')
+                           .first
+    { older: older, newer: newer }
+  end
+
+  # Walk older commits on this branch and return the first one whose
+  # state is "fully clean" — every computer compiled and every test
+  # passed. Used as the comparison anchor for the commit detail's
+  # "Diff vs last pass" tab.
+  #
+  # Bounded by `depth` because the per-commit aggregation
+  # (`commit_state`) is itself a couple of queries; an unbounded walk
+  # on a very-stale branch would be expensive. If no clean commit
+  # turns up within `depth`, returns nil and the diff tab gets
+  # disabled in the view.
+  def last_clean_commit_before(commit, depth: 25)
+    candidates = ordered_commits
+                   .where('commits.commit_time < ?', commit.commit_time)
+                   .limit(depth)
+                   .to_a
+
+    candidates.find do |c|
+      state = c.commit_state
+      state[:build][:status] == :all_ok &&
+        state[:tests][:status] == :all_pass
+    end
+  end
+
+  # Window of up to `size` commits on this branch centered on
+  # `focused_commit`, returned newest-first. Used by the commit
+  # detail hero's mini subway map so the user sees the focused
+  # commit in context with its neighbors.
+  #
+  # If `focused_commit` is at or near the head/tail, the missing
+  # side's slots fill from the other side so the window keeps a
+  # consistent visual length. (Branch may simply be shorter than
+  # `size` in total, in which case the returned array is too.)
+  def focused_commit_window(focused_commit, size: 5)
+    half = (size - 1) / 2
+
+    newer = ordered_commits
+              .where('commits.commit_time > ?', focused_commit.commit_time)
+              .reorder('commits.commit_time ASC')
+              .limit(half)
+              .to_a
+    older = ordered_commits
+              .where('commits.commit_time < ?', focused_commit.commit_time)
+              .limit(half)
+              .to_a
+
+    # Compensate when the focused commit is near an end of the
+    # branch — pull extra from the side that still has commits.
+    deficit = (size - 1) - newer.size - older.size
+    if deficit > 0 && newer.size < half
+      older = ordered_commits
+                .where('commits.commit_time < ?', focused_commit.commit_time)
+                .limit(half + deficit)
+                .to_a
+    elsif deficit > 0 && older.size < half
+      newer = ordered_commits
+                .where('commits.commit_time > ?', focused_commit.commit_time)
+                .reorder('commits.commit_time ASC')
+                .limit(half + deficit)
+                .to_a
+    end
+
+    newer.reverse + [focused_commit] + older
+  end
+
+  # Build the sparkline payload used in the commits list and commit
+  # detail hero. Walks the branch's `ordered_commits` newest-first and
+  # returns the last N commits packaged with the categorical states the
+  # sparkline cells render: build status + tests status (see
+  # CommitState#commit_state for the vocabulary).
+  #
+  # Yes, this is N+1 in commit_state — each commit's helpers touch its
+  # submissions and test_case_commits. Profile and batch once the
+  # sparkline is wired into actual views. For now 12 commits is well
+  # under the threshold worth pre-optimizing.
+  def sparkline_data(limit: 12)
+    ordered_commits.limit(limit).map do |commit|
+      state = commit.commit_state
+      {
+        commit: commit,
+        sha: commit.short_sha,
+        build_status: state[:build][:status],
+        tests_status: state[:tests][:status]
+      }
+    end
   end
 
   # Return test_case_commits for the same test case on commits near

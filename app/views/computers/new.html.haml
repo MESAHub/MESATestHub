@@ -1,3 +1,21 @@
-%h1 New computer
+- content_for :title, "New computer"
 
-= render 'form'
+.space-y-4
+  -# Breadcrumb. Back arrow lands on the user's computer list.
+  %nav.flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+    = link_to user_computers_path(@user),
+             class: "inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-bg-muted hover:text-fg no-underline",
+             title: "Back to #{@user.name}'s computers" do
+      = mesa_icon(:arrow_left, size: 14)
+      %span= "#{@user.name}'s computers"
+    %span.text-fg-subtle /
+    %span.text-fg New computer
+
+  -# Headline.
+  .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+    %div{ class: "text-[20px] font-medium leading-snug tracking-tight text-fg" }
+      Register a new test client for
+      = link_to @user.name, user_path(@user),
+               class: "font-semibold text-brand no-underline hover:underline"
+
+  = render "form", cancel_path: user_computers_path(@user), submit_label: "Add computer"

@@ -1,0 +1,23 @@
+-# Date chip + calendar dropdown.
+-# Locals:
+-#   selected_time: Time in the user's zone (cursor's effective moment).
+-#   branch:        current Branch (used to build the navigation path).
+- iso_date = selected_time.to_date.iso8601
+- chip_label = selected_time.strftime("%b %-d, %Y")
+.relative.inline-flex{ data: { controller: "dropdown calendar", open: "false", calendar_selected_value: iso_date, calendar_path_value: commits_path(branch: branch.name) } }
+  %button.inline-flex.items-center.gap-2.rounded-md.px-2.5.py-1.text-sm.font-mono.text-brand-soft-text.bg-brand-soft.border.border-brand-soft.cursor-pointer.hover:bg-brand-soft{ type: "button", "aria-haspopup": "dialog", "aria-expanded": "false", "aria-label": "Pick a date", data: { dropdown_target: "trigger", action: "click->dropdown#toggle" } }
+    %span.text-brand= mesa_icon(:clock, size: 13)
+    %span= chip_label
+    %span.text-brand-soft-text= mesa_icon(:chevron, size: 12)
+
+  .absolute.left-0.top-full.z-20.mt-1.rounded-md.border.border-border.bg-bg-elev.p-3.text-sm{ hidden: true, style: "box-shadow: var(--shadow-card-md); width: 17rem;", data: { dropdown_target: "menu" }, role: "dialog", "aria-label": "Pick a date" }
+    .flex.items-center.justify-between.gap-2.mb-2
+      %button.rounded.p-1.text-fg-muted.hover:bg-bg-muted.cursor-pointer{ type: "button", "aria-label": "Previous month", data: { action: "click->calendar#prevMonth" } }
+        %span.inline-block{ style: "transform: rotate(90deg);" }= mesa_icon(:chevron, size: 14)
+      %span.font-semibold.text-fg{ data: { calendar_target: "title" } }= ""
+      %button.rounded.p-1.text-fg-muted.hover:bg-bg-muted.cursor-pointer{ type: "button", "aria-label": "Next month", data: { action: "click->calendar#nextMonth" } }
+        %span.inline-block{ style: "transform: rotate(-90deg);" }= mesa_icon(:chevron, size: 14)
+    .grid.gap-1{ class: "grid-cols-7", data: { calendar_target: "grid" } }
+    .mt-3.flex.items-center.justify-between.border-t.border-border-subtle.pt-2.text-xs.text-fg-muted
+      %button.rounded.px-2.py-1.hover:bg-bg-muted.cursor-pointer{ type: "button", data: { action: "click->calendar#pickToday" } }
+        Latest (clear date)
