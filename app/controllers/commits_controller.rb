@@ -20,9 +20,16 @@ class CommitsController < ApplicationController
       redirect_to(commit_path(sha: @commit.short_sha, branch: @selected_branch.name), alert: "Branch <span class='text-monospace'>#{CGI.unescape(params[:branch])}</span> does not exist. Found commit in <span class='text-monospace'>#{@selected_branch}</span>.") and return
     end
 
-    other_branches = @commit.branches.reject { |b| b == @selected_branch }
-                                     .sort_by(&:updated_at)
-    @branches = [@selected_branch, other_branches].flatten
+    # Two-section picker: branches that actually contain this
+    # commit on top (switching to one keeps the user on the same
+    # SHA), then everything else below (switching jumps to that
+    # branch's head). Both alphabetical, with `main` pinned first.
+    containing = @commit.branches.includes(:head).to_a
+    containing_ids = containing.map(&:id)
+    other = Branch.includes(:head).where.not(id: containing_ids).order(:name).to_a
+    @containing_branches = main_first(containing.sort_by(&:name))
+    @other_branches      = main_first(other)
+    @branches            = @containing_branches + @other_branches
 
     @commit_state    = @commit.commit_state
     @matrix          = @commit.test_computer_matrix
@@ -56,7 +63,13 @@ class CommitsController < ApplicationController
   end
 
   def index
+    # Two-section picker: branches with activity in the last 4 weeks
+    # ("recent") above the rest ("older"). `main` is always pinned
+    # to the top of the recent section, even on the off chance its
+    # `updated_at` has aged out of the window.
     @branches = Branch.includes(:head).order(:name)
+    @recent_branches, @older_branches = split_branches_for_picker(@branches)
+
     @branch_names = @branches.pluck(:name)
     @branch = if @branch_names.include? CGI.unescape(params[:branch])
                 @branches[@branch_names.index(CGI.unescape(params[:branch]))]
@@ -276,6 +289,29 @@ class CommitsController < ApplicationController
   end
 
   private
+
+  # Pin the `main` branch to the front of a Branch array, preserving
+  # the relative order of everything else. Used to keep the trunk
+  # branch visually anchored at the top of picker sections.
+  def main_first(branches)
+    branches = branches.to_a
+    main_idx = branches.index { |b| b.name == 'main' }
+    return branches unless main_idx
+
+    [branches[main_idx], *branches.each_with_index.reject { |_, i| i == main_idx }.map(&:first)]
+  end
+
+  # Split a Branch scope into [recent, older] sections for the
+  # commits-index branch picker. "Recent" = updated in the last 4
+  # weeks (per `Branch.recent`); "older" = everything else. `main`
+  # is always pinned to the top of `recent`, even if its updated_at
+  # has aged past the window — switching off main shouldn't require
+  # scrolling past 30 dependabot branches.
+  def split_branches_for_picker(all_branches)
+    cutoff = 4.weeks.ago
+    recent, older = all_branches.partition { |b| b.updated_at > cutoff || b.name == 'main' }
+    [main_first(recent.sort_by(&:name)), older.sort_by(&:name)]
+  end
 
   # Parse the `before=` URL parameter for cursor pagination.
   #

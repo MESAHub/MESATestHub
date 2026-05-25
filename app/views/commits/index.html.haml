@@ -14,7 +14,8 @@
   %header.flex.flex-col.gap-2
     .flex.flex-wrap.items-baseline.gap-x-3.gap-y-2
       %h1.text-2xl.font-semibold.tracking-tight.text-fg Commits on
-      = render "branch_picker", branch: @branch, branches: @branches
+      - picker_sections = [{ label: "Recently updated", branches: @recent_branches }, { label: "Older", branches: @older_branches }]
+      = render "branch_picker", branch: @branch, sections: picker_sections, link_for: ->(b) { commits_path(branch: b.name) }
       %span.text-2xl.font-semibold.tracking-tight.text-fg.whitespace-nowrap on or before
       = render "date_picker", selected_time: displayed_time, branch: @branch
       %span.font-mono.text-fg-subtle.tabular-nums{ class: "text-[12px]" }

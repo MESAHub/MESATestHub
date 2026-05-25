@@ -1,7 +1,16 @@
--# Inline branch chip + dropdown picker.
+-# Inline branch chip + sectioned dropdown picker.
+-#
 -# Locals:
--#   branch:   current Branch
--#   branches: enumerable of Branch records to show
+-#   branch    — the currently-selected Branch (drives the chip)
+-#   sections  — array of { label:, branches: } hashes. Rendered in
+-#               order; blank sections are skipped. `branches` should
+-#               already be in display order (callers pin `main` to
+-#               the top of the relevant section).
+-#   link_for  — lambda/proc `->(b) { path }` building the target URL
+-#               for each branch. Commits index uses a flat
+-#               `commits_path(branch:)`; commit detail splits
+-#               between same-commit-on-new-branch (containing) and
+-#               that-branch's-head (non-containing).
 .relative.inline-flex{ data: { controller: "dropdown", open: "false" } }
   %button.inline-flex.items-center.gap-2.rounded-md.px-2.5.py-1.text-sm.font-mono.text-brand-soft-text.bg-brand-soft.hover:bg-brand-soft.border.border-brand-soft.cursor-pointer{ type: "button", "aria-haspopup": "listbox", "aria-expanded": "false", data: { dropdown_target: "trigger", action: "click->dropdown#toggle" } }
     %span.text-brand= mesa_icon(:branch, size: 13)
@@ -10,12 +19,16 @@
 
   .absolute.left-0.top-full.z-10.mt-1.w-72.rounded-md.border.border-border.bg-bg-elev.p-1.text-sm{ hidden: true, style: "box-shadow: var(--shadow-card-md);", data: { dropdown_target: "menu" } }
     .max-h-80.overflow-y-auto
-      - branches.each do |b|
-        - active = (b == branch)
-        = link_to commits_path(branch: b.name),
-                 class: "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 font-mono text-[12px] no-underline #{active ? 'bg-brand text-fg-on-brand' : 'text-fg hover:bg-bg-muted'}" do
-          %span.flex.items-center.gap-1.5.truncate
-            %span= mesa_icon(:branch, size: 11)
-            = b.name
-          - if b == branch
-            %span.uppercase.tracking-wide.opacity-80{ class: "text-[10px]" } current
+      - sections.each do |section|
+        - next if section[:branches].blank?
+        .px-2.pt-2.pb-1.text-fg-subtle.uppercase.tracking-wide{ class: "text-[10px]" }= section[:label]
+        - section[:branches].each do |b|
+          - active = (b == branch)
+          = link_to link_for.call(b),
+                   class: "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 font-mono no-underline #{active ? 'bg-brand text-fg-on-brand' : 'text-fg hover:bg-bg-muted'}",
+                   style: "font-size: 12px;" do
+            %span.flex.items-center.gap-1.5.truncate
+              %span= mesa_icon(:branch, size: 11)
+              = b.name
+            - if active
+              %span.uppercase.tracking-wide.opacity-80{ class: "text-[10px]" } current

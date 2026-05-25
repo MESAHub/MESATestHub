@@ -6,7 +6,13 @@
       = mesa_icon(:arrow_left, size: 14)
       %span Commits
     %span.text-fg-subtle /
-    = render "branch_picker", branch: @selected_branch, branches: @branches
+    -# Containing branches link to the same SHA on the new branch;
+    -# other branches jump to that branch's head (since the current
+    -# commit doesn't live there).
+    - containing_ids = @containing_branches.map(&:id).to_set
+    - picker_sections = [{ label: "Contains this commit", branches: @containing_branches }, { label: "Other branches", branches: @other_branches }]
+    - picker_link_for = ->(b) { containing_ids.include?(b.id) ? commit_path(sha: @commit.short_sha, branch: b.name) : commit_path(sha: 'head', branch: b.name) }
+    = render "branch_picker", branch: @selected_branch, sections: picker_sections, link_for: picker_link_for
     %span.text-fg-subtle /
     %span.font-mono.text-fg= @commit.short_sha
 
