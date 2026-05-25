@@ -41,6 +41,10 @@ Before doing non-trivial work, read the appropriate doc:
   looks the way it does. Active design tokens live in
   `app/assets/tailwind/application.css` and the Stimulus
   controllers under `app/javascript/controllers/`.
+- **[`docs/morning-mailer.md`](docs/morning-mailer.md)** —
+  daily mesa-developers digest: data shape, anomaly-detection
+  thresholds, in-browser preview, and the Railway cron
+  configuration that fires it at 8 AM US Eastern.
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.
 

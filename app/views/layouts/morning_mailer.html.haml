@@ -1,0 +1,65 @@
+!!! Strict
+%html{ lang: "en" }
+  %head
+    %meta{ charset: "utf-8" }
+    %meta{ "http-equiv": "Content-Type", content: "text/html; charset=utf-8" }
+    %meta{ name: "viewport", content: "width=device-width, initial-scale=1" }
+    %meta{ name: "color-scheme", content: "light dark" }
+    %meta{ name: "supported-color-schemes", content: "light dark" }
+    %title= "MESA Test Hub digest"
+    -# Most email clients strip or sandbox <style>, so every load-bearing
+    -# rule is inlined in the body. This block is purely for progressive
+    -# enhancement: link-hover, dark-mode color flips, and the few
+    -# Outlook/Gmail-specific resets. Clients that honor it get a nicer
+    -# experience; ones that don't still get a perfectly readable email.
+    :css
+      /* Resets */
+      body,table,td,a { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
+      table,td { mso-table-lspace:0pt; mso-table-rspace:0pt; }
+      img { -ms-interpolation-mode:bicubic; border:0; outline:none; text-decoration:none; }
+      table { border-collapse:collapse !important; }
+      body { margin:0 !important; padding:0 !important; width:100% !important; }
+      /* Link hovers */
+      a.mesa-link:hover { color:#1e2ebf !important; text-decoration:underline !important; }
+      /* Dark mode — iOS Mail, Apple Mail, Outlook.com */
+      @media (prefers-color-scheme: dark) {
+        body, .mesa-page { background:#0a0e14 !important; color:#e6edf3 !important; }
+        .mesa-card { background:#161b22 !important; border-color:#2a3038 !important; }
+        .mesa-card-subtle { background:#0d1117 !important; border-color:#2a3038 !important; }
+        .mesa-fg { color:#e6edf3 !important; }
+        .mesa-fg-muted { color:#9198a1 !important; }
+        .mesa-fg-subtle { color:#6e7681 !important; }
+        .mesa-divider { border-color:#21262d !important; }
+        a.mesa-link { color:#a8b6ff !important; }
+        a.mesa-link:hover { color:#cbd4ff !important; }
+        .mesa-badge-success { background:rgba(63,185,80,0.18) !important; color:#4ac263 !important; }
+        .mesa-badge-danger  { background:rgba(248,81,73,0.18) !important; color:#ff7b73 !important; }
+        .mesa-badge-warning { background:rgba(210,153,34,0.18) !important; color:#e3b341 !important; }
+        .mesa-badge-info    { background:rgba(107,130,255,0.20) !important; color:#a8b6ff !important; }
+        .mesa-badge-mixed   { background:rgba(210,153,34,0.18) !important; color:#e3b341 !important; }
+        .mesa-stat-num { color:#e6edf3 !important; }
+        .mesa-anomaly-card { background:rgba(248,81,73,0.06) !important; border-color:rgba(248,81,73,0.30) !important; }
+        .mesa-wordmark-text { color:#e6edf3 !important; }
+      }
+      /* Mobile */
+      @media screen and (max-width:600px) {
+        .mesa-stack-on-mobile { display:block !important; width:100% !important; }
+        .mesa-stat-cell { padding-bottom:8px !important; }
+      }
+  %body.mesa-page{ style: "margin:0; padding:0; background:#f7f8fa; color:#1f2328; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif; font-size:14px; line-height:1.5;" }
+    %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "background:#f7f8fa;" }
+      %tr
+        %td{ align: "center", style: "padding:24px 12px;" }
+          %table.mesa-card{ role: "presentation", width: "600", cellspacing: "0", cellpadding: "0", border: "0", style: "max-width:600px; width:100%;" }
+            %tr
+              %td
+                = yield
+                %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0" }
+                  %tr
+                    %td.mesa-fg-subtle{ style: "padding:16px 24px 24px 24px; font-size:11px; color:#8b949e; text-align:center;" }
+                      You're receiving this because you're on the
+                      = succeed "." do
+                        %a.mesa-link{ href: "https://lists.mesastar.org", style: "color:#3a56fd; text-decoration:none;" } mesa-developers list
+                      Powered by
+                      = succeed "." do
+                        = link_to "MESA Test Hub", root_url, class: "mesa-link", style: "color:#3a56fd; text-decoration:none;"

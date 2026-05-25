@@ -102,6 +102,9 @@ Rails.application.routes.draw do
   # just for counts; for API access only to prevent disastrous data dump
   get '/test_instances/search_count', to: 'test_instances#search_count'
 
+  # In-browser preview of the daily mesa-developers digest email.
+  get '/morning_report', to: 'morning_report#show', as: 'morning_report'
+
   get 'admin', to: 'users#admin', as: 'admin'
   get 'admin_edit_user', to: 'users#admin_edit_user', as: 'admin_edit_user'
   delete 'admin_destroy_user', to: 'users#admin_destroy_user',
