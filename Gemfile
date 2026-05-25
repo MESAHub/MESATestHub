@@ -13,8 +13,6 @@ gem 'rack-attack'
 gem 'rack-cors', '>=2.0.2', require: 'rack/cors'
 gem 'bootsnap', '~> 1.18'
 gem 'msgpack', '~> 1.7'
-gem 'terser', '~> 1.2'
-gem 'turbolinks', '~> 5'
 gem 'jbuilder', '~> 2.13'
 gem 'pg'
 gem "rexml", ">= 3.3.9"
@@ -25,7 +23,6 @@ gem 'kaminari'
 gem 'loofah', '~> 2.21'
 gem 'lograge'
 gem 'rails-html-sanitizer', '~> 1.6.2'
-gem 'font-awesome-rails'
 
 # Git stuff
 gem 'octokit', '~> 10.0'
@@ -33,19 +30,14 @@ gem 'faraday-http-cache'
 gem 'faraday-retry'
 gem 'github_webhook', '~> 1.4'
 
-# Frontend: legacy stack — retired piecewise as views migrate to the
-# Tailwind/Hotwire layout. Removed in Phase 4 Step 9.
-gem 'bootstrap', '~> 4.5'
-gem 'bootstrap_form'
+# Frontend stack. Tailwind for styling, Turbo + Stimulus for
+# behavior, Importmap for ES module loading without a JS build
+# step. HAML is the template engine. Sprockets-rails serves the
+# Tailwind build at app/assets/builds/tailwind.css and wires the
+# tailwindcss-rails build hook into assets:precompile at deploy.
 gem 'haml', '~> 6.1.2'
 gem 'haml-rails'
-gem 'high_voltage'
-gem 'jquery-rails'
-
-# Frontend: modern stack — coexists with the legacy stack during the
-# Phase 4 migration. The modern layout (`layouts/modern.html.haml`)
-# opts in per-controller; the legacy `application.html.haml` keeps
-# serving everything else.
+gem 'sprockets-rails'
 gem 'tailwindcss-rails', '~> 4.0'
 gem 'turbo-rails', '~> 2.0'
 gem 'stimulus-rails', '~> 1.3'

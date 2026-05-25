@@ -36,18 +36,6 @@ Rails.application.routes.draw do
       as: 'computer_submission',
       defaults: { format: :json }
 
-  # Phase 4 modern-layout preview surface. Must mount BEFORE the
-  # `/:branch/commits` catch-all below, otherwise the path constraint
-  # `branch: /.*/` swallows `dev/preview/commits` with branch="dev/preview".
-  # Dev/test only — see DevPreviewController.
-  if Rails.env.development? || Rails.env.test?
-    get 'dev/preview', to: 'dev_preview#index', as: 'dev_preview'
-    get 'dev/preview/not_found', to: 'dev_preview#not_found',
-        as: 'dev_preview_not_found'
-    get 'dev/preview/commits', to: 'dev_preview#commits',
-        as: 'dev_preview_commits'
-  end
-
   # Per-test log proxy + HEAD probe. Same pattern as the commit-
   # level build_log routes below: a narrow allow-list so only logs
   # for a (commit, computer, test) actually represented in our
