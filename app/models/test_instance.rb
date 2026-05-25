@@ -402,9 +402,6 @@ class TestInstance < ApplicationRecord
     # building up the search query from many pre-defined searchable options.
     options = [
       SearchOption.new('test_case', TestCase, :name),
-      # SearchOption.new('version', TestInstance, :mesa_version, true) do |number|
-        # number.to_i 
-      # end,
       SearchOption.new('commit', Commit, :short_sha) do |sha|
         sha[(0..7)]
       end,
@@ -426,10 +423,18 @@ class TestInstance < ApplicationRecord
       SearchOption.new('re_RAM', self, :mem_re, true) do |mem_GB|
         mem_GB.to_f * (1024**2)
       end,
-      # `total_runtime_seconds` is the column; users enter minutes (or
-      # natural phrasings like "1 hr 30 min") and parse_runtime converts
-      # to seconds. There is no total_runtime_minutes column — relying on
-      # the like-named instance method would break inside a where clause.
+      # Runtime SearchOptions all share parse_runtime — accepts integer
+      # seconds or natural phrasings like "1 hr 30 min". The columns are
+      # `runtime_seconds` (rn step), `re_time` (re step), and
+      # `total_runtime_seconds` (whole test). There is no
+      # total_runtime_minutes column — relying on the like-named instance
+      # method would break inside a where clause.
+      SearchOption.new('rn_runtime', self, :runtime_seconds, true) do |runtime_str|
+        TestInstance.parse_runtime(runtime_str)
+      end,
+      SearchOption.new('re_runtime', self, :re_time, true) do |runtime_str|
+        TestInstance.parse_runtime(runtime_str)
+      end,
       SearchOption.new('runtime', self, :total_runtime_seconds, true) do |runtime_str|
         TestInstance.parse_runtime(runtime_str)
       end,

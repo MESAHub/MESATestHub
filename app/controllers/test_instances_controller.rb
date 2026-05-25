@@ -2,11 +2,8 @@ class TestInstancesController < ApplicationController
   layout "modern", only: [:search]
 
   # Cross-cuts every test run on every computer for every commit
-  # using a single key-value query language. The query backend
-  # (`TestInstance.query` on the model) is partially rotted since
-  # the SVN → git transition — see the inline warning on the
-  # search view + the Phase 4 follow-up note in
-  # docs/frontend-modernization.md.
+  # using a single key-value query language. See
+  # `TestInstance.query` for the backend.
   #
   # The JSON variant of this action is what the historic API
   # consumers hit; it requires authentication via the same

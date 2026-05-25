@@ -13,34 +13,6 @@
       Cross-cuts every test run on every computer for every commit
       using a single key-value query language.
 
-  -# Known-broken warning. The search backend
-  -# (`TestInstance.query` in app/models/test_instance.rb) has
-  -# rotted since the SVN→git transition — `version:` queries hit
-  -# the long-gone `Version` model + dropped `mesa_version`
-  -# column and silently fall through (`flash.now[:warning]`).
-  -# Other fields like `test_case:`, `user:`, `commit:` mostly
-  -# still work. The JSON API at `/test_instances/search.json`
-  -# shares the same backend.
-  .rounded-md.border.border-warning.bg-warning-soft.p-3.text-warning-soft-text{ role: "status" }
-    .flex.items-start.gap-2
-      = mesa_icon(:warn, size: 14, css: "mt-0.5 shrink-0")
-      .min-w-0
-        %p.font-semibold{ class: "text-[13px]" } Partial functionality — known rot.
-        %p.mt-1{ class: "text-[12px]" }
-          The query backend has rotted since the SVN → git
-          transition. Some fields still work
-          (#{content_tag(:code, "test_case", class: "font-mono")},
-          #{content_tag(:code, "user", class: "font-mono")},
-          #{content_tag(:code, "commit", class: "font-mono")},
-          #{content_tag(:code, "computer", class: "font-mono")},
-          #{content_tag(:code, "passed", class: "font-mono")}); others
-          (notably #{content_tag(:code, "version", class: "font-mono")}, which depends on the dropped
-          `mesa_version` column + retired `Version` model) silently
-          drop through and return the unfiltered result set. The
-          JSON API (#{content_tag(:code, "/test_instances/search.json", class: "font-mono")})
-          shares the same backend. Repairing the query layer is a
-          separate, deferred task.
-
   -# Search form.
   = form_with url: search_instances_path, method: :get, local: true, class: "rounded-lg border border-border bg-bg-elev p-5 space-y-3", html: { style: "box-shadow: var(--shadow-card-sm);" } do |f|
     %div
@@ -82,7 +54,7 @@
           %p.text-fg-muted
             String multiple pairs together with semicolons:
           %p.mt-2
-            %code.font-mono.text-fg{ class: "rounded-md bg-bg-muted px-2 py-0.5 text-[12px]" } user: Bill Wolf; version: 10000
+            %code.font-mono.text-fg{ class: "rounded-md bg-bg-muted px-2 py-0.5 text-[12px]" } user: Bill Wolf; passed: true
           %p.mt-2.text-fg-muted
             All conditions are combined with AND.
 
@@ -91,7 +63,7 @@
           %p.text-fg-muted
             Comma-separate values for OR, or use a dash for ranges:
           %p.mt-2
-            %code.font-mono.text-fg{ class: "rounded-md bg-bg-muted px-2 py-0.5 text-[12px]" } version: 10000-10200; test_case: wd2, 1M_thermohaline
+            %code.font-mono.text-fg{ class: "rounded-md bg-bg-muted px-2 py-0.5 text-[12px]" } commit_datetime: 2024-01-01-2024-06-30; test_case: wd2, 1M_thermohaline
 
       -# Available fields, two columns.
       %div
@@ -99,14 +71,15 @@
         .grid.gap-x-8.gap-y-1{ class: "grid-cols-1 md:grid-cols-2 text-[13px]" }
           %dl.space-y-2
             = render "field_row", field: "test_case", desc: "Name of a valid test case."
-            = render "field_row", field: "version", desc: "Number of a valid MESA revision."
+            = render "field_row", field: "commit", desc: "Short SHA of a commit (first 7+ characters)."
+            = render "field_row", field: "commit_datetime", desc: "Commit datetime — YYYY-MM-DD. Range supported (e.g. 2024-01-01-2024-06-30)."
             = render "field_row", field: "passed", desc: %q{"t" / "true" / "f" / "false" — match passing or failing instances.}
             = render "field_row", field: "computer", desc: "Name of a computer."
             = render "field_row", field: "user", desc: "Name of a user (maintainer)."
             = render "field_row", field: "date", desc: "Submission date — YYYY/MM/DD, UTC."
             = render "field_row", field: "datetime", desc: "Submission date and time — YYYY/MM/DD hh:mm:ss; append e.g. 'PST' for a non-UTC timezone."
-            = render "field_row", field: "platform", desc: "Computer platform: macOS or linux. No version string."
           %dl.space-y-2
+            = render "field_row", field: "platform", desc: "Computer platform: macOS or linux. No version string."
             = render "field_row", field: "platform_version", desc: "Platform version, e.g. 14.5 or Ubuntu 22.04."
             = render "field_row", field: "rn_runtime / re_runtime / runtime", desc: "Runtime for rn / re scripts or whole test. Integer seconds or '1 hr 30 min', '2.3 hours', etc."
             = render "field_row", field: "rn_RAM / re_RAM", desc: "Peak memory for rn / re scripts, in GB."
