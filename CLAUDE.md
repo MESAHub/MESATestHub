@@ -32,255 +32,62 @@ Before doing non-trivial work, read the appropriate doc:
   GitHub sync rewrite (topology-driven ordering, webhook payload-driven
   sync). Complete on the `perf-sync-topology` branch.
 - **[`docs/frontend-modernization.md`](docs/frontend-modernization.md)**
-  — plan for the Phase 4 frontend rewrite (Bootstrap+jQuery →
-  Tailwind+Turbo+Stimulus, plus port of the design in
-  `docs/design_handoff_mesa_testhub/`). Spans multiple sessions on
-  the `frontend-tailwind` branch. **Steps 0–7 are landed**, plus
-  Step 8's first wing-it page — `test_cases#show` (test history
-  across commits) — Tailwind + Turbo + Stimulus + importmap are
-  installed alongside the legacy stack; the 404 page, login, the
-  commits index (`/:branch/commits`), the commit detail page
-  (`/:branch/commits/:sha`), the test-on-commit page
-  (`/:branch/commits/:sha/test_cases/:module/:test_case`), the
-  test-case history page
-  (`/:branch/test_cases/:module/:test_case`), and the
-  computers list + detail pages (`/users/:id/computers`,
-  `/users/:id/computers/:id`, `/all_computers`), the
-  users list + detail pages (`/users`, `/users/:id`), and the
-  full forms cluster (`/users/new`, `/users/:id/edit`, `/admin`,
-  `/users/:id/computers/new`, `/users/:id/computers/:id/edit`)
-  all render through the modern layout.
-  Commit detail has four tabs (Summary / Computers / Diff vs
-  last pass / Build logs) — the original Tests tab was folded
-  into Summary when review flagged it as redundant with the
-  matrix. The merged Summary panel hosts a chip + module
-  dropdown + free-text-search toolbar over the full Tests ×
-  Computers matrix (sealed sticky band with right-aligned
-  legend; horizontal scroll on narrow viewports synced via
-  JS), and clicking any cell opens a popover with that
-  (test, computer)'s failure mode, checksum grouping, SDK,
-  runtime, and submission count, rendered from a JSON blob
-  embedded in the page (no per-click database query). Clean
-  cells get a minimal stub popover instead of navigating away,
-  so click behavior is consistent. On `xl+` the popover renders
-  into a docked right rail (sticky, with per-computer mini
-  summary as its inactive state); below xl it falls back to a
-  floating panel anchored to the clicked cell. Computers cards carry a maintainer link,
-  SDK chip, probe-gated log links, and a last-successful-build
-  link on no-build cards. Diff vs last pass uses the matrix
-  cell encoding (before / after drawings) with a grouped
-  change-counts summary line. The Logs tab proxies upstream
-  build logs server-side with an availability probe.
-  Aggregation helpers in
-  [`app/models/concerns/commit_state.rb`](app/models/concerns/commit_state.rb)
-  cover `#commit_state` / `#test_computer_matrix` (memoized
-  per-instance) / `#per_computer_summary` (includes per-computer
-  submissions) / `#per_test_summary` / `#cells_changed_since` /
-  `#default_detail_tab` / `#last_successful_build_commit_for` /
-  `#cell_popover_data`; Branch helpers in
-  [`app/models/branch.rb`](app/models/branch.rb) add
-  `#sparkline_data` / `#commit_neighbors` /
-  `#focused_commit_window` / `#last_clean_commit_before`;
-  `TestCaseCommit#instances_for_display` round out the layer.
-  Matrix cell visuals come from the `matrix_cell_visual` helper
-  in [`CommitsHelper`](app/helpers/commits_helper.rb) — same SVG
-  output as the original partial, but called as a plain helper to
-  avoid the per-cell partial-render overhead (the History tab on
-  test_cases#show can paint 700+ cells per request). Stimulus controllers driving the page:
-  `tabs_controller.js`, `matrix_filter_controller.js`,
-  `matrix_scroll_controller.js` (header↔body horizontal scroll
-  sync), `popover_controller.js`, `dropdown_controller.js`,
-  `logs_controller.js`, `computer_card_controller.js`,
-  `subway_map_controller.js`, `pan_map_controller.js`,
-  `calendar_controller.js`, `theme_controller.js`,
-  `copy_button_controller.js`. The test-on-commit page
-  (`test_case_commits#show`, Step 7) has two tabs: Summary
-  (default, the 19-column instances table with grouped
-  column picker + status-segment + free-text filters +
-  icons legend) and Logs (proxied `out.txt` / `mk.txt` /
-  `err.txt` viewer with computer + type pickers). The
-  column picker's preset map lives in
-  [`TestCaseCommitsHelper`](app/helpers/test_case_commits_helper.rb)
-  and the active set persists to
-  `localStorage["mesa.test_on_commit.columns.v1"]`. The
-  Logs tab calls `test_case_commits#log` to proxy a single
-  file (friendly per-type 404 messages naming the file and
-  pointing at sibling types) and `#log_status` to HEAD-probe
-  all three types per (commit, computer, test) in one round
-  trip (10-minute server-side cache, shared with the per-
-  row "logs ↗" jump link's reveal probe). The proxy
-  machinery (`fetch_log`, `probe_log_url`, the
-  `LogNotFound` / `LogTooLarge` / `LogFetchError` error
-  types, 5 MB byte cap, open/read timeouts) lives in the
-  [`LogProxy`](app/controllers/concerns/log_proxy.rb)
-  concern included by both `TestCaseCommitsController` and
-  `CommitsController`. The headline card has two tiers:
-  full-width status sentence on top — the test pill is a
-  picker dropdown listing every TCC on this commit, sorted
-  worst-first by status, then by module (star → binary →
-  astero per `TestCase.modules`), then alphabetically by
-  name — and below it a `lg:grid-cols-2` split with commit
-  identity (message + expander + author + time + GitHub
-  button top-right) on the left and a test-history capsule
-  (single-color subway map centered + Full history button
-  top-right) on the right. Subway stations link to that
-  commit's test-on-commit page and reveal popovers (SHA ·
-  age · message · author · this test's status) via the
-  shared `subway_map_controller.js`. The test-case history page
-  (`test_cases#show`) shares the headline + tab-strip frame from
-  the test-on-commit page but adds a shared time-window toolbar
-  (anchor commit picker with SHA-paste + date-snap-to-nearest +
-  jump-to-HEAD shortcut, window size 25/50/100/250, ← Newer /
-  Older → pan by half-window) that drives all three tabs:
-  **History** (default — per-commit rows with status pills + a
-  per-row computer ribbon that reuses the matrix cell encoding +
-  popover with degradation metrics like steps/retries/log E err
-  on a docked rail at xl+), **Trend** (uPlot line chart of a
-  chosen metric vs commit *index* — equally spaced — for the
-  top-3 most-common `(computer, threads, run_optional)` config
-  tuples with a status strip drawn at the bottom of the plot
-  area and a brand-colored vertical anchor marker; click any
-  point re-centers the toolbar), and **Submissions** (per-
-  instance table for a chosen computer over the window — picker
-  auto-selects the most-active in the window). The toolbar's
-  URL params (`?tab=&center=&window=&metric=&computer=`) all
-  round-trip via the `toolbar_path` helper so pan / tab switch /
-  metric change preserve everything else.
-
-  `TestCase#commit_window` and `#trend_payload` plus the
-  TestCasesHelper's `submissions_payload` /
-  `history_popover_data` / `history_matrix_payload` build all
-  per-tab data off ONE eagerly-loaded TCC scope
-  (`test_instances: [:computer, { instance_inlists: :inlist_data }]`)
-  so a 100-commit window completes in ~25 queries.
-
-  Stimulus controllers added for this page:
-  `trend_chart_controller.js` (uPlot wrapper that lives inside
-  initially-hidden tab panels — uses a MutationObserver on the
-  panel's `hidden` attribute to `setSize` once visible, since
-  uPlot bakes width at construction time).
-
-  The `computers#index` + `#show` pair (Step 8g–8h) shares the
-  breadcrumb + status-sentence headline + sticky-thead table
-  vocabulary used by the test-case pages. Show adds a
-  hairline-split lower tier with Hardware (Platform / Processor /
-  RAM) on the left and Usage (CPU hours over 24h / year / all
-  time) on the right. Same Build status pill (Built / Failed /
-  Not reported) as the commit-show banners. The admin
-  `/all_computers` view threads through the same `index` template
-  with an extra Maintainer column. Index supports a Sort dropdown
-  (Most recent activity / Maintainer (A→Z) / Computer name (A→Z))
-  backed by a `Computer.ordered(sort)` scope — the "recent"
-  branch uses a correlated subquery against `submissions(MAX
-  created_at)`, with a composite
-  `submissions(computer_id, created_at)` index added to keep
-  the query under 5ms on the prod-sized submissions table.
-
-  computers#show also hosts a self-serve bulk-delete flow for
-  submissions (so a maintainer can clean up a bad batch from a
-  misconfigured SDK without escalating to the admin). Three
-  layers wire together:
-  - **Filter toolbar** on the submissions card:
-    `?from=&to=&sha=` URL params, parsed by
-    `Submission.submitted_between` + `Submission.for_commit_sha`
-    (4-char minimum case-insensitive prefix). Header switches
-    to "N submissions matching the filter" when active.
-  - **Selection UI** powered by
-    `submission_selection_controller.js`: per-row checkboxes
-    (only rendered for `self_or_admin?`), a "select all on
-    this page" header checkbox with indeterminate tri-state, a
-    sticky brand-soft selection bar, and a
-    "Select all M matching the filter" link that appears when
-    the filter scope exceeds the visible page AND every
-    visible row is ticked — flips the form into
-    `select_all_matching=1` mode so the server re-derives the
-    set from the filter scope.
-  - **Confirmation modal** as an HTML5 `<dialog>` (centered +
-    scrim backdrop styled in the modern Tailwind layer).
-    Confirm POSTs to `DELETE
-    /users/:user_id/computers/:id/submissions` →
-    `ComputersController#destroy_submissions`, protected by
-    the existing `authorize_self_or_admin` filter, scoped at
-    `@computer.submissions` to prevent IDOR, and capped at
-    `BULK_DESTROY_LIMIT = 500` so a single request doesn't
-    spin on the `Submission#after_commit :update_commit`
-    callback chain. The post-delete redirect round-trips the
-    active filter params so the user lands on the same view.
-    Cascade is fully audited — the destroy fires
-    `before_destroy :remember_affected_tcc_ids, prepend: true`
-    so the affected `TestCaseCommit` IDs are captured before
-    `dependent: :destroy` wipes the `test_instances`, then
-    `update_commit` refreshes the captured TCCs (resetting
-    them to `:untested` when their last submission goes away)
-    AND the parent `Commit` scalars, in that order. See the
-    Reality-checks note + the regression specs in
-    `spec/models/submission_destroy_cascade_spec.rb`.
-
-  Pagination on the modern pages uses a new Kaminari theme at
-  [`app/views/kaminari/modern/`](app/views/kaminari/modern/) —
-  brand-fill for the active page, neutral mesa-btn-styled
-  Older/Newer arrows. Pages opt in with
-  `paginate @scope, theme: "modern"`. The Bootstrap-era partials
-  at `app/views/kaminari/` keep serving un-migrated pages.
-
-  Destructive actions on modern-layout pages use
-  `button_to ..., method: :delete, form: { data: { turbo_confirm: } }`
-  rather than `link_to ..., method: :delete` — the modern layout
-  ships only Turbo (no rails-ujs), so `data-method=delete` from
-  the legacy helper is dead.
-
-  The `users#index` + `#show` pair (Step 8i) reuses the same
-  card / breadcrumb / table vocabulary. Index is single-tier
-  (status sentence + admin-gated "Create user" CTA + table with
-  Name / Email / Computers chips / Actions, no paginator since
-  the user list is small). Show uses the two-tier headline from
-  computers#show — Tier 1 is the identity sentence ("`<name>`
-  maintains `N` computers" + admin chip), Tier 2 is a Profile
-  dl (Email / Time zone / Role) + Activity dl (Computers count
-  / Member since) split at lg+. The computers card below uses
-  the same row vocabulary as `computers#index`, minus the
-  Maintainer column. `UsersController#index` was bumped to
-  `User.includes(:computers)` so the chip rendering doesn't
-  N+1 against `users` rows.
-
-  The **forms cluster** (Step 8j) landed every model-bound form
-  in the app: `users/new`, `users/edit`, `users/admin` (which
-  hosts three forms — create / select-to-edit / select-to-delete),
-  `computers/new`, `computers/edit`, and the shared
-  `computers/_form` partial. New primitives at
-  [`app/views/shared/_field.html.haml`](app/views/shared/_field.html.haml)
-  (label + input + inline error, handles :text / :email /
-  :password / :select / :checkbox / :textarea / :number / :url /
-  :tel) and
-  [`app/views/shared/_form_errors.html.haml`](app/views/shared/_form_errors.html.haml)
-  (top-of-form summary banner). Driven by two new Tailwind layer
-  classes — `.mesa-input.is-invalid` / `[aria-invalid="true"]`
-  (danger border + soft glow on focus) and `.mesa-checkbox`
-  (brand-accented native checkbox). Form re-renders on
-  validation failure use
-  `render :new, status: :unprocessable_content` (or `:edit`) —
-  Turbo silently no-ops the 200 + render pattern, so the
-  status code is load-bearing. Also added a
-  `Computer::PLATFORMS = %w[macOS linux].freeze` constant to
-  fix a long-standing bug in the legacy form (which referenced
-  a non-existent `Computer.platforms` method).
-
-  Step 8's remaining wing-it pages (`test_instances#*`,
-  submissions/show, pages/about, visitors/index) are still
-  outstanding; the page priority list
-  is at the bottom of
-  [`docs/frontend-modernization.md`](docs/frontend-modernization.md).
-  Note: `computers#test_instances_index` was deleted, not
-  modernized — it had been dead since the SVN→git transition
-  (controller ordered by the missing `mesa_version` column, view
-  linked to the missing `Version` model) and nothing in the app
-  pointed at the route. The orphan empty
-  `users/computers_index.html.haml` template (no controller
-  action, no route, no link) was also deleted alongside the
-  users#index/#show modernization.
-
+  — record of the Phase 4 frontend rewrite (Bootstrap + jQuery
+  + Sprockets + Turbolinks → Tailwind + Turbo + Stimulus +
+  Importmap). **Complete** as of the legacy purge in Step 9b
+  on the `frontend-tailwind` branch. The doc lists every step,
+  every page, and every architectural decision; consult it when
+  you need history on why a given layout / partial / helper
+  looks the way it does. Active design tokens live in
+  `app/assets/tailwind/application.css` and the Stimulus
+  controllers under `app/javascript/controllers/`.
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.
+
+## Frontend architecture (post-Phase 4)
+
+Single layout: [`app/views/layouts/modern.html.haml`](app/views/layouts/modern.html.haml).
+Stack: Tailwind v4 (standalone CLI, output at
+`app/assets/builds/tailwind.css`), Turbo, Stimulus, Importmap.
+Sprockets-rails still in place to serve the Tailwind build and
+wire `tailwindcss:build` into `assets:precompile` at deploy.
+
+Shared design primitives:
+
+- **Reusable form fields** —
+  [`app/views/shared/_field.html.haml`](app/views/shared/_field.html.haml)
+  wraps label + input + inline error for `:text` / `:email` /
+  `:password` / `:select` / `:checkbox` / `:textarea` /
+  `:number` / `:url` / `:tel`. Top-of-form summary banner at
+  [`app/views/shared/_form_errors.html.haml`](app/views/shared/_form_errors.html.haml).
+- **CSS vocabulary** in
+  [`app/assets/tailwind/application.css`](app/assets/tailwind/application.css):
+  `.mesa-input` (with `.is-invalid` / `[aria-invalid="true"]`
+  error state), `.mesa-checkbox`, `.mesa-label`, `.mesa-btn`,
+  `.mesa-btn-primary`. All gated under `.mesa-modern` on
+  `<body>` from an earlier "two stacks coexisting" world — the
+  scope is now harmless and could be flattened in a future
+  cleanup but it isn't blocking anything.
+- **Inline SVG icons** via `mesa_icon(name, size:, css:)` in
+  [`CommitsHelper`](app/helpers/commits_helper.rb) — small
+  curated set (check / x / chevron / arrow_left / search / warn
+  / plus / file / github / etc.). Replaces font-awesome.
+- **Pagination** via the `modern` Kaminari theme at
+  [`app/views/kaminari/modern/`](app/views/kaminari/modern/).
+  Pages opt in with `paginate @scope, theme: "modern"`.
+- **Turbo wrinkles** the agent will hit:
+  - Form re-renders on validation failure MUST use
+    `status: :unprocessable_content` (or `:unprocessable_entity`
+    on Rack 2). Turbo silently no-ops the default 200 + render
+    pattern and the user sees no feedback.
+  - Destructive actions use `button_to` (Turbo-aware) instead of
+    `link_to method: :delete` — the legacy `data-method=delete`
+    via rails-ujs is no longer loaded.
+
+The detailed history of how each page was migrated lives in
+[`docs/frontend-modernization.md`](docs/frontend-modernization.md).
+Reach for it when you need to understand *why* a particular
+helper or partial exists.
 
 ## Reality checks (things the codebase *looks* like but isn't)
 
@@ -291,7 +98,7 @@ that makes the change.
   from the original plan — Rack 3's `:unprocessable_entity` →
   `:unprocessable_content` rename, `show_exceptions` becoming an enum,
   and the gems that needed bumps or removal for the resolver to settle.
-- **The test suite is small but real.** 255 specs (request + model +
+- **The test suite is small but real.** 263 specs (request + model +
   helper + job) cover auth, submissions API, GitHub webhook (now
   async via `BranchSyncJob`, payload-driven), branch deletion, the
   Octokit middleware wiring, `TestInstance.query`,
@@ -301,40 +108,19 @@ that makes the change.
   `#trend_payload`) + the `TestCasesHelper#submissions_payload`
   picker logic, the computers#show bulk-delete + filter +
   permissions matrix, the Submission destroy cascade scalar
-  refresh, and high-traffic page renders. They are the regression
-  safety net for upcoming work — build on this rather than
-  starting fresh.
+  refresh, the User destroy cascade chain, and high-traffic page
+  renders. They are the regression safety net for upcoming work —
+  build on this rather than starting fresh.
 - **No Cucumber.** The old Cucumber suite is preserved at
   `features.deprecated/` and `spec/features.deprecated/`. RSpec request
   specs replace it. Do not add `.feature` files.
-- **No CoffeeScript.** All `.coffee` files were converted to plain ES2015+
-  JavaScript in the `frontend/drop-coffeescript` branch. `coffee-rails` and
-  `barista` are gone from the Gemfile. The remaining frontend stack
-  (Bootstrap 4, jQuery, Sprockets, Turbolinks) is being replaced in Phase 4.
-- **Two frontend stacks coexist during Phase 4.** Pages still using
-  Bootstrap render through `layouts/application.html.haml`, which links
-  Sprockets-built `application.css` (Bootstrap + custom SCSS) and
-  `legacy.js` (jQuery + Bootstrap + Turbolinks + custom JS). Pages
-  migrated to the new design render through
-  `layouts/modern.html.haml`, which links the Tailwind v4 build at
-  `app/assets/builds/tailwind.css` and loads Turbo + Stimulus via
-  `importmap-rails`. Controllers opt in per-action with
-  `render layout: "modern"`. The Sprockets entry point was renamed from
-  `application.js` to `legacy.js` so it doesn't collide with the
-  importmap entry at `app/javascript/application.js`.
-- **sassc-rails's :sass CSS compressor must stay disabled.** SassC can't
-  parse Tailwind v4's modern color syntax (`rgb(from red r g b)`, etc.).
-  Both `config/environments/test.rb` and `config/environments/production.rb`
-  explicitly set `config.assets.css_compressor = nil`. Removing or
-  flipping that breaks asset compilation everywhere the modern layout
-  loads.
-- **Dev preview surface for Phase 4.** `/dev/preview/...` routes mount
-  only in development + test (see [`config/routes.rb`](config/routes.rb)
-  and [`DevPreviewController`](app/controllers/dev_preview_controller.rb)).
-  Each action renders a migrated view inside `layouts/modern.html.haml`
-  with canned data and bypasses the auth filter so the design can be
-  reviewed in a browser without logging in. Add a new action per page
-  as it migrates.
+- **No CoffeeScript / Bootstrap / jQuery / Turbolinks / Sprockets-pipeline
+  legacy.** All `.coffee` files were converted to plain ES2015+
+  JavaScript in the `frontend/drop-coffeescript` branch. The
+  Bootstrap + jQuery + Sprockets + Turbolinks stack itself was
+  ripped out in Phase 4 Step 9b (commits leading up to `bf21d3f`
+  on `frontend-tailwind`). The only frontend stack now is the
+  one described in the "Frontend architecture" section above.
 - **Tailwind rebuild after class changes.** Tailwind v4's standalone
   CLI scans view files at build time and only emits utilities it
   actually saw. After adding new utility classes to a view, run
@@ -351,10 +137,6 @@ that makes the change.
   explicit `{ class: "…" }` hash. Same goes for empty tags — write
   `%span &nbsp;` or give the tag content; bare `%span` followed by
   sibling tags trips an "illegal nesting" error.
-- **Dev preview routes must mount BEFORE catch-all `/:branch/commits`.**
-  The `branch: /.*/` constraint will happily consume `dev/preview` as
-  a branch name. The `dev/preview/...` block lives near the top of
-  `config/routes.rb`, just below the submissions routes.
 - **Cursor pagination on the commits index, two URL params.**
   `commits#index` accepts two mutually-exclusive cursors:
   `?before=X` (default mental model — show commits with
@@ -418,6 +200,16 @@ that makes the change.
   scalar-recompute method — `||=` won't reset a previously-set
   status; use `self.status = :untested` then override based on
   outcomes.
+- **User destroy cascades all the way down.** `User has_many
+  :computers, dependent: :destroy`, which chains through
+  computers → submissions → test_instances → instance_inlists →
+  inlist_data. Belt-and-suspenders: `computers.user_id` carries a
+  real FK with `ON DELETE CASCADE`, so even a callback-bypassing
+  `User.where(id: X).delete_all` keeps the table consistent. The
+  Submission scalar-refresh cascade above fires once per
+  destroyed submission during this walk, so a heavy user can
+  produce thousands of after_commit invocations — slow but
+  correct. See [`spec/models/user_destroy_cascade_spec.rb`](spec/models/user_destroy_cascade_spec.rb).
 
 ## Development commands
 

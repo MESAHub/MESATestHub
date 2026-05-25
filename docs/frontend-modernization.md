@@ -1231,16 +1231,38 @@ same headline rhythm.
 
 ### Step 9 — Cleanup
 
-- Remove the legacy gems listed in "Stack changes" above.
-- Delete `app/assets/javascripts/*.js` files that have been
-  replaced by Stimulus controllers.
-- Delete `app/assets/stylesheets/*.scss` files superseded by
-  Tailwind. Sprockets may still serve generated assets if needed.
-- Update `Gemfile`, run `bundle install`, regenerate `Gemfile.lock`.
-- Clear `tmp/cache/bootsnap` once after gem removals.
-- Update `CLAUDE.md`: drop the "Bootstrap 4, jQuery, Sprockets,
-  Turbolinks" line under reality checks.
-- Update `docs/roadmap.md`: mark Phase 4 complete.
+**Status: complete** as of commit `bf21d3f` on
+`frontend-tailwind`.
+
+Step 9a — deleted unreachable views + dead controller actions
+(test_data, pages/about, visitors, dead test_instances views,
+dead test_cases views, all the json.jbuilders that fed them,
+and the bulk of `test_instances_controller.rb`).
+
+Step 9b — ripped out the legacy frontend layer in full:
+- `layouts/application.html.haml` + `_navigation*` + `_messages`
+- The duplicate HAML mailer layouts that shadowed the .erb canon
+- `app/assets/javascripts/` and `app/assets/stylesheets/` (all
+  Sprockets pipeline assets — every legacy .js and .scss)
+- `app/channels/` (ActionCable never wired up)
+- `app/views/kaminari/_*.html.haml` top-level partials
+- `dev_preview_controller.rb` + its routes (the dev surface
+  existed to preview modern alongside legacy; not needed once
+  legacy is gone)
+- Gems: `bootstrap`, `bootstrap_form`, `jquery-rails`,
+  `turbolinks`, `high_voltage`, `font-awesome-rails`, `terser`
+- Kept `sprockets-rails` (was being pulled in transitively;
+  added explicitly so `assets:precompile` keeps working and
+  Tailwind's build output keeps being served)
+
+Step 9c — updated `CLAUDE.md`, `docs/roadmap.md`, this doc.
+The "two stacks coexist" / "sassc-rails CSS compressor" /
+"Dev preview surface" reality checks dropped; a new
+"Frontend architecture (post-Phase 4)" section in CLAUDE.md
+captures the current state.
+
+**Known follow-ups, not blocking:**
+
 - **Date display audit.** `ApplicationController#format_time`
   uses `I18n.l ..., format: :short`, which by default drops the
   year. That's fine for recent rows but ambiguous on submissions
@@ -1252,6 +1274,15 @@ same headline rhythm.
   the year when the timestamp is more than ~6–12 months in the
   past, or (b) add a tooltip with the full timestamp on hover.
   Decide once, apply everywhere — don't fix it per-page.
+- **`TestInstance.query` rot.** Search backend is partially
+  broken since the SVN→git transition (see the inline warning
+  on `test_instances#search` + the related note above). Most
+  fields still work; `version:` and a few others silently fall
+  through. Rewrite SearchOption against current columns/models.
+- **`.mesa-modern` scope on the Tailwind layer.** The CSS rules
+  are all scoped under `.mesa-modern` on `<body>`, a relic of
+  the dual-stack era. Harmless but no longer load-bearing; could
+  be flattened in a small follow-up.
 
 ## Pages without designs ("wing it" policy)
 

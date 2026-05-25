@@ -148,56 +148,34 @@ Suite grew from 78 to 158 specs over this phase.
 
 ## Phase 4 — Frontend modernization
 
-**Branch:** `frontend-tailwind` (active)
-**Status:** in progress — Steps 0–7 complete + Step 8's first wing-it page
-(`test_cases#show`, with History / Trend / Submissions tabs over a shared
-anchor+window toolbar). Step 8 remaining: `computers#*`, `test_instances#*`,
-admin pages.
-**Estimate:** 4–8 days (incremental, page by page; less now that
-CoffeeScript was pulled forward to Phase 1.5)
+**Branch:** `frontend-tailwind`
+**Status:** complete
 
-See [`docs/frontend-modernization.md`](frontend-modernization.md) for
-the full plan, and
+Replaced the entire legacy frontend stack (Bootstrap 4, jQuery,
+Sprockets-driven JS, Turbolinks, custom SCSS, font-awesome,
+bootstrap_form, high_voltage) with Tailwind v4 + Turbo +
+Stimulus + Importmap. Every user-facing HTML page now renders
+through `app/views/layouts/modern.html.haml`; there is no
+legacy layout, no second JS pipeline, and no Bootstrap.
+
+See [`docs/frontend-modernization.md`](frontend-modernization.md)
+for the step-by-step record of how each page was migrated, and
 [`docs/design_handoff_mesa_testhub/`](design_handoff_mesa_testhub/)
-for the visual reference (commits list, commit detail, test-on-commit
-prototyped at high fidelity; other pages get "winged" using the same
-tokens and components).
+for the visual reference that drove the design decisions.
+CLAUDE.md's "Frontend architecture" section captures the
+current state and the design primitives an agent needs.
 
-Goal: drop the rest of the legacy frontend stack in favor of a modern one.
+**Known follow-up — not blocking Phase 5:**
 
-**Out:**
-- Bootstrap 4 → Tailwind CSS
-- jQuery → vanilla JS (and/or Stimulus, see below)
-- Turbolinks → Turbo
-- Sprockets-driven JS bundling → importmap-rails or jsbundling-rails
-- `uglifier`, `sassc-rails`, `jquery-rails`, `bootstrap`, `bootstrap_form`
-
-**On jQuery specifically:** the only reason it's still here is that
-Bootstrap 4 requires it (`.collapse('show')`, `.tooltip()`). Once Bootstrap
-leaves, the converted JS in `app/assets/javascripts/*.js` uses jQuery only
-for trivial DOM/event/AJAX patterns that map 1:1 to modern native APIs
-(`querySelectorAll`, `addEventListener`, `classList`, `fetch`,
-`dataset`, etc.). No jQuery-specific plugins (Select2, DataTables, etc.)
-are in use, so the cutover is mechanical.
-
-**Recommended JS approach for this phase:** since Rails 8 is the Phase 2
-target and Hotwire is the Rails 8 default, lean on **Stimulus + Turbo**
-rather than ad-hoc vanilla JS. Stimulus organizes per-page behavior
-declaratively (`data-controller="commits"`,
-`data-action="click->commits#togglePassing"`) which maps cleanly onto
-the existing module structure (`TogglePassing`, `NearbyCommits`, etc. in
-`commits.js`). Pure vanilla is also fine if Stimulus feels like
-overkill; for this codebase's complexity either works.
-
-**In:**
-- Tailwind via `tailwindcss-rails` or standalone CLI
-- Native JS modules (no transpilation needed for modern browsers)
-- Turbo for SPA-like interactions
-- Importmap-rails for ES module loading
-
-Best done page-by-page rather than as a single big-bang. The auth flow and
-404 page are good first candidates; the commits index and show pages are
-the most complex.
+- `TestInstance.query` (the backend for `test_instances#search`
+  and its JSON API counterpart) is partially rotted since the
+  SVN→git transition. Some fields still work (`test_case:`,
+  `user:`, `commit:`, `computer:`, `passed:`); ones tied to the
+  dropped `mesa_version` column / retired `Version` model
+  (notably `version:`) silently fall through. The search page
+  carries a `border-warning` notice so users see the state.
+  Repairing the query layer is a small, contained task — flagged
+  for whenever someone gets to it.
 
 ## Ongoing — email migration
 
@@ -261,6 +239,22 @@ conversion. Captured here so they don't get lost.
 
 ## Done
 
+- **Frontend modernization** (Phase 4). Multi-session work on the
+  `frontend-tailwind` branch. Replaced Bootstrap + jQuery +
+  Sprockets-driven JS + Turbolinks + custom SCSS with
+  Tailwind v4 + Turbo + Stimulus + Importmap, page by page,
+  then ripped out the entire legacy stack in Step 9b. Added the
+  shared `_field` / `_form_errors` form primitives, a Kaminari
+  `modern` paginator theme, and a curated SVG icon set in
+  `CommitsHelper#mesa_icon`. Drive-by fixes that landed during
+  the phase: user-deletion cascade was finally wired up
+  (`User has_many :computers, dependent: :destroy` + FK with
+  `ON DELETE CASCADE`); the broken `Computer.platforms`
+  reference was replaced with a `Computer::PLATFORMS` constant;
+  the dead `computers#test_instances_index` page (and the dead
+  `users/computers_index.html.haml` template, and the dead
+  `submissions#show` HTML view) were deleted. Suite grew from
+  158 to 263 specs.
 - **GitHub sync overhaul** (Phase 3.5). Topology-driven sync built on
   a new `commit_relations` join table. Webhook → `BranchSyncJob`
   consumes the payload, calls `api.compare(before, after)` once,
