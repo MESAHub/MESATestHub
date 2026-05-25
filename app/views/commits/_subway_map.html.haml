@@ -52,7 +52,12 @@
 - min_shift = -(track_w - window_w)
 - initial_shift = (@map_initial_view == :oldest) ? min_shift : max_shift
 
-.rounded-lg.border.border-border.bg-bg-elev.p-4{ style: "box-shadow: var(--shadow-card-sm);" }
+-# The map's pan controller relies on fixed pixel widths
+-# (window_w grows with visible_count). At 13 visible commits
+-# the natural width is ~908px, which won't fit below the lg
+-# breakpoint. Hide it on narrow viewports — the table below
+-# carries the same data with more detail.
+.hidden.lg:block.rounded-lg.border.border-border.bg-bg-elev.p-4{ style: "box-shadow: var(--shadow-card-sm);" }
   .flex.items-center.justify-between.font-semibold.uppercase.tracking-wide.text-fg-subtle.mb-3{ class: "text-[11px]" }
     %span Visible commits
     %span.normal-case.font-normal.text-fg-subtle.tabular-nums

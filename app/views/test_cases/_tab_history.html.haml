@@ -64,19 +64,24 @@
                     data: { instance_filter_target: "search",
                             action: "input->instance-filter#search" } }
 
-          .inline-flex.rounded-md.border.border-border.bg-bg-elev.p-0.5.gap-0.5
-            - status_specs.each do |id, label, count, dot|
-              - on = (id == "all")
-              %button{ type: "button",
-                       "aria-pressed": on.to_s,
-                       class: "inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs font-medium cursor-pointer transition-colors #{on ? 'bg-brand-soft text-brand-soft-text' : 'text-fg-muted hover:bg-bg-muted'}",
-                       data: { instance_filter_target: "statusChip",
-                               status: id,
-                               action: "click->instance-filter#selectStatus" } }
-                - if dot
-                  %span{ class: "inline-block h-1.5 w-1.5 rounded-full #{dot}" }
-                %span= label
-                %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= count
+          -# Status segment. Six buttons in a single row don't fit a
+          -# 375px viewport (~487px natural width), so the segment
+          -# wraps in a horizontally-scrollable container that hugs
+          -# its own content on wider screens.
+          .max-w-full.overflow-x-auto
+            .inline-flex.rounded-md.border.border-border.bg-bg-elev.p-0.5.gap-0.5{ class: "flex-nowrap" }
+              - status_specs.each do |id, label, count, dot|
+                - on = (id == "all")
+                %button{ type: "button",
+                         "aria-pressed": on.to_s,
+                         class: "inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs font-medium cursor-pointer transition-colors whitespace-nowrap #{on ? 'bg-brand-soft text-brand-soft-text' : 'text-fg-muted hover:bg-bg-muted'}",
+                         data: { instance_filter_target: "statusChip",
+                                 status: id,
+                                 action: "click->instance-filter#selectStatus" } }
+                  - if dot
+                    %span{ class: "inline-block h-1.5 w-1.5 rounded-full #{dot}" }
+                  %span= label
+                  %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= count
 
         -# Matrix body.
         %div{ style: "overflow-x: auto;" }
