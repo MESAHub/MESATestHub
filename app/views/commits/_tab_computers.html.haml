@@ -8,9 +8,13 @@
 -# Column count auto-fills from viewport width so words like
 -# "CHECKSUM" never bleed past a card edge. The 5-mini-stat grid
 -# inside each card needs ~5 × 78px = 390px just for the labels +
--# numbers, plus 28px of card padding. 420px is the minimum that
--# fits without text overflow; below that we drop to one column.
-.grid.gap-3{ style: "grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));" }
+-# numbers, plus 28px of card padding. 420px is the comfortable
+-# minimum on desktop; below that we drop to a single column that
+-# can be narrower than 420px without overflowing the viewport.
+-# The `min(420px, 100%)` trick lets the track shrink past 420px
+-# on narrow viewports while still treating 420px as the target
+-# wrap point on wider ones.
+.grid.gap-3{ style: "grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));" }
   - @per_computer.each do |row|
     - computer = row[:computer]
     - accent = computer_state_color(row[:state])
@@ -44,7 +48,11 @@
           = sdk_label
 
       - if row[:built]
-        .grid.grid-cols-5.gap-2
+        -# 5-stat grid. Below sm, a single full-width card on a 375px
+        -# viewport leaves ~50px per column, which clips "CHECKSUM" on
+        -# its label row. Switch to a 3+2 layout there; from sm up,
+        -# cards are wide enough (>=420px) for the full row.
+        .grid.grid-cols-3.gap-2{ class: "sm:grid-cols-5" }
           - %i[pass fail pending fpe checksum].each do |key|
             .rounded-md.bg-bg-subtle.px-2.py-1.text-center
               %div.text-fg-subtle.uppercase.tracking-wide{ class: "text-[10px]" }= key.to_s.upcase
