@@ -24,9 +24,17 @@ Rails.application.routes.draw do
   get 'submissions/request_commit.json', to: 'submissions#request_commit'
   resources :submissions, only: [:create, :show], defaults: { formats: :json }
 
-  # view one submission from a computer
-  get '/computers/:computer/submissions/:id', to: 'submissions#show',
-    as: 'computer_submission'
+  # JSON-only view of one submission from a computer. Used by the
+  # test client: SubmissionsController#create echoes this URL
+  # (with `.json`) back in the create response, and the client
+  # polls it to read the submission state. The HTML view was
+  # deleted alongside the Phase 4 frontend modernization — the
+  # data is reachable through the modern computers#show
+  # submissions table instead.
+  get '/computers/:computer/submissions/:id.json',
+      to: 'submissions#show',
+      as: 'computer_submission',
+      defaults: { format: :json }
 
   # Phase 4 modern-layout preview surface. Must mount BEFORE the
   # `/:branch/commits` catch-all below, otherwise the path constraint

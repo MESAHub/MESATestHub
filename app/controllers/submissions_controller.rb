@@ -193,22 +193,10 @@ class SubmissionsController < ApplicationController
   end
 
   def succeed
-    respond_to do |format|
-      format.html do
-        redirect_to computer_submission_url(computer: @computer.name,
-                                            id: @submission.id),
-                    notice: 'Submission was successfully created.'
-      end
-      format.json do
-
-        render :show, status: :created,
-               location: computer_submission_url(
-                 computer: @computer.name, id: @submission.id
-               )
-      end
-    end
-
-    # render :show, status: :created, location: submission_path(@submission), format: :json
+    render :show, status: :created,
+           location: computer_submission_url(
+             computer: @computer.name, id: @submission.id, format: :json
+           )
   end
 
   def authenticate_submission
