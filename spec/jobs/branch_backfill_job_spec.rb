@@ -8,11 +8,12 @@ RSpec.describe BranchBackfillJob, type: :job do
   # `[:foo]` lookup identically. Need the full nested shape because
   # ingest_payload_commits passes it through hash_from_github.
   def fake_commit(sha:, parent_shas: [])
+    time = Time.zone.parse('2026-01-01T12:00:00Z')
     {
       sha: sha,
       commit: {
-        author: { name: 'Bot', email: 'bot@example.com',
-                  date: Time.zone.parse('2026-01-01T12:00:00Z') },
+        author:    { name: 'Bot', email: 'bot@example.com', date: time },
+        committer: { name: 'Bot', email: 'bot@example.com', date: time },
         message: "msg #{sha[0, 7]}"
       },
       html_url: "https://github.com/MESAHub/mesa/commit/#{sha}",

@@ -19,11 +19,12 @@ RSpec.describe BranchSyncJob, type: :job do
 
   # Shape commit hashes the way Octokit returns them from api.compare.
   def gh_commit(sha:, parent_shas: [])
+    time = Time.zone.parse('2026-01-01T12:00:00Z')
     {
       sha: sha,
       commit: {
-        author: { name: 'Bot', email: 'bot@example.com',
-                  date: Time.zone.parse('2026-01-01T12:00:00Z') },
+        author:    { name: 'Bot', email: 'bot@example.com', date: time },
+        committer: { name: 'Bot', email: 'bot@example.com', date: time },
         message: 'msg'
       },
       html_url: "https://github.com/MESAHub/mesa/commit/#{sha}",
