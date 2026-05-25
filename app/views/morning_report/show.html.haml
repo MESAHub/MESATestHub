@@ -1,0 +1,30 @@
+- content_for :title, "Daily digest"
+
+.space-y-4
+  -# Page-level header sits above the email card, with the
+  -# refresh-cache control and a note about caching.
+  .flex.flex-wrap.items-center.justify-between.gap-3
+    %div
+      %div.mesa-label Email preview
+      %h1.mt-1.text-fg{ class: "text-[20px] font-semibold tracking-tight" } Daily digest
+      %p.mt-1.text-fg-muted{ class: "text-[13px]" }
+        Same content + styling that goes out to mesa-developers each
+        morning at 8:00 AM US Eastern.
+        Cached for 24 hours per date — pass
+        %code.font-mono.rounded.bg-bg-muted.text-fg{ class: "px-1 py-0.5 text-[12px]" } ?refresh=1
+        to rebuild.
+
+    %div.flex.items-center.gap-2
+      = link_to morning_report_path(refresh: 1, date: @date),
+                class: "mesa-btn",
+                style: "padding: 6px 12px; font-size: 13px;" do
+        = mesa_icon(:plus, size: 12)
+        %span Rebuild
+
+  -# The actual email body. The email template's inline styles
+  -# dominate over the modern layout, so the inner content renders
+  -# the way it would in a recipient's inbox. We render it inside a
+  -# centered 600px column, mirroring the email-client viewport.
+  .rounded-lg.border.border-border.bg-bg-subtle.p-4{ style: "box-shadow: var(--shadow-card-sm);" }
+    .mx-auto{ style: "max-width: 640px;" }
+      = render template: "morning_mailer/daily"

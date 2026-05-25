@@ -1,7 +1,8 @@
-desc 'Look for tests failed in the last 24 hours and mail out a summary to '\
-     'mesa-developers.'
-task morning_mail: :environment do
-  puts 'Sending out morning e-mail...'
-  MorningMailer.morning_email_3.deliver!
-  puts 'done.'
+namespace :morning_mailer do
+  desc 'Send the daily MESA Test Hub digest to mesa-developers.'
+  task daily: :environment do
+    puts 'Sending out morning digest...'
+    MorningMailer.daily.deliver_now
+    puts 'done.'
+  end
 end

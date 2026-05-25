@@ -176,6 +176,35 @@ current state and the design primitives an agent needs.
   `commit_datetime:` fields (the latter accepts ranges like
   `2024-01-01-2024-06-30`), and removed the warning banner.
 
+## Daily digest mailer
+
+**Branch:** `feature-morning-mailer-revival`
+**Status:** complete
+
+Resurrected the daily mesa-developers digest on the commits-based
+data model. The old `morning_email_*` methods were welded to the
+dropped `Version` model and the `mesa_version` column; the new
+pipeline is a `MorningReport` PORO + a clean `MorningMailer#daily`
+action + a pretty HTML template that matches the app's light/dark
+design system. Adds:
+
+- Per-commit pass/fail/checksum/mixed roll-ups grouped by branch
+  (main first).
+- Performance anomaly detection: flags passing instances whose
+  runtime or RAM is ≥ 3σ AND ≥ 1.25× the recent
+  `(test_case, computer, run_optional, fpe_checks)` cohort
+  mean. Drill-in URLs land on `test_instances#search` with a
+  pre-populated `commit_datetime:` window.
+- An in-browser preview at `/morning_report` (24-hour
+  `Rails.cache` per date, `?refresh=1` to bust).
+- Configurable for Railway cron at 8 AM US Eastern via
+  `TZ=America/New_York` + `0 8 * * *` schedule.
+
+See [`docs/morning-mailer.md`](morning-mailer.md) for the
+architecture overview, the anomaly-detection knobs
+(`COHORT_LIMIT` / `ANOMALY_Z_THRESHOLD` / `ANOMALY_RATIO_FLOOR`),
+and the Railway cron setup.
+
 ## Ongoing — email migration
 
 **Status:** deferred, not blocking

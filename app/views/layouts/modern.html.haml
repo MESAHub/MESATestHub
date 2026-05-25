@@ -49,6 +49,7 @@
             %a.text-xs.text-fg-muted.hover:text-fg.px-3.py-1.5.rounded-md.hover:bg-bg-muted.no-underline{ href: commits_path(branch: params[:branch] || "main") } Commits
             %a.text-xs.text-fg-muted.hover:text-fg.px-3.py-1.5.rounded-md.hover:bg-bg-muted.no-underline{ href: search_instances_path } Test Instances
             %a.text-xs.text-fg-muted.hover:text-fg.px-3.py-1.5.rounded-md.hover:bg-bg-muted.no-underline{ href: user_computers_path(current_user) } My Computers
+            %a.text-xs.text-fg-muted.hover:text-fg.px-3.py-1.5.rounded-md.hover:bg-bg-muted.no-underline{ href: morning_report_path } Daily Digest
             - if admin?
               %a.text-xs.text-fg-muted.hover:text-fg.px-3.py-1.5.rounded-md.hover:bg-bg-muted.no-underline{ href: admin_path } Admin
 
@@ -77,6 +78,7 @@
               %a.block.rounded-md.px-3.py-2.text-sm.text-fg-muted.hover:bg-bg-muted.hover:text-fg.no-underline{ href: commits_path(branch: params[:branch] || "main") } Commits
               %a.block.rounded-md.px-3.py-2.text-sm.text-fg-muted.hover:bg-bg-muted.hover:text-fg.no-underline{ href: search_instances_path } Test Instances
               %a.block.rounded-md.px-3.py-2.text-sm.text-fg-muted.hover:bg-bg-muted.hover:text-fg.no-underline{ href: user_computers_path(current_user) } My Computers
+              %a.block.rounded-md.px-3.py-2.text-sm.text-fg-muted.hover:bg-bg-muted.hover:text-fg.no-underline{ href: morning_report_path } Daily Digest
               - if admin?
                 %a.block.rounded-md.px-3.py-2.text-sm.text-fg-muted.hover:bg-bg-muted.hover:text-fg.no-underline{ href: admin_path } Admin
           .mt-3.flex.flex-col.gap-2.border-t.border-border-subtle.pt-3
