@@ -9,9 +9,13 @@
 class MorningMailer < ApplicationMailer
   layout 'morning_mailer'
 
-  default_url_options[:host] = ENV.fetch('MAILER_HOST',
-    Rails.env.production? ? 'mesatesthub-production.up.railway.app' \
-                          : 'localhost:3000')
+  # Hardcoded — `testhub.mesastar.org` is the long-term canonical
+  # URL regardless of which provider hosts the app. If we ever move
+  # off Railway, the DNS record moves with the URL and these links
+  # keep resolving. Update here only if the canonical hostname
+  # itself changes.
+  default_url_options[:host] =
+    Rails.env.production? ? 'testhub.mesastar.org' : 'localhost:3000'
   default_url_options[:protocol] = Rails.env.production? ? 'https' : 'http'
 
   # mesa-developers list + the Slack inbound-mail address that pipes the
