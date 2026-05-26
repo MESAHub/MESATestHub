@@ -788,6 +788,12 @@ class TestInstance < ApplicationRecord
   # here; the default makes the method callable from paths that
   # don't pass anything (which broke the JSON search endpoint as
   # soon as it had to serialize a non-empty result set).
+  #
+  # Runtime is exposed as `runtime_minutes` to match the only
+  # column the ingest pipeline actually writes; the previous
+  # `rn_runtime` / `re_runtime` / `runtime` keys all read
+  # unpopulated schema columns and were always nil regardless of
+  # how long the test took. See CLAUDE.md's runtime reality-check.
   def as_json(options = nil)
     {
       test_case: test_case.name,
@@ -800,9 +806,7 @@ class TestInstance < ApplicationRecord
       datetime: created_at,
       platform: computer.platform,
       platform_version: platform_version,
-      rn_runtime: rn_time,
-      re_runtime: re_time,
-      runtime: total_runtime_seconds,
+      runtime_minutes: runtime_minutes,
       mem_rn: rn_mem_GB,
       mem_re: re_mem_GB,
       threads: omp_num_threads,

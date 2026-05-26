@@ -80,6 +80,26 @@ RSpec.describe 'GET /test_instances/search.json', type: :request do
     expect(body['results'].size).to eq(1)
   end
 
+  it 'serializes runtime as runtime_minutes (the only populated runtime column)' do
+    # Set the runtime on the existing main_instance so the assertion
+    # has something to read back. `update_columns` skips the build
+    # callback that would zero `runtime_minutes` from the inlists.
+    main_instance.update_columns(runtime_minutes: 12.5)
+
+    get '/test_instances/search.json', params: { query_text: 'branch: main' }
+    body = JSON.parse(response.body)
+    result = body['results'].first
+
+    expect(result).to have_key('runtime_minutes')
+    expect(result['runtime_minutes']).to eq(12.5)
+    # Confirm the old dead keys are gone — they always returned null
+    # because `runtime_seconds` / `re_time` / `total_runtime_seconds`
+    # are unpopulated columns.
+    expect(result).not_to have_key('rn_runtime')
+    expect(result).not_to have_key('re_runtime')
+    expect(result).not_to have_key('runtime')
+  end
+
   describe 'GET /test_instances/search_count.json' do
     it 'returns the count for a branch query' do
       get '/test_instances/search_count.json',
