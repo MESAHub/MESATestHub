@@ -114,11 +114,13 @@ with the `TZ` env var rather than encoding the offset.
 On the cron service:
 
 1. **Variables** → set everything in the table above.
-2. **Settings** → **Cron Schedule** → fill in:
-   ```
-   Cron Schedule:  0 8 * * *
-   Cron Command:   bundle exec rake morning_mailer:daily
-   ```
+2. **Settings** → set the two fields:
+   - **Cron Schedule**: `0 8 * * *`
+   - **Custom Start Command**: `bundle exec rake morning_mailer:daily`
+
+   When a Cron Schedule is set, Railway runs the service as a
+   one-shot job and uses Custom Start Command as the command for
+   each invocation.
 3. Combined with `TZ=America/New_York` from the variables, Railway
    evaluates `0 8 * * *` as 8 AM Eastern and the schedule tracks
    DST automatically.
