@@ -98,14 +98,24 @@ class MorningReport
     end
   end
 
-  # Per-commit roll-up.  `status` mirrors `Commit#status`:
+  # Per-commit roll-up.
+  #
+  # `status` mirrors `Commit#status` (the test rollup):
   #   -1 = untested / rollup not finalized (CI run in progress)
-  #    0 = passing
-  #    1 = failing
-  #    2 = checksums
-  #    3 = mixed
+  #    0 = passing, 1 = failing, 2 = checksums, 3 = mixed
+  #
+  # `build_status` mirrors `Commit#compilation_status` (compile rollup):
+  #   -1 = no compile status reported
+  #    0 = compiles everywhere, 1 = fails everywhere, 2 = mixed
+  #
+  # `computer_count` is the count of distinct (computer × spec)
+  # submissions on this commit.  `complete_computer_count` is how
+  # many of those actually ran all test cases.  Drive-by submitters
+  # that ran 1/106 tests still bump `computer_count` but not
+  # `complete_computer_count`, so the digest reports both.
   CommitSummary = Struct.new(
-    :commit, :status, :tested_count, :computer_count,
+    :commit, :status, :build_status, :tested_count,
+    :computer_count, :complete_computer_count,
     :failing_tccs, :checksum_tccs, :mixed_tccs, :passing_count,
     keyword_init: true
   ) do
@@ -119,8 +129,18 @@ class MorningReport
       end
     end
 
+    def build_label
+      case build_status
+      when 0 then :build_ok
+      when 1 then :build_fail
+      when 2 then :build_mixed
+      else :build_none
+      end
+    end
+
     def failing?
-      status_label == :failing || status_label == :mixed
+      status_label == :failing || status_label == :mixed ||
+        build_label == :build_fail || build_label == :build_mixed
     end
 
     def problem_tccs
@@ -233,9 +253,11 @@ class MorningReport
     CommitSummary.new(
       commit: commit,
       status: commit.status,
+      build_status: commit.compilation_status,
       tested_count: commit.passed_count.to_i + commit.failed_count.to_i +
                     commit.mixed_count.to_i + commit.checksum_count.to_i,
       computer_count: commit.computer_count.to_i,
+      complete_computer_count: commit.complete_computer_count.to_i,
       passing_count: commit.passed_count.to_i,
       failing_tccs: tccs.select { |t| t.status == 1 },
       checksum_tccs: tccs.select { |t| t.status == 2 },
