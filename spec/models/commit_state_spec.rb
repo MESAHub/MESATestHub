@@ -99,6 +99,23 @@ RSpec.describe 'commit state aggregation' do
       submit(computer: frontera, compiled: true)
       expect(commit.reload.build_status).to eq(:all_ok)
     end
+
+    it 'treats a singleton submission with no compile flag as built when it carries a test instance' do
+      # Test-by-test clients submit each result on its own with no
+      # `entire`/`empty` flag, so the submissions controller leaves
+      # `compiled` nil. The presence of a test instance implies the
+      # build succeeded.
+      submit(computer: rusty, compiled: nil)
+      instance(test_case: test_case_a, computer: rusty, passed: true)
+      expect(commit.reload.build_status).to eq(:all_ok)
+    end
+
+    it 'still returns :unknown for a compile-less submission with no test instances' do
+      # An empty singleton submission carries no signal at all — don't
+      # invent a build status for it.
+      submit(computer: rusty, compiled: nil)
+      expect(commit.reload.build_status).to eq(:unknown)
+    end
   end
 
   describe '#tests_status' do
@@ -311,6 +328,20 @@ RSpec.describe 'commit state aggregation' do
       expect(row[:counts][:pass]).to eq(1)
       expect(row[:counts][:fail]).to eq(1)
       expect(row[:counts][:fpe]).to eq(1)
+    end
+
+    it 'includes computers whose only submissions carry no compile flag but have results' do
+      # Regression: singleton submissions (compiled=nil) used to drop
+      # the computer out of the per-computer summary entirely, which
+      # hid the matrix column even though the test_instances were
+      # safely in the database.
+      submit(computer: popeye, compiled: nil)
+      instance(test_case: test_case_a, computer: popeye, passed: true)
+
+      row = commit.reload.per_computer_summary.find { |r| r[:computer].name == 'popeye' }
+      expect(row).not_to be_nil
+      expect(row[:state]).to eq(:all_pass)
+      expect(row[:counts][:pass]).to eq(1)
     end
   end
 

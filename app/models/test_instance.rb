@@ -502,7 +502,7 @@ class TestInstance < ApplicationRecord
     end
 
     res = res.where.not(commit_id: nil)
-    return [res.includes(:test_case, :test_case_commit, :commit, computer: :user).
+    return [res.includes(:test_case, :test_case_commit, computer: :user, commit: :branches).
       order('commits.commit_time DESC, test_instances.created_at DESC'), failed_requirements]
   end
 
