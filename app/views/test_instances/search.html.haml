@@ -64,6 +64,12 @@
             Comma-separate values for OR, or use a dash for ranges:
           %p.mt-2
             %code.font-mono.text-fg{ class: "rounded-md bg-bg-muted px-2 py-0.5 text-[12px]" } commit_datetime: 2024-01-01-2024-06-30; test_case: wd2, 1M_thermohaline
+          %p.mt-3.text-fg-muted
+            Want failing tests on
+            %code.font-mono.text-fg{ class: "rounded-md bg-bg-muted px-1.5 py-0.5 text-[11px]" } main
+            from a specific computer in the last few days? Combine
+            %code.font-mono.text-fg{ class: "rounded-md bg-bg-muted px-1.5 py-0.5 text-[11px]" } branch:
+            with the existing filters.
 
       -# Available fields, two columns.
       %div
@@ -71,7 +77,8 @@
         .grid.gap-x-8.gap-y-1{ class: "grid-cols-1 md:grid-cols-2 text-[13px]" }
           %dl.space-y-2
             = render "field_row", field: "test_case", desc: "Name of a valid test case."
-            = render "field_row", field: "commit", desc: "Short SHA of a commit (first 7+ characters)."
+            = render "field_row", field: "commit", desc: "Commit SHA — paste the short (7-char) or full 40-char hash. Case-insensitive."
+            = render "field_row", field: "branch", desc: "Branch name (exact). Limits to instances whose commit lives on the named branch. Comma-separate for OR."
             = render "field_row", field: "commit_datetime", desc: "Commit datetime — YYYY-MM-DD. Range supported (e.g. 2024-01-01-2024-06-30)."
             = render "field_row", field: "passed", desc: %q{"t" / "true" / "f" / "false" — match passing or failing instances.}
             = render "field_row", field: "computer", desc: "Name of a computer."

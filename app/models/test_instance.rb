@@ -402,8 +402,12 @@ class TestInstance < ApplicationRecord
     # building up the search query from many pre-defined searchable options.
     options = [
       SearchOption.new('test_case', TestCase, :name),
+      # Match on short_sha (7 hex chars). Truncate the user input to
+      # the first 7 chars so a pasted full 40-char SHA still resolves,
+      # and downcase so an uppercase paste from a terminal still hits
+      # the lowercase column.
       SearchOption.new('commit', Commit, :short_sha) do |sha|
-        sha[(0..7)]
+        sha.to_s.downcase.strip[0, 7]
       end,
       SearchOption.new('commit_datetime', Commit, :commit_time, true) do |datetime|
         Date.parse(datetime)
@@ -477,6 +481,15 @@ class TestInstance < ApplicationRecord
     #   query_hash[m1[:key]] = m1[:value]
     # end
     query_hash = split_query(query_text)
+
+    # `branch:` lives outside the SearchOption mechanism because
+    # branches relate to test instances transitively through commits
+    # and BranchMembership — there's no `branch_id` on TestInstance
+    # that the generic SearchOption.query_piece can target. Pop it
+    # out *before* the unknown-key check so it isn't flagged as
+    # unrecognized, and apply the filter after the SearchOption loop.
+    branch_value = query_hash.delete('branch')
+
     query_hash.keys.each do |key|
       unless option_names.include?(key)
         failed_requirements << key
@@ -498,6 +511,26 @@ class TestInstance < ApplicationRecord
         # commonly a malformed date/datetime). Treat it like an unknown
         # key — drop it from the query and report it back to the view.
         failed_requirements << "#{key} (#{value.inspect})"
+      end
+    end
+
+    # Apply `branch:` here so it composes with whatever the
+    # SearchOption loop produced. Comma-separated branch names mean
+    # OR. Branch names that don't resolve to a Branch row get
+    # reported back so the form can warn the user; if NONE of the
+    # requested branches exist, scope the result set to none rather
+    # than silently dropping the filter and showing every instance.
+    if branch_value
+      branch_names = branch_value.split(',').map(&:strip).reject(&:empty?)
+      branches     = Branch.where(name: branch_names)
+      unknown      = branch_names - branches.pluck(:name)
+      failed_requirements << "branch (#{unknown.join(', ')})" if unknown.any?
+      if branches.any?
+        commit_ids = BranchMembership.where(branch_id: branches.select(:id))
+                                     .distinct.pluck(:commit_id)
+        res = res.where(commit_id: commit_ids)
+      else
+        res = res.none
       end
     end
 
