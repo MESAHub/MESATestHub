@@ -427,20 +427,14 @@ class TestInstance < ApplicationRecord
       SearchOption.new('re_RAM', self, :mem_re, true) do |mem_GB|
         mem_GB.to_f * (1024**2)
       end,
-      # Runtime SearchOptions all share parse_runtime — accepts integer
-      # seconds or natural phrasings like "1 hr 30 min". The columns are
-      # `runtime_seconds` (rn step), `re_time` (re step), and
-      # `total_runtime_seconds` (whole test). There is no
-      # total_runtime_minutes column — relying on the like-named instance
-      # method would break inside a where clause.
-      SearchOption.new('rn_runtime', self, :runtime_seconds, true) do |runtime_str|
-        TestInstance.parse_runtime(runtime_str)
-      end,
-      SearchOption.new('re_runtime', self, :re_time, true) do |runtime_str|
-        TestInstance.parse_runtime(runtime_str)
-      end,
-      SearchOption.new('runtime', self, :total_runtime_seconds, true) do |runtime_str|
-        TestInstance.parse_runtime(runtime_str)
+      # `runtime` queries `runtime_minutes`, the one runtime column the
+      # ingest pipeline actually populates (summed from instance_inlists
+      # in `build_instance`). `runtime_seconds`, `re_time`, and
+      # `total_runtime_seconds` exist in the schema from a long-ago
+      # refactor but are never written. `parse_runtime` returns seconds
+      # — convert to minutes for the column.
+      SearchOption.new('runtime', self, :runtime_minutes, true) do |runtime_str|
+        TestInstance.parse_runtime(runtime_str) / 60.0
       end,
       SearchOption.new('date', self, :created_at, true) do |datestring|
         Date.parse(datestring)
