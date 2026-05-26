@@ -8,19 +8,33 @@ module MorningMailerHelper
   # mailer layout's dark-mode @media rules; the inline style is the
   # always-on light-mode look.
   STATUS_STYLES = {
-    passing:   { label: 'Passing',   klass: 'mesa-badge-success',
+    passing:   { label: 'Tests: Pass',      klass: 'mesa-badge-success',
                  style: 'background:#d8f5df; color:#0a5825;' },
-    failing:   { label: 'Failing',   klass: 'mesa-badge-danger',
+    failing:   { label: 'Tests: Fail',      klass: 'mesa-badge-danger',
                  style: 'background:#ffe4e6; color:#a40e26;' },
-    checksums: { label: 'Checksums', klass: 'mesa-badge-warning',
+    checksums: { label: 'Tests: Checksums', klass: 'mesa-badge-warning',
                  style: 'background:#fef6cf; color:#6b4900;' },
-    mixed:     { label: 'Mixed',     klass: 'mesa-badge-mixed',
+    mixed:     { label: 'Tests: Mixed',     klass: 'mesa-badge-mixed',
                  style: 'background:#fef6cf; color:#6b4900;' },
     # `:untested` is `Commit#status = -1` — the rollup hasn't
     # finalized (CI run in progress, or no rollup row yet). Renders
     # in neutral gray so it doesn't masquerade as Passing.
-    untested:  { label: 'Untested',  klass: 'mesa-badge-skipped',
+    untested:  { label: 'Tests: Pending',   klass: 'mesa-badge-skipped',
                  style: 'background:#eceef2; color:#57606a;' }
+  }.freeze
+
+  # Separate from STATUS_STYLES so a "no compile status reported"
+  # commit can suppress the badge entirely without affecting the
+  # tests-status fallback.
+  BUILD_STYLES = {
+    build_ok:    { label: 'Build: OK',    klass: 'mesa-badge-success',
+                   style: 'background:#d8f5df; color:#0a5825;' },
+    build_fail:  { label: 'Build: Fail',  klass: 'mesa-badge-danger',
+                   style: 'background:#ffe4e6; color:#a40e26;' },
+    build_mixed: { label: 'Build: Mixed', klass: 'mesa-badge-mixed',
+                   style: 'background:#fef6cf; color:#6b4900;' }
+    # :build_none intentionally absent — render nothing rather than
+    # a confusing placeholder when no compilation status came in.
   }.freeze
 
   # Falls back to the untested style for any unexpected label rather
@@ -28,6 +42,32 @@ module MorningMailerHelper
   # masked status=-1 commits as green.
   def mailer_status_badge(label)
     style = STATUS_STYLES[label] || STATUS_STYLES[:untested]
+    badge_pill(text: style[:label], klass: style[:klass], style: style[:style])
+  end
+
+  # Returns build-status badge HTML, or an empty (safe) string when no
+  # build status is available so the layout collapses gracefully.
+  def mailer_build_badge(label)
+    style = BUILD_STYLES[label]
+    return ''.html_safe unless style
+
+    badge_pill(text: style[:label], klass: style[:klass], style: style[:style])
+  end
+
+  # Short-form badges for the inline per-test-case-commit lists
+  # (rendered next to a test-case name, where the "Tests:" prefix
+  # used by the commit-level status badge is redundant).
+  TCC_STATUS_STYLES = {
+    failing:   { label: 'Fail',      klass: 'mesa-badge-danger',
+                 style: 'background:#ffe4e6; color:#a40e26;' },
+    checksums: { label: 'Checksums', klass: 'mesa-badge-warning',
+                 style: 'background:#fef6cf; color:#6b4900;' },
+    mixed:     { label: 'Mixed',     klass: 'mesa-badge-mixed',
+                 style: 'background:#fef6cf; color:#6b4900;' }
+  }.freeze
+
+  def mailer_tcc_badge(label)
+    style = TCC_STATUS_STYLES[label] || TCC_STATUS_STYLES[:failing]
     badge_pill(text: style[:label], klass: style[:klass], style: style[:style])
   end
 

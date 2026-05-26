@@ -176,10 +176,14 @@
                           %span{ style: "padding:0 6px; color:#8b949e;" } ·
                           = cs.commit.author
                           %span{ style: "padding:0 6px; color:#8b949e;" } ·
-                          = pluralize(cs.tested_count, 'test')
-                          on
-                          = pluralize(cs.computer_count, 'computer')
+                          - if cs.complete_computer_count == cs.computer_count
+                            #{pluralize(cs.tested_count, 'test')} on #{pluralize(cs.computer_count, 'computer')}
+                          - else
+                            #{pluralize(cs.tested_count, 'test')} · #{cs.complete_computer_count} of #{cs.computer_count} computers complete
                       %td{ valign: "top", align: "right", style: "white-space:nowrap;" }
+                        - if cs.build_label != :build_none
+                          %div{ style: "margin-bottom:4px;" }
+                            = mailer_build_badge(cs.build_label)
                         = mailer_status_badge(cs.status_label)
 
                   - if cs.problem_tccs.any?
@@ -190,8 +194,8 @@
                             - when 1 then :failing
                             - when 2 then :checksums
                             - when 3 then :mixed
-                            - else :passing
-                          = mailer_status_badge(tcc_status_key)
+                            - else :failing
+                          = mailer_tcc_badge(tcc_status_key)
                           %span{ style: "padding-left:8px;" }
                             = link_to tcc.test_case.name, mailer_test_case_commit_url(section.link_branch_name, tcc, cs.commit), class: "mesa-link mesa-fg", style: "color:#1f2328; text-decoration:none; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;"
                       - if cs.problem_tccs.size > 8

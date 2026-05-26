@@ -115,24 +115,40 @@ RSpec.describe MorningReport, type: :model do
     end
   end
 
-  describe 'CommitSummary#status_label' do
+  describe 'CommitSummary' do
     let(:commit) { create(:commit) }
 
-    it 'returns :untested (not :unknown / :passing) for status = -1' do
-      summary = described_class::CommitSummary.new(
-        commit: commit, status: -1, tested_count: 5, computer_count: 1,
+    def summary(overrides = {})
+      described_class::CommitSummary.new({
+        commit: commit, status: 0, build_status: 0, tested_count: 5,
+        computer_count: 1, complete_computer_count: 1,
         failing_tccs: [], checksum_tccs: [], mixed_tccs: [], passing_count: 5
-      )
-      expect(summary.status_label).to eq(:untested)
-      expect(summary.failing?).to be(false)
+      }.merge(overrides))
+    end
+
+    it 'returns :untested (not :unknown / :passing) for status = -1' do
+      s = summary(status: -1)
+      expect(s.status_label).to eq(:untested)
+      expect(s.failing?).to be(false)
     end
 
     it 'returns :passing for status = 0' do
-      summary = described_class::CommitSummary.new(
-        commit: commit, status: 0, tested_count: 5, computer_count: 1,
-        failing_tccs: [], checksum_tccs: [], mixed_tccs: [], passing_count: 5
-      )
       expect(summary.status_label).to eq(:passing)
+    end
+
+    it 'maps build_status to a :build_ok / :build_fail / :build_mixed / :build_none label' do
+      expect(summary(build_status: 0).build_label).to eq(:build_ok)
+      expect(summary(build_status: 1).build_label).to eq(:build_fail)
+      expect(summary(build_status: 2).build_label).to eq(:build_mixed)
+      expect(summary(build_status: -1).build_label).to eq(:build_none)
+    end
+
+    it 'flags failing? on build failure even when tests are still pending' do
+      expect(summary(status: -1, build_status: 1).failing?).to be(true)
+    end
+
+    it 'flags failing? on mixed build status' do
+      expect(summary(status: 0, build_status: 2).failing?).to be(true)
     end
   end
 
