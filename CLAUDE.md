@@ -235,16 +235,21 @@ helper or partial exists.
 ### Database
 - `bundle exec rails db:migrate`
 - `bundle exec rails db:reset` — drop, create, migrate, seed
-- To re-pull prod data:
-  ```
-  heroku pg:backups:capture && heroku pg:backups:download
-  pg_restore --no-acl --no-owner --clean --if-exists -d development latest.dump
-  ```
+- `bundle exec rake db:pull_prod` — sync local dev DB from Railway
+  production. Reads `DATABASE_PUBLIC_URL` from `railway variables`
+  (`-s Postgres` by default; override with `RAILWAY_DB_SERVICE`),
+  dumps via `pg_dump -Fc`, drops + recreates the local
+  `development` DB, restores, and runs migrations. Refuses to run
+  outside `RAILS_ENV=development`. Override the source URL with
+  `PROD_DATABASE_URL=...` if you don't have the Railway CLI; skip
+  the confirmation prompt with `OVERWRITE=1`. Defined in
+  [`lib/tasks/db_pull_prod.rake`](lib/tasks/db_pull_prod.rake).
   (Local Postgres is via Postgres.app at
   `/Applications/Postgres.app/Contents/Versions/17/bin/`.)
 
 ### Custom Rake tasks (in `lib/tasks/`)
-- `morning_mailer:send` — daily summary emails
+- `morning_mailer:daily` — daily mesa-developers digest
+- `db:pull_prod` — sync local dev DB from Railway production
 - `update_pulls:update` — GitHub PR data
 - `compute_delays`
 - `cleanup_orphaned_commits`
