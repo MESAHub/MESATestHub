@@ -1,6 +1,7 @@
 class TestCaseCommitsController < ApplicationController
   include TestCaseCommitsHelper
   include LogProxy
+  include BranchMismatchRedirect
 
   # Log-type whitelist + per-type display vocabulary for the
   # per-test log proxy. Keys match the `:type` route segment;
@@ -19,7 +20,22 @@ class TestCaseCommitsController < ApplicationController
 
   def show
     @selected_branch = Branch.named(params[:branch])
-    return render_404("Branch '#{params[:branch]}' not found") unless @selected_branch
+    if branch_mismatch?(@selected_branch, @commit)
+      target = @commit.preferred_branch
+      return render_404("Commit '#{@commit.short_sha}' is not on any branch") unless target
+      flash[:warning] = branch_mismatch_message(
+        requested_name: CGI.unescape(params[:branch]),
+        requested_branch: @selected_branch,
+        target: target,
+        commit: @commit
+      )
+      redirect_to(test_case_commit_path(
+        sha: @commit.short_sha,
+        branch: target.name,
+        module: @test_case.module,
+        test_case: @test_case.name
+      )) and return
+    end
 
     # Other branches that contain this commit, for the breadcrumb's
     # branch picker. Mirrors the pattern used on commits#show.

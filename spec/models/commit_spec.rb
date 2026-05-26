@@ -61,4 +61,48 @@ RSpec.describe Commit, type: :model do
       expect(commit.fine_resolution?).to be false
     end
   end
+
+  describe '#preferred_branch' do
+    it 'returns nil when the commit is on no branches' do
+      commit = create(:commit)
+      expect(commit.preferred_branch).to be_nil
+    end
+
+    it 'prefers main when the commit lives there' do
+      main = create(:branch, name: 'main')
+      feature = create(:branch, name: 'feature/x')
+      commit = create(:commit)
+      [main, feature].each { |b| BranchMembership.create!(branch: b, commit: commit) }
+
+      expect(commit.preferred_branch).to eq(main)
+    end
+
+    it 'picks the branch with the most-recent head when main is absent' do
+      old_head = create(:commit, commit_time: 10.days.ago)
+      new_head = create(:commit, commit_time: 1.day.ago)
+      old_branch = create(:branch, name: 'z-old', head: old_head)
+      new_branch = create(:branch, name: 'a-new', head: new_head)
+      BranchMembership.create!(branch: old_branch, commit: old_head)
+      BranchMembership.create!(branch: new_branch, commit: new_head)
+
+      orphan = create(:commit)
+      BranchMembership.create!(branch: old_branch, commit: orphan)
+      BranchMembership.create!(branch: new_branch, commit: orphan)
+
+      # Most-recent-head wins despite alphabetical order putting old first.
+      expect(orphan.preferred_branch).to eq(new_branch)
+    end
+
+    it 'falls back to alphabetical order when heads tie on time' do
+      shared_head = create(:commit, commit_time: 1.day.ago)
+      a_branch = create(:branch, name: 'a-branch', head: shared_head)
+      b_branch = create(:branch, name: 'b-branch', head: shared_head)
+
+      commit = create(:commit)
+      BranchMembership.create!(branch: a_branch, commit: commit)
+      BranchMembership.create!(branch: b_branch, commit: commit)
+
+      expect(commit.preferred_branch).to eq(a_branch)
+    end
+  end
 end
