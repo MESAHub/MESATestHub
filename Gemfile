@@ -30,6 +30,11 @@ gem 'faraday-http-cache'
 gem 'faraday-retry'
 gem 'github_webhook', '~> 1.4'
 
+# Email delivery via Resend's HTTPS API. Used instead of SMTP
+# because Railway (and many other cloud hosts) block outbound
+# SMTP entirely.
+gem 'resend'
+
 # Frontend stack. Tailwind for styling, Turbo + Stimulus for
 # behavior, Importmap for ES module loading without a JS build
 # step. HAML is the template engine. Sprockets-rails serves the
