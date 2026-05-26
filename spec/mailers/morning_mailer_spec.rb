@@ -7,7 +7,7 @@ RSpec.describe MorningMailer, type: :mailer do
 
       expect(mail.subject).to match(/MESA Test Hub digest — \d{4}-\d{2}-\d{2}/)
       expect(mail.to).to eq(MorningMailer::RECIPIENTS)
-      expect(mail.from).to eq(['mesa-developers@lists.mesastar.org'])
+      expect(mail.from).to eq(['digest@testhub.mesastar.org'])
       flat = mail.body.encoded.gsub(/\s+/, ' ')
       expect(flat).to include('No new test runs in the last 24 hours')
     end

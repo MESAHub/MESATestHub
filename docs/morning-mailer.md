@@ -63,31 +63,79 @@ Metrics checked: `runtime_seconds` (rn), `re_time` (re),
 Tweak the thresholds in `MorningReport` if the signal-to-noise is
 off for your use case.
 
+## Email provider — Resend
+
+SMTP wiring in [`app/mailers/application_mailer.rb`](../app/mailers/application_mailer.rb)
+is provider-agnostic: it defaults to Resend's SMTP endpoint
+(`smtp.resend.com:465`, implicit TLS, username `resend`) but every
+value is overridable via env vars.  Swapping to a different
+provider is a config change, not a code change.
+
+### Required env vars (cron service)
+
+| Var | Default | Purpose |
+|---|---|---|
+| `SMTP_PASSWORD` *or* `RESEND_API_KEY` | — | API key from Resend's dashboard. The code reads `SMTP_PASSWORD` first, then falls back to `RESEND_API_KEY`, so either name works. |
+| `SMTP_HOST` | `smtp.resend.com` | SMTP endpoint hostname. |
+| `SMTP_PORT` | `465` | Use 465 for implicit TLS (matches the `tls: true` setting), or override to 587/2587 for STARTTLS (would also need a code tweak to swap `tls:` for `enable_starttls_auto:`). |
+| `SMTP_USER` | `resend` | Resend uses the literal username `resend` for every account; only the password (API key) identifies you. |
+| `DATABASE_URL` | — | Reference the Railway Postgres service: `${{Postgres.DATABASE_URL}}`. |
+| `SECRET_KEY_BASE` | — | Required for Rails to boot. Reference the web service's: `${{MESATestHub.SECRET_KEY_BASE}}`. |
+| `GIT_TOKEN` | — | Optional but recommended — without it, the digest shows "couldn't check" for the release-blocker line. Reference the web service's: `${{MESATestHub.GIT_TOKEN}}`. |
+| `RAILS_ENV` | — | Set to `production`. |
+| `TZ` | UTC | Set to `America/New_York` so the cron schedule evaluates in Eastern Time (DST-safe). |
+
+### Domain verification in Resend
+
+Resend requires the From-address's domain to be verified before it'll
+relay mail.  We send from `digest@testhub.mesastar.org`, so:
+
+1. **Resend dashboard** → Domains → Add Domain → `testhub.mesastar.org`.
+2. Resend hands you three DNS records (SPF / DKIM / DMARC) to add at
+   your DNS host.  These are TXT records on `testhub.mesastar.org`
+   itself plus its `resend._domainkey.` subdomain — they don't
+   conflict with the existing A record pointing at the app host.
+3. Add the records, click **Verify** in Resend.  Propagation is
+   usually under 5 minutes.
+
+The visible From in subscribers' inboxes will be
+`digest@testhub.mesastar.org`; the `mesa-developers@lists.mesastar.org`
+list address stays in the To header so threading / archival behavior
+is unchanged.
+
 ## Scheduling — 8 AM US Eastern
 
 The intended cadence is **8:00 AM US Eastern Time** every day.
 Daylight Saving makes that a moving UTC target, so configure cron
-with the `TZ` env var rather than encoding the offset:
+with the `TZ` env var rather than encoding the offset.
 
-### Railway
+### Railway cron trigger
 
-In the Railway service settings → **Cron Triggers**:
+On the cron service:
 
-```
-Command:  bundle exec rake morning_mailer:daily
-Schedule: 0 8 * * *
-TZ env:   America/New_York
-```
+1. **Variables** → set everything in the table above.
+2. **Settings** → **Cron Schedule** → fill in:
+   ```
+   Cron Schedule:  0 8 * * *
+   Cron Command:   bundle exec rake morning_mailer:daily
+   ```
+3. Combined with `TZ=America/New_York` from the variables, Railway
+   evaluates `0 8 * * *` as 8 AM Eastern and the schedule tracks
+   DST automatically.
 
-(Set `TZ=America/New_York` on the same service or directly on the
-cron config.  Railway evaluates the schedule against `TZ` when
-present, so 8 AM Eastern stays 8 AM Eastern across DST.)
+The cron service is a separate Railway service from the web app —
+both deploy from this repo, but only the web service has a public
+domain.  The cron service wakes up at the scheduled time, runs the
+rake task once, and exits.
 
 ### Local manual send
 
 ```
 DISABLE_SPRING=1 bundle exec rake morning_mailer:daily
 ```
+
+(Needs the SMTP env vars set locally too — easiest is a `.env`
+that mirrors the Railway cron service's variables.)
 
 ## Preview & cache
 
