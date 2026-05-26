@@ -245,7 +245,15 @@ helper or partial exists.
   the confirmation prompt with `OVERWRITE=1`. Defined in
   [`lib/tasks/db_pull_prod.rake`](lib/tasks/db_pull_prod.rake).
   (Local Postgres is via Postgres.app at
-  `/Applications/Postgres.app/Contents/Versions/17/bin/`.)
+  `/Applications/Postgres.app/Contents/Versions/18/bin/`. Match
+  the local major version to Railway's — `pg_dump` refuses to read
+  a server newer than itself. Railway is currently on **Postgres
+  18**; if it bumps to 19, the local install needs to follow.
+  Postgres.app supports multiple major versions side-by-side, so
+  the upgrade is `Download → Stop old server → Start new server`.
+  If the GUI Stop button leaves a phantom postmaster running
+  against a now-deleted binary, signal the PID directly:
+  `kill -INT $(lsof -i :5432 -t | head -1)`.)
 
 ### Custom Rake tasks (in `lib/tasks/`)
 - `morning_mailer:daily` — daily mesa-developers digest
