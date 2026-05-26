@@ -789,8 +789,12 @@ class TestInstance < ApplicationRecord
   end
 
 
-  # overridden to get user names, computer names, and other details
-  def as_json(options)
+  # overridden to get user names, computer names, and other details.
+  # `options` is part of the Rails as_json contract but is not used
+  # here; the default makes the method callable from paths that
+  # don't pass anything (which broke the JSON search endpoint as
+  # soon as it had to serialize a non-empty result set).
+  def as_json(options = nil)
     {
       test_case: test_case.name,
       commit: commit.to_json,
