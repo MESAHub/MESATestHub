@@ -88,6 +88,85 @@ RSpec.describe TestInstance, '.query', type: :model do
       expect(failures).to be_empty
       expect(relation.to_a).to contain_exactly(mid_instance)
     end
+
+    it 'matches a commit by full 40-char SHA' do
+      relation, failures = TestInstance.query("commit: #{mid_commit.sha}")
+      expect(failures).to be_empty
+      expect(relation.to_a).to contain_exactly(mid_instance)
+    end
+
+    it 'is case-insensitive on commit SHA input' do
+      relation, failures = TestInstance.query(
+        "commit: #{mid_commit.short_sha.upcase}"
+      )
+      expect(failures).to be_empty
+      expect(relation.to_a).to contain_exactly(mid_instance)
+    end
+  end
+
+  describe 'branch filtering' do
+    let(:test_case) { create(:test_case) }
+    let(:computer)  { create(:computer) }
+    let(:main_branch)    { create(:branch, name: 'main') }
+    let(:feature_branch) { create(:branch, name: 'feature-x') }
+    let(:main_commit)    { create(:commit) }
+    let(:feature_commit) { create(:commit) }
+    let(:shared_commit)  { create(:commit) }
+
+    before do
+      BranchMembership.create!(branch: main_branch,    commit: main_commit)
+      BranchMembership.create!(branch: feature_branch, commit: feature_commit)
+      BranchMembership.create!(branch: main_branch,    commit: shared_commit)
+      BranchMembership.create!(branch: feature_branch, commit: shared_commit)
+    end
+
+    let!(:main_instance) do
+      make_instance(commit: main_commit, computer: computer, test_case: test_case)
+    end
+    let!(:feature_instance) do
+      make_instance(commit: feature_commit, computer: computer, test_case: test_case)
+    end
+    let!(:shared_instance) do
+      make_instance(commit: shared_commit, computer: computer, test_case: test_case)
+    end
+
+    it 'narrows to instances whose commit is on the requested branch' do
+      relation, failures = TestInstance.query('branch: main')
+      expect(failures).to be_empty
+      expect(relation.to_a).to contain_exactly(main_instance, shared_instance)
+    end
+
+    it 'unions instances across comma-separated branches' do
+      relation, failures = TestInstance.query('branch: main, feature-x')
+      expect(failures).to be_empty
+      expect(relation.to_a).to contain_exactly(
+        main_instance, feature_instance, shared_instance
+      )
+    end
+
+    it 'composes with other filters via AND' do
+      other_test_case = create(:test_case)
+      other_instance  = make_instance(commit: main_commit, computer: computer,
+                                       test_case: other_test_case)
+      relation, failures = TestInstance.query(
+        "branch: main; test_case: #{test_case.name}"
+      )
+      expect(failures).to be_empty
+      expect(relation.to_a).to contain_exactly(main_instance, shared_instance)
+      expect(relation.to_a).not_to include(other_instance)
+    end
+
+    it 'returns no instances and reports the failure for an unknown branch' do
+      relation, failures = TestInstance.query('branch: no-such-branch')
+      expect(relation.to_a).to be_empty
+      expect(failures).to include(a_string_starting_with('branch (no-such-branch'))
+    end
+
+    it 'partial-match: keeps known branches and flags unknown ones' do
+      relation, failures = TestInstance.query('branch: main, no-such-branch')
+      expect(relation.to_a).to contain_exactly(main_instance, shared_instance)
+      expect(failures).to include(a_string_starting_with('branch (no-such-branch'))
+    end
   end
 
   describe 'rn_runtime / re_runtime fields' do
