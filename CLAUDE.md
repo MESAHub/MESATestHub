@@ -291,6 +291,11 @@ helper or partial exists.
 
 - **Branches**: kebab-case, prefix by purpose: `tests/`, `rails-upgrade`,
   `perf-`, `frontend-`, `fix-`, `feature-`.
+- **Doc-only changes can go straight to `master`.** Updating a Markdown
+  file, fixing a typo in a comment, bumping a docs link — no PR
+  ceremony required. Just commit and push. Save the branch + PR
+  workflow for anything that touches application code, tests, or
+  schema.
 - **Commits**: short imperative subject, present-tense verb. Match style of
   existing `git log` (e.g., "Restrict most pages to logged-in users to
   reduce traffic"). Body when the *why* needs explanation.
