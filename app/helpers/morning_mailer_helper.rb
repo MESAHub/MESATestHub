@@ -15,11 +15,19 @@ module MorningMailerHelper
     checksums: { label: 'Checksums', klass: 'mesa-badge-warning',
                  style: 'background:#fef6cf; color:#6b4900;' },
     mixed:     { label: 'Mixed',     klass: 'mesa-badge-mixed',
-                 style: 'background:#fef6cf; color:#6b4900;' }
+                 style: 'background:#fef6cf; color:#6b4900;' },
+    # `:untested` is `Commit#status = -1` — the rollup hasn't
+    # finalized (CI run in progress, or no rollup row yet). Renders
+    # in neutral gray so it doesn't masquerade as Passing.
+    untested:  { label: 'Untested',  klass: 'mesa-badge-skipped',
+                 style: 'background:#eceef2; color:#57606a;' }
   }.freeze
 
+  # Falls back to the untested style for any unexpected label rather
+  # than silently labeling unknowns as Passing — the previous behavior
+  # masked status=-1 commits as green.
   def mailer_status_badge(label)
-    style = STATUS_STYLES[label] || STATUS_STYLES[:passing]
+    style = STATUS_STYLES[label] || STATUS_STYLES[:untested]
     badge_pill(text: style[:label], klass: style[:klass], style: style[:style])
   end
 

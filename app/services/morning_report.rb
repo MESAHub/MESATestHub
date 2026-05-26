@@ -70,8 +70,17 @@ class MorningReport
 
   # ===== Inner data classes =====
 
+  # Stand-in for a real Branch on synthetic BranchSections. Must be a
+  # *named* constant so Marshal-based caching can serialize it
+  # (Rails.cache.write → Marshal.dump refuses anonymous classes).
+  SyntheticBranch = Struct.new(:name)
+
   # One branch's worth of commits-tested-in-window, in commit_time DESC.
-  BranchSection = Struct.new(:branch, :commit_summaries, keyword_init: true) do
+  # `synthetic` is true for the catch-all "Unattached commits" group
+  # built from commits that have no branch memberships — typically PR
+  # test-merge commits or commits whose membership row hasn't synced yet.
+  BranchSection = Struct.new(:branch, :commit_summaries, :synthetic,
+                             keyword_init: true) do
     def failing?
       commit_summaries.any?(&:failing?)
     end
@@ -79,10 +88,22 @@ class MorningReport
     def commit_count
       commit_summaries.size
     end
+
+    # Branch name to use when building per-commit URLs. Synthetic
+    # sections don't have a real branch route, so fall back to main —
+    # the commit detail page accepts any branch name and uses it
+    # only as nav context.
+    def link_branch_name
+      synthetic ? "main" : branch.name
+    end
   end
 
   # Per-commit roll-up.  `status` mirrors `Commit#status`:
-  #   0 = passing, 1 = failing, 2 = checksums, 3 = mixed.
+  #   -1 = untested / rollup not finalized (CI run in progress)
+  #    0 = passing
+  #    1 = failing
+  #    2 = checksums
+  #    3 = mixed
   CommitSummary = Struct.new(
     :commit, :status, :tested_count, :computer_count,
     :failing_tccs, :checksum_tccs, :mixed_tccs, :passing_count,
@@ -94,7 +115,7 @@ class MorningReport
       when 1 then :failing
       when 2 then :checksums
       when 3 then :mixed
-      else :unknown
+      else :untested
       end
     end
 
@@ -169,10 +190,18 @@ class MorningReport
     @commits_tested = commits.to_a
 
     # Group commits by branch — a commit may belong to multiple.
+    # Commits with no branch memberships (PR test-merge commits and
+    # in-flight pushes whose membership row hasn't synced) collect
+    # into an "unattached" bucket that renders as a synthetic
+    # section after the real branches.
     branch_to_commits = Hash.new { |h, k| h[k] = [] }
+    unattached_commits = []
     commits.each do |commit|
-      commit.branch_memberships.each do |bm|
-        branch_to_commits[bm.branch] << commit
+      memberships = commit.branch_memberships
+      if memberships.empty?
+        unattached_commits << commit
+      else
+        memberships.each { |bm| branch_to_commits[bm.branch] << commit }
       end
     end
 
@@ -185,7 +214,16 @@ class MorningReport
     @branch_sections = ordered_branches.map do |branch|
       BranchSection.new(
         branch: branch,
-        commit_summaries: branch_to_commits[branch].map { |c| build_summary(c) }
+        commit_summaries: branch_to_commits[branch].map { |c| build_summary(c) },
+        synthetic: false
+      )
+    end
+
+    if unattached_commits.any?
+      @branch_sections << BranchSection.new(
+        branch: SyntheticBranch.new("Unattached commits"),
+        commit_summaries: unattached_commits.map { |c| build_summary(c) },
+        synthetic: true
       )
     end
   end
@@ -330,9 +368,12 @@ class MorningReport
     @release_blocker_count = fetch_release_blocker_count
   end
 
+  # Returns the count of open issues labeled `release-blocker` on the
+  # MESAHub/mesa repo, or nil when we can't reach GitHub (no token, API
+  # error, or running in the test environment). The view distinguishes
+  # nil from 0 so subscribers can tell "couldn't check" apart from
+  # "checked, nothing pending."
   def fetch_release_blocker_count
-    # Hit GitHub only when there's a token configured and we're not in
-    # the test environment; the spec suite doesn't need real API traffic.
     return nil if Rails.env.test?
     return nil if ENV['GIT_TOKEN'].to_s.empty?
 
