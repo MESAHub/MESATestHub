@@ -1,6 +1,22 @@
 class TestInstancesController < ApplicationController
   layout "modern", only: [:search]
 
+  # The JSON variants of search / search_count are the API path that
+  # mesa_test (and other CLI clients) hit to read past test
+  # instances. They authenticate per-request via `email` + `password`
+  # params inside the `authenticated?` helper — there's no browser
+  # session involved. The global `authorize_user` before_action
+  # added in commit b8542bc (Sep 2025) didn't exempt this controller,
+  # which silently broke every external client.
+  #
+  # Skip the global filter only for the JSON paths; the HTML search
+  # page stays behind the login wall (intentional from b8542bc — the
+  # goal there was to reduce anonymous browse traffic). The action
+  # body still enforces auth via `authenticated?`. `search_count`
+  # is JSON-only, so unconditional skip is fine there.
+  skip_before_action :authorize_user, only: [:search, :search_count]
+  before_action :gate_html_search_to_authenticated_users, only: [:search]
+
   # Cross-cuts every test run on every computer for every commit
   # using a single key-value query language. See
   # `TestInstance.query` for the backend.
@@ -55,6 +71,20 @@ class TestInstancesController < ApplicationController
   end
 
   private
+
+  # The HTML variant of #search should remain behind the same login
+  # wall the rest of the browser views are. Restoring the global
+  # before_action with a controller-level skip is the wrong shape
+  # here because the conditional-`if:` form doesn't play well with
+  # format detection (the lambda doesn't appear to be consulted
+  # consistently on `skip_before_action` in Rails 8). Instead, skip
+  # the global gate unconditionally and re-impose it on the HTML
+  # format only.
+  def gate_html_search_to_authenticated_users
+    return if request.format.json?
+    return if current_user
+    redirect_to login_url, alert: 'Most pages are restricted to logged-in users. New accounts can only be created by an admin.'
+  end
 
   # Authenticates the JSON-API path. Hits the existing session
   # first (so a logged-in browser making a fetch() against the
