@@ -1,43 +1,29 @@
-# Provider-agnostic SMTP wiring. Defaults to Resend
-# (smtp.resend.com) because that's what production runs, but every
-# value is overridable via env vars so a future provider swap is a
-# config change rather than a code change.
+# Email delivery via Resend's HTTPS API.
 #
-# Required env vars in production:
-#   SMTP_PASSWORD  — for Resend, the API key value
-#                    (or set RESEND_API_KEY and we'll pick it up)
+# Originally configured for SMTP, but Railway blocks outbound SMTP
+# entirely (both implicit-TLS on 465 and STARTTLS on 587 time out at
+# the TCP-connect stage). Switching to Resend's REST API over HTTPS
+# bypasses the block — Railway doesn't restrict outbound HTTPS.
 #
-# Optional (defaults match Resend's STARTTLS endpoint):
-#   SMTP_HOST  — default smtp.resend.com
-#   SMTP_PORT  — default 587 (STARTTLS); 465 / 2465 for implicit TLS
-#   SMTP_USER  — default 'resend'
+# The `resend` gem registers a `:resend` ActionMailer delivery
+# method that takes a Mail::Message and POSTs it to
+# https://api.resend.com/emails. Same `Mailer#action.deliver_now`
+# call site — only the wire format changes.
 #
-# TLS strategy is auto-picked by port: 465 / 2465 use implicit TLS
-# (TLS handshake on connect), every other port uses STARTTLS (plain
-# socket then upgrade). Default is 587 because some cloud providers
-# (Railway included) only allow outbound STARTTLS, not implicit TLS.
+# Required env var in production:
+#   RESEND_API_KEY  — API key from the Resend dashboard
+#
+# The test environment keeps its `:test` delivery method (set in
+# config/environments/test.rb), so specs don't hit the network.
 class ApplicationMailer < ActionMailer::Base
-  # From-address domain (testhub.mesastar.org) is the one we verify
-  # with the email provider. Any future mailer overrides this via
-  # its own `default from:`.
+  # From-address domain (testhub.mesastar.org) is the one verified
+  # in Resend. Any future mailer overrides this via its own
+  # `default from:`.
   default from: 'digest@testhub.mesastar.org'
   layout 'mailer'
 end
 
-smtp_port = ENV.fetch('SMTP_PORT', '587').to_i
-tls_options =
-  if [465, 2465].include?(smtp_port)
-    { tls: true }
-  else
-    { enable_starttls_auto: true }
-  end
-
-ApplicationMailer.smtp_settings = {
-  address:        ENV.fetch('SMTP_HOST', 'smtp.resend.com'),
-  port:           smtp_port,
-  user_name:      ENV.fetch('SMTP_USER', 'resend'),
-  password:       ENV['SMTP_PASSWORD'] || ENV['RESEND_API_KEY'],
-  domain:         'testhub.mesastar.org',
-  authentication: :plain
-}.merge(tls_options)
-ApplicationMailer.delivery_method = :smtp
+if Rails.env.production?
+  ApplicationMailer.delivery_method = :resend
+  ApplicationMailer.resend_settings = { api_key: ENV['RESEND_API_KEY'] }
+end

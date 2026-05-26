@@ -63,33 +63,34 @@ Metrics checked: `runtime_seconds` (rn), `re_time` (re),
 Tweak the thresholds in `MorningReport` if the signal-to-noise is
 off for your use case.
 
-## Email provider — Resend
+## Email provider — Resend (HTTPS API, not SMTP)
 
-SMTP wiring in [`app/mailers/application_mailer.rb`](../app/mailers/application_mailer.rb)
-is provider-agnostic: it defaults to Resend's STARTTLS SMTP endpoint
-(`smtp.resend.com:587`, username `resend`) but every value is
-overridable via env vars.  Swapping to a different provider is a
-config change, not a code change.
+Delivery goes through Resend's REST API over HTTPS via the
+[`resend`](https://github.com/resend/resend-ruby) gem's
+ActionMailer adapter, **not** SMTP.  Railway blocks outbound SMTP
+on every port we tried (465 / 587 both hit `Net::OpenTimeout` at
+the TCP-connect stage); HTTPS isn't blocked.  Same
+`MorningMailer.daily.deliver_now` call site, different wire format.
 
-The TLS strategy is auto-picked by port: 465 / 2465 use implicit
-TLS (handshake on connect); every other port (587, 2587, 25, …)
-uses STARTTLS.  Default is 587 because some cloud hosts —
-Railway among them — block outbound implicit-TLS SMTP but allow
-STARTTLS.
+If you ever move off Railway to a host that *does* allow outbound
+SMTP, swapping back is reverting the
+[`app/mailers/application_mailer.rb`](../app/mailers/application_mailer.rb)
+change to set `delivery_method = :smtp` with `smtp_settings`
+pointing at the provider.
 
 ### Required env vars (cron service)
 
-| Var | Default | Purpose |
-|---|---|---|
-| `SMTP_PASSWORD` *or* `RESEND_API_KEY` | — | API key from Resend's dashboard. The code reads `SMTP_PASSWORD` first, then falls back to `RESEND_API_KEY`, so either name works. |
-| `SMTP_HOST` | `smtp.resend.com` | SMTP endpoint hostname. |
-| `SMTP_PORT` | `587` | 587 (STARTTLS) or 2587 (STARTTLS alt) work on Railway. 465 / 2465 (implicit TLS) may be blocked; only use those if you've confirmed outbound 465 works for your host. |
-| `SMTP_USER` | `resend` | Resend uses the literal username `resend` for every account; only the password (API key) identifies you. |
-| `DATABASE_URL` | — | Reference the Railway Postgres service: `${{Postgres.DATABASE_URL}}`. |
-| `SECRET_KEY_BASE` | — | Required for Rails to boot. Reference the web service's: `${{MESATestHub.SECRET_KEY_BASE}}`. |
-| `GIT_TOKEN` | — | Optional but recommended — without it, the digest shows "couldn't check" for the release-blocker line. Reference the web service's: `${{MESATestHub.GIT_TOKEN}}`. |
-| `RAILS_ENV` | — | Set to `production`. |
-| `TZ` | UTC | Set to `America/New_York` so `Time.now` reads Eastern inside the rake task's "is it 8 AM yet?" guard. Note: the Railway cron *scheduler* itself always evaluates in UTC — see the cron section below. |
+| Var | Purpose |
+|---|---|
+| `RESEND_API_KEY` | API key from Resend's dashboard. |
+| `DATABASE_URL` | Reference the Railway Postgres service: `${{Postgres.DATABASE_URL}}`. |
+| `SECRET_KEY_BASE` | Required for Rails to boot. Reference the web service's: `${{MESATestHub.SECRET_KEY_BASE}}`. |
+| `GIT_TOKEN` | Optional but recommended — without it, the digest shows "couldn't check" for the release-blocker line. Reference the web service's: `${{MESATestHub.GIT_TOKEN}}`. |
+| `RAILS_ENV` | Set to `production` (gates the `:resend` delivery method — see [`application_mailer.rb`](../app/mailers/application_mailer.rb)). |
+| `TZ` | Set to `America/New_York` so `Time.now` reads Eastern inside the rake task's "is it 8 AM yet?" guard. Note: the Railway cron *scheduler* itself always evaluates in UTC — see the cron section below. |
+
+Old `SMTP_*` env vars from the SMTP era can be removed; they're
+no longer read.
 
 ### Domain verification in Resend
 
