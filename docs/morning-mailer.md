@@ -66,10 +66,16 @@ off for your use case.
 ## Email provider — Resend
 
 SMTP wiring in [`app/mailers/application_mailer.rb`](../app/mailers/application_mailer.rb)
-is provider-agnostic: it defaults to Resend's SMTP endpoint
-(`smtp.resend.com:465`, implicit TLS, username `resend`) but every
-value is overridable via env vars.  Swapping to a different
-provider is a config change, not a code change.
+is provider-agnostic: it defaults to Resend's STARTTLS SMTP endpoint
+(`smtp.resend.com:587`, username `resend`) but every value is
+overridable via env vars.  Swapping to a different provider is a
+config change, not a code change.
+
+The TLS strategy is auto-picked by port: 465 / 2465 use implicit
+TLS (handshake on connect); every other port (587, 2587, 25, …)
+uses STARTTLS.  Default is 587 because some cloud hosts —
+Railway among them — block outbound implicit-TLS SMTP but allow
+STARTTLS.
 
 ### Required env vars (cron service)
 
@@ -77,13 +83,13 @@ provider is a config change, not a code change.
 |---|---|---|
 | `SMTP_PASSWORD` *or* `RESEND_API_KEY` | — | API key from Resend's dashboard. The code reads `SMTP_PASSWORD` first, then falls back to `RESEND_API_KEY`, so either name works. |
 | `SMTP_HOST` | `smtp.resend.com` | SMTP endpoint hostname. |
-| `SMTP_PORT` | `465` | Use 465 for implicit TLS (matches the `tls: true` setting), or override to 587/2587 for STARTTLS (would also need a code tweak to swap `tls:` for `enable_starttls_auto:`). |
+| `SMTP_PORT` | `587` | 587 (STARTTLS) or 2587 (STARTTLS alt) work on Railway. 465 / 2465 (implicit TLS) may be blocked; only use those if you've confirmed outbound 465 works for your host. |
 | `SMTP_USER` | `resend` | Resend uses the literal username `resend` for every account; only the password (API key) identifies you. |
 | `DATABASE_URL` | — | Reference the Railway Postgres service: `${{Postgres.DATABASE_URL}}`. |
 | `SECRET_KEY_BASE` | — | Required for Rails to boot. Reference the web service's: `${{MESATestHub.SECRET_KEY_BASE}}`. |
 | `GIT_TOKEN` | — | Optional but recommended — without it, the digest shows "couldn't check" for the release-blocker line. Reference the web service's: `${{MESATestHub.GIT_TOKEN}}`. |
 | `RAILS_ENV` | — | Set to `production`. |
-| `TZ` | UTC | Set to `America/New_York` so the cron schedule evaluates in Eastern Time (DST-safe). |
+| `TZ` | UTC | Set to `America/New_York` so `Time.now` reads Eastern inside the rake task's "is it 8 AM yet?" guard. Note: the Railway cron *scheduler* itself always evaluates in UTC — see the cron section below. |
 
 ### Domain verification in Resend
 
@@ -106,8 +112,12 @@ is unchanged.
 ## Scheduling — 8 AM US Eastern
 
 The intended cadence is **8:00 AM US Eastern Time** every day.
-Daylight Saving makes that a moving UTC target, so configure cron
-with the `TZ` env var rather than encoding the offset.
+Railway's cron scheduler evaluates schedules in UTC regardless of
+the service's `TZ` env var, and 8 AM ET moves between 12 UTC (EDT)
+and 13 UTC (EST) twice a year.  To get a stable 8 AM ET delivery
+across DST without manual schedule edits, we fire **twice** in UTC
+and let the rake task itself decide whether it's actually 8 AM
+Eastern.
 
 ### Railway cron trigger
 
@@ -115,15 +125,18 @@ On the cron service:
 
 1. **Variables** → set everything in the table above.
 2. **Settings** → set the two fields:
-   - **Cron Schedule**: `0 8 * * *`
+   - **Cron Schedule**: `0 12,13 * * *` (fires at 12:00 UTC *and* 13:00 UTC)
    - **Custom Start Command**: `bundle exec rake morning_mailer:daily`
 
    When a Cron Schedule is set, Railway runs the service as a
    one-shot job and uses Custom Start Command as the command for
    each invocation.
-3. Combined with `TZ=America/New_York` from the variables, Railway
-   evaluates `0 8 * * *` as 8 AM Eastern and the schedule tracks
-   DST automatically.
+3. `lib/tasks/morning_mailer.rake` checks `Time.now.in_time_zone('America/New_York').hour`
+   on every run and **exits without sending** when the local
+   Eastern hour isn't 8.  Net effect: during EDT (UTC-4) the 12 UTC
+   fire delivers and the 13 UTC fire skips; during EST (UTC-5) the
+   12 UTC fire skips and the 13 UTC fire delivers.  Always 8 AM ET,
+   no DST babysitting.
 
 The cron service is a separate Railway service from the web app —
 both deploy from this repo, but only the web service has a public
@@ -133,8 +146,12 @@ rake task once, and exits.
 ### Local manual send
 
 ```
-DISABLE_SPRING=1 bundle exec rake morning_mailer:daily
+FORCE=1 DISABLE_SPRING=1 bundle exec rake morning_mailer:daily
 ```
+
+The `FORCE=1` env var bypasses the 8-AM-Eastern guard so the task
+sends regardless of local time.  Same flag works for on-Railway
+manual fires from the dashboard.
 
 (Needs the SMTP env vars set locally too — easiest is a `.env`
 that mirrors the Railway cron service's variables.)
