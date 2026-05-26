@@ -66,14 +66,17 @@
                     %div.mesa-stat-num{ style: "margin-top:4px; font-size:24px; font-weight:600; color:#{anomaly_count.zero? ? '#1f2328' : '#a40e26'};" }
                       = anomaly_count
 
-      - if @report.release_blocker_count
-        %div.mesa-fg-muted{ style: "margin-top:14px; font-size:12px; color:#57606a;" }
-          - if @report.release_blocker_count.zero?
-            No open release-blocker issues.
-          - else
-            %strong{ style: "color:#a40e26;" }
-              = pluralize(@report.release_blocker_count, 'open release-blocker')
-            on GitHub.
+      %div.mesa-fg-muted{ style: "margin-top:14px; font-size:12px; color:#57606a;" }
+        - case @report.release_blocker_count
+        - when nil
+          %span.mesa-fg-subtle{ style: "color:#8b949e;" }
+            Release blockers: couldn't check (no GitHub API access in this environment).
+        - when 0
+          No open release-blocker issues on GitHub.
+        - else
+          %strong{ style: "color:#a40e26;" }
+            = pluralize(@report.release_blocker_count, 'open release-blocker')
+          on GitHub.
 
 -# ===== Anomalies =====
 - if @report.any_anomalies?
@@ -151,6 +154,9 @@
                 = section.branch.name
               %td.mesa-fg-muted{ style: "color:#57606a; font-size:11px; text-align:right;" }
                 = pluralize(section.commit_count, 'commit')
+          - if section.synthetic
+            %div.mesa-fg-muted{ style: "margin-top:4px; font-size:11px; color:#8b949e;" }
+              Commits with no branch membership — typically PR test-merge commits, or pushes whose branch sync hasn't landed yet.
 
       - section.commit_summaries.each_with_index do |cs, i|
         %tr
@@ -164,7 +170,7 @@
                     %tr
                       %td{ valign: "top", style: "padding-right:10px;" }
                         %div
-                          = link_to mailer_message_excerpt(cs.commit), commit_url(branch: section.branch.name, sha: cs.commit.short_sha), class: "mesa-link mesa-fg", style: "color:#1f2328; text-decoration:none; font-size:14px; font-weight:500;"
+                          = link_to mailer_message_excerpt(cs.commit), commit_url(branch: section.link_branch_name, sha: cs.commit.short_sha), class: "mesa-link mesa-fg", style: "color:#1f2328; text-decoration:none; font-size:14px; font-weight:500;"
                         %div.mesa-fg-muted{ style: "margin-top:4px; font-size:12px; color:#57606a;" }
                           = mailer_sha_pill(cs.commit)
                           %span{ style: "padding:0 6px; color:#8b949e;" } ·
@@ -187,7 +193,7 @@
                             - else :passing
                           = mailer_status_badge(tcc_status_key)
                           %span{ style: "padding-left:8px;" }
-                            = link_to tcc.test_case.name, mailer_test_case_commit_url(section.branch.name, tcc, cs.commit), class: "mesa-link mesa-fg", style: "color:#1f2328; text-decoration:none; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;"
+                            = link_to tcc.test_case.name, mailer_test_case_commit_url(section.link_branch_name, tcc, cs.commit), class: "mesa-link mesa-fg", style: "color:#1f2328; text-decoration:none; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;"
                       - if cs.problem_tccs.size > 8
                         %div.mesa-fg-muted{ style: "padding-top:4px; font-size:11px; color:#8b949e;" }
                           (+ #{cs.problem_tccs.size - 8} more)

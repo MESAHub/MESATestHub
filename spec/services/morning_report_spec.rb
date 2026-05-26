@@ -71,6 +71,69 @@ RSpec.describe MorningReport, type: :model do
                                                    feature_commit.id)
       end
     end
+
+    context 'with a branchless commit (PR test-merge, etc.)' do
+      let(:main_branch) { create(:branch, name: 'main') }
+      let(:test_case)   { create(:test_case) }
+      let(:computer)    { create(:computer) }
+      let(:in_window_time) { as_of - 2.hours }
+      let(:branch_commit) { create(:commit, commit_time: in_window_time) }
+      let(:branchless_commit) do
+        create(:commit, commit_time: in_window_time - 1.minute)
+      end
+
+      before do
+        create(:branch_membership, branch: main_branch, commit: branch_commit)
+        # branchless_commit deliberately has no membership.
+        make_instance(commit: branch_commit, computer: computer,
+                      test_case: test_case, created_at: in_window_time)
+        make_instance(commit: branchless_commit, computer: computer,
+                      test_case: test_case, created_at: in_window_time)
+      end
+
+      it 'still counts the branchless commit in commits_tested' do
+        report = described_class.new(as_of: as_of).build
+        expect(report.commits_tested.map(&:id))
+          .to contain_exactly(branch_commit.id, branchless_commit.id)
+      end
+
+      it 'appends a synthetic "Unattached commits" section after real branches' do
+        report = described_class.new(as_of: as_of).build
+        section_names = report.branch_sections.map { |s| s.branch.name }
+        expect(section_names).to eq(['main', 'Unattached commits'])
+        synthetic = report.branch_sections.last
+        expect(synthetic.synthetic).to be(true)
+        expect(synthetic.commit_summaries.map { |cs| cs.commit.id })
+          .to eq([branchless_commit.id])
+      end
+
+      it 'falls back to "main" for URL building on the synthetic section' do
+        report = described_class.new(as_of: as_of).build
+        synthetic = report.branch_sections.last
+        expect(synthetic.link_branch_name).to eq('main')
+      end
+    end
+  end
+
+  describe 'CommitSummary#status_label' do
+    let(:commit) { create(:commit) }
+
+    it 'returns :untested (not :unknown / :passing) for status = -1' do
+      summary = described_class::CommitSummary.new(
+        commit: commit, status: -1, tested_count: 5, computer_count: 1,
+        failing_tccs: [], checksum_tccs: [], mixed_tccs: [], passing_count: 5
+      )
+      expect(summary.status_label).to eq(:untested)
+      expect(summary.failing?).to be(false)
+    end
+
+    it 'returns :passing for status = 0' do
+      summary = described_class::CommitSummary.new(
+        commit: commit, status: 0, tested_count: 5, computer_count: 1,
+        failing_tccs: [], checksum_tccs: [], mixed_tccs: [], passing_count: 5
+      )
+      expect(summary.status_label).to eq(:passing)
+    end
   end
 
   describe 'anomaly detection' do
