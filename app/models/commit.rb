@@ -698,6 +698,20 @@ class Commit < ApplicationRecord
     compile_stati.count(false)
   end
 
+  # Pick the branch this commit should display under when a caller
+  # doesn't have a strong preference (e.g. the controllers' branch-
+  # mismatch redirect, or a URL builder that has a commit but no
+  # branch in hand). Prefers `main` when the commit lives there;
+  # otherwise picks the branch whose head was most recently active
+  # (alphabetical tiebreaker). Returns nil when the commit isn't on
+  # any branch — the caller decides whether that's a 404.
+  def preferred_branch
+    candidates = branches.includes(:head).to_a
+    return nil if candidates.empty?
+    candidates.find { |b| b.name == 'main' } ||
+      candidates.min_by { |b| [-(b.head&.commit_time&.to_i || 0), b.name] }
+  end
+
   # branches that this commit is NOT in, in two categories:
   # - branches that have been recently updated
   # - branches that have not been recently updated

@@ -1,23 +1,31 @@
 class CommitsController < ApplicationController
   include LogProxy
+  include BranchMismatchRedirect
 
   skip_before_action :authorize_user, only: :show, if: :root_page?
   before_action :set_commit, only: :show
   layout "modern", only: [:index, :show]
 
   # Branch lookup for the commit detail page. The :branch URL segment
-  # might disagree with where the commit actually lives — old branch
-  # got merged, user typed a typo, etc. If we can't find the branch
-  # named in the URL but the commit does live on `main`, prefer that;
-  # otherwise fall back to whatever branch first claims the commit.
-  # In either fallback case we redirect so the URL agrees with the
-  # branch we ended up using.
+  # might disagree with where the commit actually lives — branch got
+  # deleted, user typed a typo, or a stale link points at a branch
+  # the commit was never on (e.g. the cherry-picked SHA went into a
+  # feature branch while the old URL still says `main`). In any of
+  # those cases we redirect to a branch that actually contains the
+  # commit (`Commit#preferred_branch`) and surface a flash explaining
+  # what happened — both the requested branch and the alternatives.
   def show
     @selected_branch = Branch.includes(:head).named(CGI.unescape(params[:branch]))
-    unless @selected_branch
-      @selected_branch = Branch.main if @commit.branches.include?(Branch.main)
-      @selected_branch ||= @commit.branches.first
-      redirect_to(commit_path(sha: @commit.short_sha, branch: @selected_branch.name), alert: "Branch <span class='text-monospace'>#{CGI.unescape(params[:branch])}</span> does not exist. Found commit in <span class='text-monospace'>#{@selected_branch}</span>.") and return
+    if branch_mismatch?(@selected_branch, @commit)
+      target = @commit.preferred_branch
+      return render_404("Commit '#{@commit.short_sha}' is not on any branch") unless target
+      flash[:warning] = branch_mismatch_message(
+        requested_name: CGI.unescape(params[:branch]),
+        requested_branch: @selected_branch,
+        target: target,
+        commit: @commit
+      )
+      redirect_to(commit_path(sha: @commit.short_sha, branch: target.name)) and return
     end
 
     # Two-section picker: branches that actually contain this
