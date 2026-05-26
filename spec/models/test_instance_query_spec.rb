@@ -35,13 +35,23 @@ RSpec.describe TestInstance, '.query', type: :model do
   describe 'each documented search option from the help text' do
     %w[test_case commit commit_datetime passed computer user platform
        platform_version rn_RAM re_RAM threads compiler compiler_version
-       runtime rn_runtime re_runtime date datetime].each do |opt|
+       runtime date datetime].each do |opt|
       it "accepts #{opt} as a valid search key" do
         _, failures = TestInstance.query("#{opt}: foo")
         expect(failures).not_to include(opt),
           "search option `#{opt}` rejected — likely the column it points " \
           "to was renamed or removed"
       end
+    end
+
+    it 'rejects the dropped `rn_runtime` key (pointed at unpopulated runtime_seconds)' do
+      _, failures = TestInstance.query('rn_runtime: 5min')
+      expect(failures).to include('rn_runtime')
+    end
+
+    it 'rejects the dropped `re_runtime` key (pointed at unpopulated re_time)' do
+      _, failures = TestInstance.query('re_runtime: 5min')
+      expect(failures).to include('re_runtime')
     end
   end
 
@@ -169,29 +179,31 @@ RSpec.describe TestInstance, '.query', type: :model do
     end
   end
 
-  describe 'rn_runtime / re_runtime fields' do
+  describe 'runtime field' do
     let(:test_case) { create(:test_case) }
     let(:computer)  { create(:computer) }
     let(:commit)    { create(:commit) }
     let!(:slow_instance) do
       make_instance(commit: commit, computer: computer, test_case: test_case,
-                    runtime_seconds: 800, re_time: 200,
-                    total_runtime_seconds: 1000)
+                    runtime_minutes: 16.67) # ~1000s
     end
     let!(:fast_instance) do
       make_instance(commit: commit, computer: computer, test_case: test_case,
-                    runtime_seconds: 80, re_time: 20,
-                    total_runtime_seconds: 100)
+                    runtime_minutes: 1.67)  # ~100s
     end
 
-    it 'rn_runtime filters on runtime_seconds column' do
-      relation, failures = TestInstance.query('rn_runtime: 500-1000')
+    it 'filters on the runtime_minutes column with hr/min/sec syntax' do
+      # Range "5min-30min" → 5.0 to 30.0 minutes. Slow (16.67m) matches;
+      # fast (1.67m) does not.
+      relation, failures = TestInstance.query('runtime: 5min-30min')
       expect(failures).to be_empty
       expect(relation.to_a).to contain_exactly(slow_instance)
     end
 
-    it 're_runtime filters on re_time column' do
-      relation, failures = TestInstance.query('re_runtime: 150-300')
+    it 'treats bare numeric input as seconds, then converts to minutes' do
+      # parse_runtime convention: bare number = seconds. "300-2000"s →
+      # 5 to 33.3 minutes. Slow (16.67m) matches; fast (1.67m) doesn't.
+      relation, failures = TestInstance.query('runtime: 300-2000')
       expect(failures).to be_empty
       expect(relation.to_a).to contain_exactly(slow_instance)
     end

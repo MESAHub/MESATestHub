@@ -88,7 +88,7 @@
           %dl.space-y-2
             = render "field_row", field: "platform", desc: "Computer platform: macOS or linux. No version string."
             = render "field_row", field: "platform_version", desc: "Platform version, e.g. 14.5 or Ubuntu 22.04."
-            = render "field_row", field: "rn_runtime / re_runtime / runtime", desc: "Runtime for rn / re scripts or whole test. Integer seconds or '1 hr 30 min', '2.3 hours', etc."
+            = render "field_row", field: "runtime", desc: "Total test runtime. Integer seconds or '1 hr 30 min', '2.3 hours', etc."
             = render "field_row", field: "rn_RAM / re_RAM", desc: "Peak memory for rn / re scripts, in GB."
             = render "field_row", field: "threads", desc: "Number of OpenMP threads used."
             = render "field_row", field: "compiler", desc: "Compiler family, e.g. SDK, gfortran, ifort."
@@ -126,7 +126,7 @@
               %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Computer
               %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap User
               %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Submitted
-              %th.text-right.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Runtime (s)
+              %th.text-right.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Runtime (min)
               %th.text-right.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap RAM (GB)
               %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Compiler
               %th.text-left.px-3.py-2.font-medium.border-b.border-border-subtle.whitespace-nowrap Platform
@@ -163,11 +163,16 @@
                 %td.px-3.text-fg-muted.whitespace-nowrap{ class: "text-[12px] tabular-nums" }
                   = format_time_tag(ti.created_at)
                 %td.px-3.text-right.font-mono.tabular-nums.whitespace-nowrap{ class: "text-[12px]" }
-                  = ti.runtime_seconds || 0
-                  %span.text-fg-subtle  /
-                  = ti.re_time || 0
-                  %span.text-fg-subtle  /
-                  = ti.total_runtime_seconds || 0
+                  -# `runtime_minutes` is the only runtime column the ingest
+                  -# pipeline populates (summed from instance_inlists in
+                  -# TestInstance.build_instance). `runtime_seconds`, `re_time`,
+                  -# and `total_runtime_seconds` are dead schema columns from
+                  -# a long-ago refactor and are always nil; matching the
+                  -# test_case_commit cell renderer keeps the two views in sync.
+                  - if ti.runtime_minutes
+                    = sprintf('%.2f', ti.runtime_minutes)
+                  - else
+                    %span.text-fg-subtle —
                 %td.px-3.text-right.font-mono.tabular-nums.whitespace-nowrap{ class: "text-[12px]" }
                   = sprintf('%.2f', ti.rn_mem_GB || 0)
                   %span.text-fg-subtle  /
