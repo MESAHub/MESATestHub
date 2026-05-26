@@ -58,7 +58,7 @@
           %span View on GitHub
       %button.mesa-btn{ type: "button",
                         style: "padding: 5px 12px; font-size: 12px;",
-                        data: { controller: "copy-button", copy_button_value: @commit.sha, action: "click->copy-button#copy" } }
+                        data: { controller: "copy-button", copy_button_text_value: @commit.sha, action: "click->copy-button#copy" } }
         = mesa_icon(:copy, size: 13)
         %span{ data: { copy_button_target: "label" } } Copy SHA
 
