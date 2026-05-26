@@ -101,17 +101,20 @@ helper or partial exists.
   from the original plan — Rack 3's `:unprocessable_entity` →
   `:unprocessable_content` rename, `show_exceptions` becoming an enum,
   and the gems that needed bumps or removal for the resolver to settle.
-- **The test suite is small but real.** 263 specs (request + model +
+- **The test suite is small but real.** 336 specs (request + model +
   helper + job) cover auth, submissions API, GitHub webhook (now
   async via `BranchSyncJob`, payload-driven), branch deletion, the
   Octokit middleware wiring, `TestInstance.query`,
-  `Commit#computer_info`, the Phase 3.5 ingestion + topology +
-  ordering + reconcile path, the test_cases#show branch-scoped
-  helpers (`#commit_window`, `#status_summary_for`,
-  `#trend_payload`) + the `TestCasesHelper#submissions_payload`
-  picker logic, the computers#show bulk-delete + filter +
-  permissions matrix, the Submission destroy cascade scalar
-  refresh, the User destroy cascade chain, and high-traffic page
+  `Commit#computer_info`, `Commit#preferred_branch`, the Phase 3.5
+  ingestion + topology + ordering + reconcile path, the
+  test_cases#show branch-scoped helpers (`#commit_window`,
+  `#status_summary_for`, `#trend_payload`) + the
+  `TestCasesHelper#submissions_payload` picker logic, the
+  computers#show bulk-delete + filter + permissions matrix, the
+  Submission destroy cascade scalar refresh, the User destroy
+  cascade chain, the singleton-submission visibility fallback in
+  `_build_stati_by_computer`, the branch-mismatch redirect in
+  commits#show + test_case_commits#show, and high-traffic page
   renders. They are the regression safety net for upcoming work —
   build on this rather than starting fresh.
 - **No Cucumber.** The old Cucumber suite is preserved at
@@ -189,6 +192,43 @@ helper or partial exists.
 - **Bootsnap caches load paths** in `tmp/cache/bootsnap`. If you remove or
   rename a gem and immediately see `cannot load such file`, clear the cache
   with `rm -rf tmp/cache/bootsnap`.
+- **Singleton submissions count as built.** Clients that POST one
+  test result per submission (no `entire`/`empty` flag) leave
+  `Submission#compiled` nil — the controller only records
+  compile status for the two batch shapes. The matrix aggregate at
+  [`_build_stati_by_computer`](app/models/concerns/commit_state.rb)
+  used to drop those computers entirely, hiding their results from
+  the per-computer summary and the matrix column even though the
+  test_instances were in the database. It now treats any computer
+  with test_instances on this commit as implicitly built when no
+  explicit compile signal exists; an empty singleton submission
+  with no instances still falls through to `:unknown`. Running a
+  test implies a successful build. See PR #92 and
+  [`spec/models/commit_state_spec.rb`](spec/models/commit_state_spec.rb)
+  for the regression coverage.
+- **Branch-mismatch URLs redirect to a containing branch.**
+  `CommitsController#show` and `TestCaseCommitsController#show`
+  include
+  [`BranchMismatchRedirect`](app/controllers/concerns/branch_mismatch_redirect.rb)
+  and redirect any URL whose `:branch` segment either doesn't
+  exist or doesn't contain the SHA. The redirect target comes
+  from `Commit#preferred_branch` — main first, then most-recent-
+  head, alphabetical tiebreaker. A warning flash names the
+  requested branch + the chosen target + an "Also on:" list of
+  the commit's other branches. A commit on zero branches 404s.
+  Search-result links use the same precedence via
+  `TestInstancesHelper#best_branch_name_for` so the redirect is
+  the fallback, not the primary path. See PR #93.
+- **Runtime data lives in `runtime_minutes` only.** The schema
+  also has `runtime_seconds`, `re_time`, and `total_runtime_seconds`
+  columns, but the ingest factory in `TestInstance.build_instance`
+  only writes `runtime_minutes` (summed from
+  `instance_inlists.runtime_minutes`). All 870k+ rows have NULL
+  in the other three columns. Anywhere that reads or filters
+  runtime — the popover, the test_case_commit cell, the search
+  view, and the `runtime:` SearchOption — should hit
+  `runtime_minutes`. `parse_runtime` returns seconds; divide by
+  60 when feeding it into a `runtime_minutes` query.
 - **Submission destroy refreshes TCC + Commit scalars in a specific
   order.** `Submission` carries `before_destroy
   :remember_affected_tcc_ids, prepend: true` (the `prepend` is
