@@ -479,10 +479,22 @@ module CommitState
     @_build_stati_by_computer ||= begin
       rows = submissions.pluck(:computer_id, :compiled)
       grouped = rows.group_by(&:first)
+      # Test-by-test clients submit each result as a singleton submission
+      # without an `entire`/`empty` flag, so the submissions controller
+      # never records a `compiled` value (see SubmissionsController#create).
+      # The aggregate used to drop those computers entirely, hiding their
+      # results from the per-computer summary and the matrix. Submitting a
+      # test result implies a successful build, so any computer with test
+      # instances on this commit is implicitly built when no explicit
+      # signal exists.
+      implicit_built = test_instances.distinct.pluck(:computer_id).to_set
       grouped.each_with_object({}) do |(computer_id, computer_rows), out|
         flags = computer_rows.map(&:last).compact
-        next if flags.empty?
-        out[computer_id] = flags.any? { |ok| ok }
+        if flags.empty?
+          out[computer_id] = true if implicit_built.include?(computer_id)
+        else
+          out[computer_id] = flags.any? { |ok| ok }
+        end
       end
     end
   end

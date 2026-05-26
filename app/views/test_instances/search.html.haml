@@ -134,14 +134,15 @@
           %tbody
             - @test_instances.each do |ti|
               - next unless ti.commit
+              - branch_slug = best_branch_name_for(ti.commit)
               %tr.border-b.border-border-subtle.align-middle.hover:bg-bg-subtle{ class: "[&>td]:py-2" }
                 %td.px-3.font-mono.whitespace-nowrap{ class: "text-[12px]" }
                   = link_to ti.commit.short_sha,
-                           commit_path(branch: "main", sha: ti.commit.short_sha),
+                           commit_path(branch: branch_slug, sha: ti.commit.short_sha),
                            class: "text-brand font-semibold no-underline hover:underline"
                 %td.px-3.font-mono.whitespace-nowrap{ class: "text-[12px]" }
                   = link_to ti.test_case.name,
-                           test_case_commit_path(branch: "main", module: ti.test_case.module, test_case: ti.test_case.name, sha: ti.commit.short_sha),
+                           test_case_commit_path(branch: branch_slug, module: ti.test_case.module, test_case: ti.test_case.name, sha: ti.commit.short_sha),
                            class: "text-fg-muted hover:text-brand no-underline"
                 %td.px-3.whitespace-nowrap{ class: "text-[12px]" }
                   - if ti.passed
