@@ -112,9 +112,59 @@
           %span.ml-2.text-fg{ class: "text-[14px]" }
             = pluralize(@test_instances.total_count, "test instance")
             matched
-        - if @test_instances.total_pages > 1
-          %span.text-fg-subtle.tabular-nums{ class: "text-[11px]" }
-            = page_entries_info @test_instances
+        .flex.items-center.gap-3
+          - if @test_instances.total_pages > 1
+            %span.text-fg-subtle.tabular-nums{ class: "text-[11px]" }
+              = page_entries_info @test_instances
+          -# Download-as-JSON pulls the full (non-paginated) result
+          -# set through the same /search.json endpoint that
+          -# `mesa_test search` hits. Above the threshold the
+          -# Stimulus controller throws up a confirm modal — a
+          -# user accidentally clicking "Download" on a 100k-row
+          -# query would otherwise stall the tab for a while.
+          %button.mesa-btn{ type: "button",
+                            style: "padding: 4px 10px; font-size: 12px;",
+                            data: { controller: "download-json",
+                                    download_json_count_value: @test_instances.total_count,
+                                    download_json_query_value: params[:query_text].to_s,
+                                    download_json_query_label_value: params[:query_text].to_s,
+                                    download_json_button_target: "button",
+                                    action: "click->download-json#start" } }
+            = mesa_icon(:download, size: 12)
+            %span{ data: { label: true } } Download JSON
+
+      -# Discoverability for devs writing their own scripts. Closed
+      -# by default so the typical "look at one query in the browser"
+      -# user doesn't see it; one click to reveal the equivalent
+      -# `mesa_test` invocations + the count-first guidance.
+      - cli_query = params[:query_text].to_s
+      - count_cmd = %(mesa_test count "#{cli_query.gsub('"', '\\"')}")
+      - search_cmd = %(mesa_test search "#{cli_query.gsub('"', '\\"')}")
+      %details.border-b.border-border-subtle
+        %summary.flex.items-center.justify-between.gap-2.px-4.py-2.cursor-pointer.text-fg-muted.hover:bg-bg-muted{ class: "text-[12px] [&::-webkit-details-marker]:hidden" }
+          %span.flex.items-center.gap-2
+            = mesa_icon(:chevron, size: 10)
+            %span Use this query from
+            %span.font-mono.text-fg mesa_test
+          %span.text-fg-subtle{ class: "text-[11px]" } CLI
+        .px-4.py-3.space-y-3.bg-bg-subtle{ class: "text-[12px]" }
+          %p.text-fg-muted
+            Run
+            %span.font-mono.text-fg count
+            first to size the result set;
+            %span.font-mono.text-fg search
+            returns every matching row in one JSON payload.
+          - [["count", count_cmd], ["search", search_cmd]].each do |label, cmd|
+            .flex.items-stretch.gap-2
+              .flex-1.font-mono.text-fg.bg-bg-elev.border.border-border.rounded-md.px-3.py-2.overflow-x-auto.whitespace-nowrap{ class: "text-[12px]" }= cmd
+              %button.mesa-btn{ type: "button",
+                                style: "padding: 4px 12px; font-size: 12px;",
+                                title: "Copy #{label} command",
+                                data: { controller: "copy-button",
+                                        copy_button_text_value: cmd,
+                                        action: "click->copy-button#copy" } }
+                = mesa_icon(:copy, size: 12)
+                %span{ data: { copy_button_target: "label" } } Copy
 
       %div{ style: "overflow-x: auto;" }
         %table.w-full.border-collapse{ style: "min-width: 1000px;" }
