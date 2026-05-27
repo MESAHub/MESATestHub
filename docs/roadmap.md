@@ -1,15 +1,19 @@
 # MESATestHub roadmap
 
-Sequenced plan for modernizing the codebase, captured so individual sessions
-have continuity across context boundaries. Update the **Status** for each
-phase as work lands.
+Historical record of the modernization plan that ran from the bare
+codebase through Phase 4. **All sequenced phases are complete as of
+2026-05-27.** This file is kept as a reference for *why* the current
+architecture looks the way it does — what got chosen, what got
+deferred, and what the operating principles were while the work was
+in flight. Future feature work goes in the **Feature backlog**
+section near the bottom rather than as new phases.
 
-## Operating principles
+## Operating principles (in force during the migration)
 
 - **One branch per phase.** Long-running branches hide bugs and stall reviews.
-- **Tests first, then changes.** The codebase has effectively no test coverage;
-  any non-trivial change should land alongside the regression test that would
-  have caught its failure mode.
+- **Tests first, then changes.** The codebase had effectively no test
+  coverage at Phase 1; any non-trivial change landed alongside the
+  regression test that would have caught its failure mode.
 - **Phases are sequential, not parallel.** Resist the temptation to interleave
   the upgrade with the frontend refactor — debugging gets ambiguous fast.
 - **Email migration and small features can slot in between phases.** They're
@@ -205,23 +209,21 @@ architecture overview, the anomaly-detection knobs
 (`COHORT_LIMIT` / `ANOMALY_Z_THRESHOLD` / `ANOMALY_RATIO_FLOOR`),
 and the Railway cron setup.
 
-## Ongoing — email migration
-
-**Status:** deferred, not blocking
-**Estimate:** 0.5 days
-
-The current Heroku-Mailgun add-on credentials will stop working once the
-Heroku app is destroyed. Migrate to a direct-signup email provider
-([decision deferred — Brevo, Resend, Mailgun-direct, or SendGrid-direct](#)).
-Update the SMTP env vars on Railway; no application code change required
-since the mailer uses generic SMTP settings.
-
 ## Feature backlog
 
-To be sequenced after Phase 2 (modern Rails unlocks the most flexibility).
-Add items here as they come up so they don't get lost.
+Post-migration work goes here. Add items as they come up so they
+don't get lost.
 
 - _(none yet — placeholder for future work)_
+
+## External dependencies (no code action required)
+
+- **CORS for build-log / test-log HEAD probes from Railway.**
+  Resolves the moment `testhub.mesastar.org` is repointed at
+  Railway — the hostname is already on the Flatiron CORS
+  allowlist. Until the DNS cutover, log proxies work but the
+  client-side existence probes 404 in the console on the Railway
+  hostname. No code change owed from this end.
 
 ## Bugs surfaced by Phase 1 specs (fixed in Phase 3)
 
@@ -253,20 +255,30 @@ conversion. Captured here so they don't get lost.
   page persists its column picker state to
   `localStorage["mesa.test_on_commit.columns.v1"]` instead of relying on
   the legacy cookie machinery.
-- **`#passing` / `#missing` collapse animation feels clunky.** Expansion is
-  instantaneous, followed by a smooth scroll — disorienting. Bootstrap 4's
-  `.collapse` plugin should do a smooth transition; needs investigating
-  whether a CSS rule is overriding the transition, or whether the
-  scroll-on-`shown.bs.collapse` is firing before the collapse animation
-  starts. Phase 4 candidate — likely fixes itself with the Bootstrap →
-  Tailwind migration.
-- **`commits.js`'s `BuildLog` and `test_case_commits.js`'s `TestLogs`
-  HEAD probes are CORS-blocked on Railway.** Will resolve when
-  `testhub.mesastar.org` (already on the Flatiron CORS allowlist) is
-  repointed at Railway. No code change required from this end.
+- ~~**`#passing` / `#missing` collapse animation feels clunky.**~~
+  Obsolete — the legacy Bootstrap `.collapse` markup these bullets
+  referred to was removed alongside the rest of the
+  Bootstrap+jQuery stack in Phase 4 / Step 9b. The Tailwind +
+  Stimulus rewrites of those panels don't have the animation
+  glitch.
+
+The build-log / test-log CORS probe note moved up to the
+"External dependencies" section above — it's not a code bug we
+own, just something that resolves when DNS cuts over.
 
 ## Done
 
+- **Email provider migration** (off-phase, May 2026). The
+  Heroku-Mailgun add-on path was retired ahead of the eventual
+  Heroku shutdown by swapping the mailer onto Resend's HTTPS API
+  (PRs #85–#89; final wiring in
+  [`app/mailers/application_mailer.rb`](../app/mailers/application_mailer.rb)).
+  Resend's SMTP endpoints were unreachable from Railway egress —
+  both 465 and 587 timed out at TCP-connect — which forced the
+  HTTP-API path. `Resend.api_key` is set globally on the class
+  (the `resend` gem ignores `resend_settings:` per-delivery
+  overrides). Env vars: `RESEND_API_KEY` for auth, the From
+  address is configured in the mailer rather than per-deploy.
 - **Frontend modernization** (Phase 4). Multi-session work on the
   `frontend-tailwind` branch. Replaced Bootstrap + jQuery +
   Sprockets-driven JS + Turbolinks + custom SCSS with

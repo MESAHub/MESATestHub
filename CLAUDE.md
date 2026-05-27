@@ -20,10 +20,13 @@ drive commit ingestion from `MESAHub/mesa`.
 
 Before doing non-trivial work, read the appropriate doc:
 
-- **[`docs/roadmap.md`](docs/roadmap.md)** — sequenced plan for ongoing
-  modernization work (test foundation → Rails 7 upgrade → perf → frontend).
-  Active phase and branch are noted there. **Check this first** before
-  proposing structural changes; the plan may already cover them.
+- **[`docs/roadmap.md`](docs/roadmap.md)** — historical record of the
+  sequenced modernization (test foundation → Rails upgrade → perf →
+  GitHub sync rewrite → frontend). **All planned phases complete**;
+  the file is now a reference for *why* the architecture looks the
+  way it does, plus a `Feature backlog` section for future work.
+  Check it before proposing structural changes — the rationale you
+  need is often already captured under one of the phase summaries.
 - **[`docs/rails-upgrade.md`](docs/rails-upgrade.md)** — record of the
   Rails 6.1 → 8.0 upgrade (now complete on the `rails-upgrade` branch),
   including the deviations from the original phased plan that actually
