@@ -226,9 +226,12 @@ helper or partial exists.
   `instance_inlists.runtime_minutes`). All 870k+ rows have NULL
   in the other three columns. Anywhere that reads or filters
   runtime — the popover, the test_case_commit cell, the search
-  view, and the `runtime:` SearchOption — should hit
+  view, the `runtime:` SearchOption, and the
+  `test_instances/search.json` envelope — should hit
   `runtime_minutes`. `parse_runtime` returns seconds; divide by
-  60 when feeding it into a `runtime_minutes` query.
+  60 when feeding it into a `runtime_minutes` query. The JSON
+  surface used to emit `rn_runtime` / `re_runtime` / `runtime`
+  (all always null); it now emits `runtime_minutes` directly.
 - **Submission destroy refreshes TCC + Commit scalars in a specific
   order.** `Submission` carries `before_destroy
   :remember_affected_tcc_ids, prepend: true` (the `prepend` is
