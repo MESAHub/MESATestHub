@@ -6,6 +6,7 @@ class TestCaseCommit < ApplicationRecord
   has_many :inlist_data, through: :instance_inlists
   has_many :submissions, through: :test_instances
   has_many :computers, through: :test_instances
+  has_many :claims, dependent: :destroy
 
   validates_presence_of :status, :submission_count, :commit_id, :test_case_id,
                         :checksum_count

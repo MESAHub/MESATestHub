@@ -1,6 +1,7 @@
 class Submission < ApplicationRecord
   belongs_to :commit
   belongs_to :computer
+  belongs_to :claim, optional: true
   has_one :user, through: :computer
 
   # deleting the submission deletes all associated test instances
