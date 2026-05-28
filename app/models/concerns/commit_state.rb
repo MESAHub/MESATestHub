@@ -32,10 +32,21 @@ module CommitState
   #
   #   :fail            ≥1 test case failed uniformly on every computer that ran it
   #   :mixed           ≥1 test case passed on some computers, failed on others
-  #   :pending         test runs are still going, nothing passing yet
+  #   :pending         work is in flight — at least one live claim is open
+  #                    on this commit and the test side isn't done yet
   #   :pending_partial pending + some already passed
   #   :all_pass        every test case ran and passed
-  #   :not_run         no tests ran (typically because all builds failed)
+  #   :not_run         no tests ran AND no claims are open (genuinely
+  #                    untouched — typically a brand-new commit or one
+  #                    whose builds all failed)
+  #
+  # The `:pending` / `:not_run` split keys on `has_pending_claims?`,
+  # not on "are there untested TCCs?". Before claims existed, the
+  # only signal we had for "in flight" was "the TCC has no
+  # submissions yet," which fires the instant a commit is ingested
+  # — well before any computer has actually started work. Claims
+  # are the real signal: a commit with no claims is genuinely
+  # untouched, even if it has 500 TCCs sitting at status=-1.
   #
   # See app/models/test_case_commit.rb for the underlying status integer
   # vocabulary (-1 untested, 0 passing, 1 failing, 2 mixed_checksums,
@@ -44,13 +55,13 @@ module CommitState
     counts = _test_case_status_counts
 
     has_uniform_fail = counts[:failing] > 0
-    has_mixed = counts[:mixed] > 0
-    has_pending = counts[:untested] > 0
-    has_passing = counts[:passing] > 0 || counts[:mixed_checksums] > 0
+    has_mixed        = counts[:mixed] > 0
+    has_passing      = counts[:passing] > 0 || counts[:mixed_checksums] > 0
+    has_pending      = counts[:untested] > 0 && has_pending_claims?
 
     case build_status
     when :all_fail, :unknown
-      return :not_run if !has_passing && !has_uniform_fail && !has_mixed
+      return :not_run if !has_passing && !has_uniform_fail && !has_mixed && !has_pending
     end
 
     return :fail if has_uniform_fail
@@ -105,6 +116,8 @@ module CommitState
     pending_tests = 0
     passing_tests = 0
 
+    pending_tcc_test_ids = _pending_claim_test_case_ids
+
     cells_by_test.each do |test_id, row|
       pendings = row.count { |_id, cell| cell[:status] == :pending }
       passes = row.count   { |_id, cell| cell[:status] == :pass }
@@ -133,11 +146,22 @@ module CommitState
         # Pass with no failures — the test is passing regardless of
         # pending neighbors.
         passing_tests += 1
-      elsif pendings.positive? || no_data
-        # Truly unresolved: nothing passing, nothing failing, just
-        # pending submissions (or no data at all).
+      elsif pendings.positive?
+        # Cell-level pending: at least one built computer hasn't
+        # reported a result yet. Counts as test-level pending
+        # regardless of whether there's an explicit claim — the
+        # build submission is the signal.
+        pending_tests += 1
+      elsif no_data && pending_tcc_test_ids.include?(test_id)
+        # No cells (no built-computer is even attempting yet) AND
+        # someone has claimed the test → genuine in-flight pending.
         pending_tests += 1
       end
+      # no_data without a claim → not counted; the test is :not_run,
+      # not :pending. Pre-claims this branch silently bucketed every
+      # untouched test into pending_tests, which inflated the hero
+      # tile for freshly-ingested commits and for builds-all-failed
+      # commits that nobody's retrying.
     end
 
     has_uniform_fail = uniform_failing_tests.positive?
@@ -548,8 +572,26 @@ module CommitState
 
   # Cached for the lifetime of the Commit instance. Same eager-loaded
   # association set used by the matrix and popover-data passes.
+  # `pending_claims` is included so the row-classification loop in
+  # `commit_state` can ask each TCC "is anyone actually working on
+  # you?" without firing a query per test case.
   def _tccs_for_matrix
-    @_tccs_for_matrix ||= test_case_commits.includes(:test_case, :test_instances).to_a
+    @_tccs_for_matrix ||= test_case_commits
+                            .includes(:test_case, :test_instances, :pending_claims)
+                            .to_a
+  end
+
+  # `test_case_id` set for every TCC on this commit that currently
+  # has a pending test-scope claim. Used in the row-classification
+  # loop in `commit_state` to distinguish "no data on this test
+  # because no one is working on it" (counts as :not_run) from "no
+  # data on this test because the work is still in flight" (counts
+  # as :pending).
+  def _pending_claim_test_case_ids
+    @_pending_claim_test_case_ids ||= _tccs_for_matrix
+                                        .select(&:has_pending_claims?)
+                                        .map(&:test_case_id)
+                                        .to_set
   end
 
   # A cell is "clean" (skip popover) iff it passed with no flags.

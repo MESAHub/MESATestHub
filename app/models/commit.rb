@@ -30,6 +30,11 @@ class Commit < ApplicationRecord
 
   # Dispatcher/claims feature — see docs/dispatcher-and-claims.md.
   has_many :claims, dependent: :destroy
+  # Pre-filtered association for the "is anyone working on this
+  # commit right now?" question. Cheap to eager-load on the commits
+  # index without sucking in the entire claim history of the SHA.
+  has_many :pending_claims, -> { where(status: 'pending') },
+                            class_name: 'Claim'
 
   validates_uniqueness_of :sha, :short_sha
   validates_presence_of :sha, :short_sha, :author, :author_email, :message,
@@ -650,6 +655,24 @@ class Commit < ApplicationRecord
     matchgroup = CommitMessageFlags::FULL_INLISTS_RE.match(message)
     return nil unless matchgroup && matchgroup[1]
     matchgroup[1].strip.to_i
+  end
+
+  # True iff at least one computer has registered a (still-live)
+  # claim against this commit — either build-scope or test-scope.
+  # The `pending_claims` association is pre-filtered to
+  # `status='pending'`, so this is a cheap presence check that
+  # plays nicely with `.includes(:pending_claims)` on the index
+  # page (no N+1 fan-out across 25 rows).
+  #
+  # Used by the `tests_status` aggregator in CommitState to
+  # distinguish "fresh commit, nobody's working on it yet"
+  # (`:not_run`) from "fresh commit, someone has started"
+  # (`:pending`). Before claims existed, the only signal we had
+  # for the latter was "TCC status is -1" — which fires
+  # immediately at commit ingest, well before any human has
+  # touched the SHA. Claims give us the real signal.
+  def has_pending_claims?
+    pending_claims.loaded? ? pending_claims.any? : pending_claims.exists?
   end
 
 
