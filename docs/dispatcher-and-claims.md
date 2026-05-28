@@ -111,8 +111,13 @@ The MESA convention uses these flags in commit messages:
 The latter three are *preferences*, not requirements. "At least
 one" is the bar. The dispatcher honors these by:
 
-1. Parsing the message at commit ingest time, storing as boolean
-   columns on `Commit`.
+1. Parsing the **first line** of the commit message at commit
+   ingest time, storing as boolean columns on `Commit`. Only the
+   first line counts — squash and merge commits routinely list
+   every constituent commit's subject in their body, and a
+   whole-message scan would falsely inherit every directive from
+   every squashed commit. The MESA convention places directives
+   in the subject line of the commit they apply to.
 2. Boosting these commits' priority for **capable** computers
    (one that says it can do FPE gets `[ci fpe]` commits handed to
    it preferentially).
@@ -177,7 +182,8 @@ add_column :commits, :converge_satisfied_at, :datetime
 ```
 
 The `wants_*` columns are populated at commit ingestion by parsing
-the commit message. The `*_satisfied_at` columns are refreshed by
+the **first line** of the commit message (see the CI message flags
+note above for why). The `*_satisfied_at` columns are refreshed by
 a Submission `after_commit` callback when a submission with the
 relevant flag arrives. Both pairs are read together by the
 dispatcher's boost logic.
@@ -601,10 +607,10 @@ No API endpoints yet.
   and validation that `commit_id == test_case_commit.commit_id`
   for test scope.
 - Commit message parser. New module
-  `CommitMessageFlags.parse(message_body)` returns the four
-  booleans. Called from the commit ingest path
-  (`BranchSyncJob`-adjacent — check the actual ingest method
-  during implementation).
+  `CommitMessageFlags.parse(message)` scans only the **first
+  line** of the message and returns the four booleans. Called
+  from the commit ingest path (`BranchSyncJob`-adjacent —
+  check the actual ingest method during implementation).
 - Specs: `Claim` validation matrix; `CommitMessageFlags` parser
   cases (all four flags, none, multiple, weird whitespace).
 
