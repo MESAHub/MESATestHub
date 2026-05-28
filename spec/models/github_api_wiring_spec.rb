@@ -22,10 +22,18 @@ RSpec.describe 'GitHub API client wiring' do
     expect(ApplicationRecord.repo_path).to eq('MESAHub/mesa')
   end
 
-  it 'configures the Octokit middleware with Faraday::HttpCache and Octokit::Response::RaiseError' do
+  it 'configures the Octokit middleware with Retry, Faraday::HttpCache, and Octokit::Response::RaiseError' do
     handler_classes = Octokit.middleware.handlers.map(&:klass)
+    expect(handler_classes).to include(Faraday::Retry::Middleware)
     expect(handler_classes).to include(Faraday::HttpCache)
     expect(handler_classes).to include(Octokit::Response::RaiseError)
+  end
+
+  it 'places Faraday::Retry outermost so it catches Octokit exceptions raised by RaiseError' do
+    handler_classes = Octokit.middleware.handlers.map(&:klass)
+    retry_idx = handler_classes.index(Faraday::Retry::Middleware)
+    raise_idx = handler_classes.index(Octokit::Response::RaiseError)
+    expect(retry_idx).to be < raise_idx
   end
 
   it 'still has Octokit::NotFound available for rescue clauses' do
