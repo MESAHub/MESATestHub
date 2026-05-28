@@ -214,7 +214,14 @@ and the Railway cron setup.
 Post-migration work goes here. Add items as they come up so they
 don't get lost.
 
-- _(none yet — placeholder for future work)_
+- **Dispatcher & claims** — first major post-migration feature.
+  Adds a dispatcher API that tells `mesa_test` what to test next,
+  plus a `claims` data model that tracks in-flight work as a
+  first-class object. Honors `[ci skip]`, `[ci optional]`,
+  `[ci fpe]`, and `[ci converge]` flags. Unblocks a future GitHub
+  CI status integration. Full design and phased plan in
+  [`docs/dispatcher-and-claims.md`](dispatcher-and-claims.md).
+  **Status:** planning complete, implementation not started.
 
 ## External dependencies (no code action required)
 
