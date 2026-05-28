@@ -7,7 +7,25 @@ class ApplicationRecord < ActiveRecord::Base
   
   # middleware stack stuff stolen shamelessly from octokit readme:
   # https://github.com/octokit/octokit.rb#caching
+  #
+  # Retry is outermost so it catches exceptions raised deeper in the stack
+  # (notably the Octokit::* exceptions raised by RaiseError). GitHub
+  # occasionally returns transient 404s mid-pagination and 5xx during
+  # incidents; without retry, a single blip aborts the whole rake/cron run.
+  retry_options = {
+    max: 2,
+    interval: 0.5,
+    interval_randomness: 0.5,
+    backoff_factor: 2,
+    exceptions: Faraday::Retry::Middleware::DEFAULT_EXCEPTIONS + [
+      Octokit::ServerError,
+      Octokit::TooManyRequests,
+      Octokit::NotFound
+    ]
+  }
+
   stack = Faraday::RackBuilder.new do |builder|
+    builder.use Faraday::Retry::Middleware, retry_options
     builder.use Faraday::HttpCache, serializer: Marshal, shared_cache: false
     builder.use Octokit::Response::RaiseError
     builder.adapter Faraday.default_adapter
