@@ -207,4 +207,88 @@ RSpec.describe Commit, 'payload ingestion' do
         .not_to change(CommitRelation, :count)
     end
   end
+
+  # The CI directive flag columns added in Phase A of the
+  # dispatcher+claims feature get populated from the commit
+  # message at ingest. Both ingest paths run through
+  # `hash_from_github`, which merges in `CommitMessageFlags.parse`,
+  # so verifying the bulk path covers the regular AR path too.
+  describe 'CI directive flag columns at ingest' do
+    it 'populates wants_full_inlists for a [ci optional] commit' do
+      Commit.ingest_payload_commits(
+        [gh_commit(sha: sha40('opt'), message: "Refactor [ci optional]")]
+      )
+      row = Commit.find_by(sha: sha40('opt'))
+      expect(row.wants_full_inlists).to be true
+      expect(row.wants_fpe).to be false
+      expect(row.ci_skip).to be false
+    end
+
+    it 'populates wants_fpe and wants_converge together' do
+      Commit.ingest_payload_commits(
+        [gh_commit(sha: sha40('flag'),
+                   message: "Tune solver [ci fpe] [ci converge]")]
+      )
+      row = Commit.find_by(sha: sha40('flag'))
+      expect(row.wants_fpe).to be true
+      expect(row.wants_converge).to be true
+      expect(row.ci_skip).to be false
+    end
+
+    it 'populates ci_skip for a plain [ci skip] commit' do
+      Commit.ingest_payload_commits(
+        [gh_commit(sha: sha40('skip'), message: "Bump version [ci skip]")]
+      )
+      row = Commit.find_by(sha: sha40('skip'))
+      expect(row.ci_skip).to be true
+      expect(row.wants_full_inlists).to be false
+    end
+
+    it 'suppresses ci_skip when [ci optional] is also present' do
+      Commit.ingest_payload_commits(
+        [gh_commit(sha: sha40('mrge'),
+                   message: "Merge cleanup [ci skip] [ci optional]")]
+      )
+      row = Commit.find_by(sha: sha40('mrge'))
+      expect(row.ci_skip).to be false
+      expect(row.wants_full_inlists).to be true
+    end
+
+    it 'leaves all flags false for a vanilla commit' do
+      Commit.ingest_payload_commits(
+        [gh_commit(sha: sha40('clean'), message: "Add missing comma")]
+      )
+      row = Commit.find_by(sha: sha40('clean'))
+      expect(row.ci_skip).to be false
+      expect(row.wants_full_inlists).to be false
+      expect(row.wants_fpe).to be false
+      expect(row.wants_converge).to be false
+    end
+
+    it 'populates flags via the AR create_or_update path too' do
+      payload = gh_commit(sha: sha40('aronly'),
+                          message: "Big change [ci fpe]")
+      commit = Commit.create_or_update_from_github_hash(github_hash: payload)
+      expect(commit.wants_fpe).to be true
+      expect(commit.ci_skip).to be false
+    end
+
+    it 'ignores directives that appear only in the message body' do
+      # Squash/merge commits typically include each squashed
+      # commit's subject in the body. Scanning the whole message
+      # would inherit every directive from every constituent
+      # commit; only the merge commit's own subject line counts.
+      Commit.ingest_payload_commits(
+        [gh_commit(sha: sha40('mbody'),
+                   message: "Merge feature-X (#42)\n\n" \
+                            "* Tidy [ci skip]\n" \
+                            "* Solver swap [ci fpe]\n" \
+                            "* All-inlists pass [ci optional]\n")]
+      )
+      row = Commit.find_by(sha: sha40('mbody'))
+      expect(row.ci_skip).to be false
+      expect(row.wants_fpe).to be false
+      expect(row.wants_full_inlists).to be false
+    end
+  end
 end

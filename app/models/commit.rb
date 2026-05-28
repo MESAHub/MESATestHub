@@ -28,6 +28,14 @@ class Commit < ApplicationRecord
   has_many :test_cases, through: :test_case_commits
   has_many :test_instances, through: :test_case_commits
 
+  # Dispatcher/claims feature — see docs/dispatcher-and-claims.md.
+  has_many :claims, dependent: :destroy
+  # Pre-filtered association for the "is anyone working on this
+  # commit right now?" question. Cheap to eager-load on the commits
+  # index without sucking in the entire claim history of the SHA.
+  has_many :pending_claims, -> { where(status: 'pending') },
+                            class_name: 'Claim'
+
   validates_uniqueness_of :sha, :short_sha
   validates_presence_of :sha, :short_sha, :author, :author_email, :message,
     :commit_time
@@ -318,15 +326,23 @@ class Commit < ApplicationRecord
     # on the branch — that's what makes the head sit at the top of
     # GitHub's view and is what we want every commit-list view here
     # to agree on.
+    #
+    # CI directive flags are parsed from the message body here so
+    # both ingest paths (insert_all in ingest_payload_commits and
+    # ActiveRecord update in create_or_update_from_github_hash) get
+    # the columns populated automatically. Keeps the source of truth
+    # for ci_skip / wants_* a single function call away from the
+    # message text.
+    message = github_hash[:commit][:message]
     {
       sha: github_hash[:sha],
       short_sha: github_hash[:sha][(0...7)],
       author: github_hash[:commit][:author][:name],
       author_email: github_hash[:commit][:author][:email],
       commit_time: github_hash[:commit][:committer][:date],
-      message: github_hash[:commit][:message],
+      message: message,
       github_url: github_hash[:html_url]
-    }
+    }.merge(CommitMessageFlags.parse(message))
   end
 
   #####################################
@@ -607,36 +623,56 @@ class Commit < ApplicationRecord
       pluck(:test_case_id).uniq.count == test_cases.count
   end
 
-  # these simply report if the right flag appears in the commit message
-  # ideally, these should be added to the database so they can be modified
-  # after the fact (and so we can change the convetion). But for now, this
-  # will suffice
+  # The four CI directives MESA developers embed in commit
+  # messages, exposed as boolean predicates. Backed by columns on
+  # `commits` that get populated at ingest by
+  # `CommitMessageFlags.parse` — these predicates are pass-throughs
+  # to the columns so the same answer goes to the dispatcher (which
+  # filters/boosts in SQL) and to the legacy `test_candidate` /
+  # submissions API surface that historically read them at runtime.
+  #
+  # `ci_optional_n` still parses the message because the digit in
+  # `[ci optional 1234]` isn't stored as a scalar.
   def ci_skip?
-    # ensure that anything including optional or fpe tests is not thought
-    # of as being skipped; usually only appears in merge commit messages
-    !!(message =~ /\[\s*ci\s+skip\s*\]/ && !(ci_optional? || ci_fpe?))
+    ci_skip
   end
 
   def ci_optional?
-    !!(message =~ /\[\s*ci\s+optional(\s+\d+)?\s*\]/)
+    wants_full_inlists
+  end
+
+  def ci_fpe?
+    wants_fpe
+  end
+
+  def ci_converge?
+    wants_converge
   end
 
   # extract the number from a run-optional commit, if there is one
   def ci_optional_n
     return unless ci_optional?
-    matchgroup = /\[\s*ci\s+optional(\s+\d+)?\s*\]/.match(message)
-    if matchgroup[1]
-      return matchgroup[1].strip.to_i
-    end
-    return nil
+    matchgroup = CommitMessageFlags::FULL_INLISTS_RE.match(message)
+    return nil unless matchgroup && matchgroup[1]
+    matchgroup[1].strip.to_i
   end
 
-  def ci_fpe?
-    !!(message =~ /\[\s*ci\s+fpe\s*\]/)
-  end
-
-  def ci_converge?
-    !!(message =~ /\[\s*ci\s+converge\s*\]/)
+  # True iff at least one computer has registered a (still-live)
+  # claim against this commit — either build-scope or test-scope.
+  # The `pending_claims` association is pre-filtered to
+  # `status='pending'`, so this is a cheap presence check that
+  # plays nicely with `.includes(:pending_claims)` on the index
+  # page (no N+1 fan-out across 25 rows).
+  #
+  # Used by the `tests_status` aggregator in CommitState to
+  # distinguish "fresh commit, nobody's working on it yet"
+  # (`:not_run`) from "fresh commit, someone has started"
+  # (`:pending`). Before claims existed, the only signal we had
+  # for the latter was "TCC status is -1" — which fires
+  # immediately at commit ingest, well before any human has
+  # touched the SHA. Claims give us the real signal.
+  def has_pending_claims?
+    pending_claims.loaded? ? pending_claims.any? : pending_claims.exists?
   end
 
 

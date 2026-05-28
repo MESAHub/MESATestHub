@@ -6,6 +6,12 @@ class TestCaseCommit < ApplicationRecord
   has_many :inlist_data, through: :instance_inlists
   has_many :submissions, through: :test_instances
   has_many :computers, through: :test_instances
+  has_many :claims, dependent: :destroy
+  # Pre-filtered association for "is anyone running this specific
+  # test on this commit right now?" Eager-loaded by the commits
+  # index alongside Commit#pending_claims.
+  has_many :pending_claims, -> { where(status: 'pending') },
+                            class_name: 'Claim'
 
   validates_presence_of :status, :submission_count, :commit_id, :test_case_id,
                         :checksum_count
@@ -183,6 +189,25 @@ class TestCaseCommit < ApplicationRecord
 
   def failing
     test_instances.where(passed: false)
+  end
+
+  # True iff at least one computer has registered a still-live
+  # test-scope claim against this TCC. Cheap to check after an
+  # `.includes(:pending_claims)` on the commit's collection. Used
+  # by view-side aggregators that want to distinguish "this test
+  # hasn't been touched on this commit" from "this test is being
+  # worked on right now" without changing the integer status
+  # column (which still encodes pass/fail/mixed/untested).
+  def has_pending_claims?
+    pending_claims.loaded? ? pending_claims.any? : pending_claims.exists?
+  end
+
+  # True iff this TCC is in an "untested" state (no submissions)
+  # AND someone has claimed it. The two-part check is the entire
+  # point: a fresh TCC with no claim is genuinely untested; a
+  # fresh TCC with an open claim is pending.
+  def pending?
+    status == @@status_encoder[:untested] && has_pending_claims?
   end
 
   # Display payload for the test-on-commit page. Returns one hash per

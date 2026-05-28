@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_05_25_000000) do
+ActiveRecord::Schema[8.0].define(version: 2026_05_28_150845) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -30,6 +30,30 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_25_000000) do
     t.datetime "created_at", precision: nil, default: -> { "now()" }, null: false
     t.datetime "updated_at", precision: nil, default: -> { "now()" }, null: false
     t.index ["name"], name: "index_branches_on_name", unique: true
+  end
+
+  create_table "claims", force: :cascade do |t|
+    t.bigint "computer_id", null: false
+    t.bigint "commit_id", null: false
+    t.bigint "test_case_commit_id"
+    t.string "scope", null: false
+    t.string "status", default: "pending", null: false
+    t.boolean "use_fpe", default: false, null: false
+    t.boolean "use_full_inlists", default: false, null: false
+    t.boolean "use_converge", default: false, null: false
+    t.datetime "dispatched_at"
+    t.datetime "expires_at", null: false
+    t.datetime "fulfilled_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["commit_id", "status"], name: "index_claims_on_commit_id_and_status"
+    t.index ["commit_id"], name: "index_claims_on_commit_id"
+    t.index ["computer_id", "status"], name: "index_claims_on_computer_id_and_status"
+    t.index ["computer_id"], name: "index_claims_on_computer_id"
+    t.index ["expires_at"], name: "index_claims_on_expires_at_pending", where: "((status)::text = 'pending'::text)"
+    t.index ["test_case_commit_id", "status"], name: "index_claims_on_test_case_commit_id_and_status"
+    t.index ["test_case_commit_id"], name: "index_claims_on_test_case_commit_id"
+    t.check_constraint "scope::text = 'build'::text AND test_case_commit_id IS NULL OR scope::text = 'test'::text AND test_case_commit_id IS NOT NULL", name: "claims_scope_fk_coherence"
   end
 
   create_table "commit_relations", force: :cascade do |t|
@@ -61,6 +85,13 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_25_000000) do
     t.integer "status", default: 0
     t.boolean "pull_request", default: false
     t.boolean "open"
+    t.boolean "ci_skip", default: false, null: false
+    t.boolean "wants_full_inlists", default: false, null: false
+    t.boolean "wants_fpe", default: false, null: false
+    t.boolean "wants_converge", default: false, null: false
+    t.datetime "full_inlists_satisfied_at"
+    t.datetime "fpe_satisfied_at"
+    t.datetime "converge_satisfied_at"
     t.index ["sha"], name: "index_commits_on_sha", unique: true
     t.index ["short_sha"], name: "index_commits_on_short_sha", unique: true
   end
@@ -119,6 +150,12 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_25_000000) do
     t.string "sdk_version"
     t.string "math_backend"
     t.string "platform_version"
+    t.bigint "claim_id"
+    t.datetime "started_at"
+    t.boolean "use_fpe", default: false, null: false
+    t.boolean "use_full_inlists", default: false, null: false
+    t.boolean "use_converge", default: false, null: false
+    t.index ["claim_id"], name: "index_submissions_on_claim_id"
     t.index ["commit_id"], name: "index_submissions_on_commit_id"
     t.index ["computer_id", "created_at"], name: "index_submissions_on_computer_id_and_created_at"
     t.index ["computer_id"], name: "index_submissions_on_computer_id"
@@ -210,11 +247,15 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_25_000000) do
   end
 
   add_foreign_key "branches", "commits", column: "head_id"
+  add_foreign_key "claims", "commits"
+  add_foreign_key "claims", "computers"
+  add_foreign_key "claims", "test_case_commits"
   add_foreign_key "commit_relations", "commits", column: "child_id"
   add_foreign_key "commit_relations", "commits", column: "parent_id"
   add_foreign_key "computers", "users", on_delete: :cascade
   add_foreign_key "inlist_data", "instance_inlists"
   add_foreign_key "instance_inlists", "test_instances"
+  add_foreign_key "submissions", "claims"
   add_foreign_key "submissions", "commits"
   add_foreign_key "submissions", "computers"
   add_foreign_key "test_case_commits", "commits"

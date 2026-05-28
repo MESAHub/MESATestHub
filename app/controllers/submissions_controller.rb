@@ -19,6 +19,16 @@ class SubmissionsController < ApplicationController
     @submission.sdk_version = commit_params[:sdk_version]
     @submission.math_backend = commit_params[:math_backend]
 
+    # Dispatcher + claims fulfillment payload (Phase B of
+    # docs/dispatcher-and-claims.md). Optional — backwards-
+    # compatible with mesa_test versions that don't send a
+    # `claim:` block. When a claim_id is supplied, the
+    # after_create_commit callback on Submission flips the
+    # matching claim to fulfilled. The `use_*` flags record what
+    # the work was actually run with (used by Phase C's
+    # satisfaction tracking).
+    assign_claim_fulfillment(@submission)
+
     # only report compilation status once per go-round
     # that is, if we're reporting results test-by-test, compilation information
     # will come in an empty submission. In an entire submission, all the tests
@@ -290,5 +300,31 @@ class SubmissionsController < ApplicationController
   def request_commit_params
     params.permit(:allow_optional, :allow_fpe, :allow_converge, :allow_skip,
                   :max_age, :branch)
+  end
+
+  # Pulls the optional `claim:` block out of the request and
+  # writes its fields onto the submission. JSON shape:
+  #
+  #   "claim": {
+  #     "id": 8421,                          // integer, optional
+  #     "started_at": "2026-05-27T12:34:56Z",
+  #     "use_fpe": false,
+  #     "use_full_inlists": false,
+  #     "use_converge": false
+  #   }
+  #
+  # No-op when no `claim:` key is present, so legacy mesa_test
+  # versions continue to work. The `id`-vs-`claim_id` rename keeps
+  # the JSON nested-namespace tidy (`claim.id`) while the column on
+  # `submissions` stays `claim_id`.
+  def assign_claim_fulfillment(submission)
+    return unless params[:claim]
+
+    attrs = params.require(:claim).permit(
+      :id, :started_at,
+      :use_fpe, :use_full_inlists, :use_converge
+    ).to_h
+    attrs[:claim_id] = attrs.delete(:id) if attrs.key?(:id) || attrs.key?('id')
+    submission.assign_attributes(attrs)
   end
 end

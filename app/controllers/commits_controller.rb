@@ -113,7 +113,9 @@ class CommitsController < ApplicationController
                     .reorder('commits.commit_time ASC')
                     .limit(@page_size + 1)
                     .includes(:submissions,
-                              test_case_commits: { test_instances: [] })
+                              :pending_claims,
+                              test_case_commits: [:test_instances,
+                                                  :pending_claims])
                     .to_a
       @has_more_newer = rows.size > @page_size
       rows.pop if @has_more_newer
@@ -127,7 +129,9 @@ class CommitsController < ApplicationController
                     .where('commits.commit_time < ?', @before_time_param)
                     .limit(@page_size + 1)
                     .includes(:submissions,
-                              test_case_commits: { test_instances: [] })
+                              :pending_claims,
+                              test_case_commits: [:test_instances,
+                                                  :pending_claims])
                     .to_a
       @has_more_older_via_main_fetch = rows.size > @page_size
       rows.pop if @has_more_older_via_main_fetch

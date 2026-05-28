@@ -148,6 +148,95 @@ RSpec.describe 'commit state aggregation' do
       all_computers.each { |c| submit(computer: c, compiled: false) }
       expect(commit.reload.tests_status).to eq(:not_run)
     end
+
+    # Claim awareness: see docs/dispatcher-and-claims.md. Pre-claims,
+    # the only signal we had for "in flight" was "the TCC has no
+    # submissions yet," which fires the instant a commit is ingested.
+    # Claims give us the real signal; tests_status keys :pending /
+    # :not_run off claim presence now.
+    describe 'claim-aware pending vs not_run' do
+      it 'is :not_run for a fresh commit with TCCs but no claims' do
+        [test_case_a, test_case_b, test_case_c].each { |tc| tcc_for(tc) }
+        expect(commit.reload.tests_status).to eq(:not_run)
+      end
+
+      it 'is :pending when at least one claim is open on the commit' do
+        [test_case_a, test_case_b, test_case_c].each { |tc| tcc_for(tc) }
+        create(:claim, computer: rusty, commit: commit)
+
+        expect(commit.reload.tests_status).to eq(:pending)
+      end
+
+      it 'is :pending_partial when claims are open AND some tests have passed' do
+        [test_case_a, test_case_b, test_case_c].each { |tc| tcc_for(tc) }
+        submit(computer: rusty)
+        instance(test_case: test_case_a, computer: rusty, passed: true)
+        tcc_for(test_case_a).update_status
+        tcc_for(test_case_a).save!
+
+        create(:claim, computer: popeye, commit: commit)
+
+        expect(commit.reload.tests_status).to eq(:pending_partial)
+      end
+
+      it 'reverts to :not_run after the only open claim is fulfilled' do
+        [test_case_a, test_case_b, test_case_c].each { |tc| tcc_for(tc) }
+        claim = create(:claim, computer: rusty, commit: commit)
+        expect(commit.reload.tests_status).to eq(:pending)
+
+        claim.fulfill!
+        expect(commit.reload.tests_status).to eq(:not_run)
+      end
+
+      it 'reverts to :not_run after the only open claim expires' do
+        [test_case_a, test_case_b, test_case_c].each { |tc| tcc_for(tc) }
+        create(:claim, :expired, computer: rusty, commit: commit)
+        expect(commit.reload.tests_status).to eq(:not_run)
+      end
+    end
+  end
+
+  describe '#has_pending_claims?' do
+    it 'is false on a commit with no claims' do
+      expect(commit.has_pending_claims?).to be false
+    end
+
+    it 'is true when at least one pending claim exists' do
+      create(:claim, computer: rusty, commit: commit)
+      expect(commit.has_pending_claims?).to be true
+    end
+
+    it 'is false when the only claim has been fulfilled' do
+      create(:claim, :fulfilled, computer: rusty, commit: commit)
+      expect(commit.has_pending_claims?).to be false
+    end
+
+    it 'is false when the only claim has expired' do
+      create(:claim, :expired, computer: rusty, commit: commit)
+      expect(commit.has_pending_claims?).to be false
+    end
+
+    it 'works without preloading the association' do
+      create(:claim, computer: rusty, commit: commit)
+      expect(commit.reload.has_pending_claims?).to be true
+    end
+
+    it 'short-circuits to the loaded association when preloaded' do
+      # If `has_pending_claims?` triggered a DB query despite the
+      # preload, the commits index render path would N+1 across 25
+      # rows. Verify by clearing the connection's query cache and
+      # asserting the predicate doesn't issue a SELECT.
+      create(:claim, computer: rusty, commit: commit)
+      reloaded = Commit.includes(:pending_claims).find(commit.id)
+      query_count = 0
+      counter = ->(*, payload) {
+        query_count += 1 unless payload[:name] == "SCHEMA"
+      }
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        reloaded.has_pending_claims?
+      end
+      expect(query_count).to eq(0)
+    end
   end
 
   describe '#flag_counts' do
@@ -251,17 +340,37 @@ RSpec.describe 'commit state aggregation' do
       expect(state[:tests][:status]).to eq(:not_run)
     end
 
-    it 'counts tests with no built-computer results as pending in the hero stat row' do
-      # Every computer attempted to build and failed; the commit *has*
-      # TCCs (so we know which tests to run) but no built computer has
-      # any cell with a status. Those tests should count toward
-      # `pending_tests` so the hero's "Pending" tile flags them as
-      # missing, rather than being silently dropped.
+    it 'reports tests with no built-computer results AND no claims as not pending' do
+      # Every computer attempted to build and failed; the commit has
+      # TCCs but no claims. Pre-claims this used to lump all three
+      # tests into `pending_tests` because of the "no_data ⇒ pending"
+      # fallback in `commit_state`. With claims as the real "work in
+      # flight" signal, "all builds failed and nobody's retrying"
+      # correctly aggregates to zero pending tests (and the hero
+      # tile reads as :not_run).
       all_computers.each { |c| submit(computer: c, compiled: false) }
       [test_case_a, test_case_b, test_case_c].each { |tc| tcc_for(tc) }
 
       state = commit.reload.commit_state
-      expect(state[:tests][:pending_tests]).to eq(3)
+      expect(state[:tests][:pending_tests]).to eq(0)
+      expect(state[:tests][:status]).to eq(:not_run)
+    end
+
+    it 'counts tests with open test-scope claims as pending in the hero stat row' do
+      # Same shape as the prior test, but with two test-scope claims
+      # out on test_case_a and test_case_b. Those are the tests
+      # someone is actually working on, so they get counted; the
+      # un-claimed test_case_c does not.
+      all_computers.each { |c| submit(computer: c, compiled: false) }
+      [test_case_a, test_case_b, test_case_c].each { |tc| tcc_for(tc) }
+
+      create(:claim, :test_scope, computer: rusty, commit: commit,
+                                  test_case_commit: tcc_for(test_case_a))
+      create(:claim, :test_scope, computer: popeye, commit: commit,
+                                  test_case_commit: tcc_for(test_case_b))
+
+      state = commit.reload.commit_state
+      expect(state[:tests][:pending_tests]).to eq(2)
     end
 
     it '8e7c1b3 — passing with two full-inlist runs flagged' do
@@ -656,6 +765,56 @@ RSpec.describe TestCaseCommit, type: :model do
       expect(row[:checksum]).to eq('abc1234')
       expect(row[:steps]).to eq(1234)
       expect(row[:computer_name]).to eq('rusty')
+    end
+  end
+
+  describe '#has_pending_claims? and #pending?' do
+    let(:user) { create(:user) }
+    let(:computer) { create(:computer, user: user) }
+    let(:commit) { create(:commit) }
+    let(:test_case) { create(:test_case) }
+    let(:tcc) { create(:test_case_commit, commit: commit, test_case: test_case) }
+
+    it '#has_pending_claims? is false on a TCC with no claims' do
+      expect(tcc.has_pending_claims?).to be false
+    end
+
+    it '#has_pending_claims? is true with a pending test-scope claim' do
+      create(:claim, :test_scope, computer: computer, commit: commit,
+                                  test_case_commit: tcc)
+      expect(tcc.has_pending_claims?).to be true
+    end
+
+    it '#has_pending_claims? is false when the only claim has been fulfilled' do
+      create(:claim, :test_scope, :fulfilled,
+             computer: computer, commit: commit, test_case_commit: tcc)
+      expect(tcc.has_pending_claims?).to be false
+    end
+
+    it '#pending? is true when status is -1 and there is a pending claim' do
+      create(:claim, :test_scope, computer: computer, commit: commit,
+                                  test_case_commit: tcc)
+      expect(tcc.pending?).to be true
+    end
+
+    it "#pending? is false when status is -1 and there's no claim" do
+      expect(tcc.pending?).to be false
+    end
+
+    it '#pending? is false once the TCC has any non-untested status' do
+      # Mid-run: a test-scope claim is out AND a passing instance has
+      # already landed. The TCC's status flips to passing(=0) and
+      # #pending? reads as false even though the claim row is still
+      # pending — the test no longer needs work.
+      create(:claim, :test_scope, computer: computer, commit: commit,
+                                  test_case_commit: tcc)
+      sub = create(:submission, commit: commit, computer: computer)
+      create(:test_instance, commit: commit, computer: computer,
+                             test_case: test_case, test_case_commit: tcc,
+                             submission: sub, passed: true)
+      tcc.update_status
+      tcc.save!
+      expect(tcc.pending?).to be false
     end
   end
 end
