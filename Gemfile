@@ -69,3 +69,5 @@ end
 group :test do
   gem 'database_cleaner'
 end
+
+gem "solid_queue", "~> 1.4"

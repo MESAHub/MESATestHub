@@ -32,8 +32,16 @@ that replaced the SVN-era `Version` rows.
   template inside the modern app layout so the user can navigate
   away.  Accepts `?date=YYYY-MM-DD` for historical previews and
   `?refresh=1` to bust the 24-hour cache.
+- **[`app/jobs/morning_mailer_job.rb`](../app/jobs/morning_mailer_job.rb)**
+  `MorningMailerJob` — the production driver. A Solid Queue
+  recurring task (see [`config/recurring.yml`](../config/recurring.yml))
+  fires it twice in UTC; the job carries the 8-AM-Eastern guard and
+  calls `MorningMailer.daily.deliver_later`. See
+  [`docs/solid-queue-migration.md`](solid-queue-migration.md).
 - **[`lib/tasks/morning_mailer.rake`](../lib/tasks/morning_mailer.rake)**
-  `morning_mailer:daily` rake task — what cron invokes.
+  `morning_mailer:daily` rake task — the manual / debugging entry
+  point (`FORCE=1` to send regardless of clock). No longer the
+  scheduled driver.
 
 ## Anomaly detection
 
@@ -78,19 +86,25 @@ SMTP, swapping back is reverting the
 change to set `delivery_method = :smtp` with `smtp_settings`
 pointing at the provider.
 
-### Required env vars (cron service)
+### Required env vars
+
+Since the digest now runs as a Solid Queue recurring job inside the
+**web service's** Puma process (no separate cron service), these
+just need to be present on the web service — most already are:
 
 | Var | Purpose |
 |---|---|
 | `RESEND_API_KEY` | API key from Resend's dashboard. |
-| `DATABASE_URL` | Reference the Railway Postgres service: `${{Postgres.DATABASE_URL}}`. |
-| `SECRET_KEY_BASE` | Required for Rails to boot. Reference the web service's: `${{MESATestHub.SECRET_KEY_BASE}}`. |
-| `GIT_TOKEN` | Optional but recommended — without it, the digest shows "couldn't check" for the release-blocker line. Reference the web service's: `${{MESATestHub.GIT_TOKEN}}`. |
-| `RAILS_ENV` | Set to `production` (gates the `:resend` delivery method — see [`application_mailer.rb`](../app/mailers/application_mailer.rb)). |
-| `TZ` | Set to `America/New_York` so `Time.now` reads Eastern inside the rake task's "is it 8 AM yet?" guard. Note: the Railway cron *scheduler* itself always evaluates in UTC — see the cron section below. |
+| `DATABASE_URL` | The Railway Postgres service. |
+| `SECRET_KEY_BASE` | Required for Rails to boot. |
+| `GIT_TOKEN` | Optional but recommended — without it, the digest shows "couldn't check" for the release-blocker line. |
+| `RAILS_ENV` | `production` (gates the `:resend` delivery method — see [`application_mailer.rb`](../app/mailers/application_mailer.rb)). |
+| `SOLID_QUEUE_IN_PUMA` | `true` — starts Solid Queue's supervisor + scheduler inside Puma so recurring jobs actually fire. See [`config/puma.rb`](../config/puma.rb). |
 
-Old `SMTP_*` env vars from the SMTP era can be removed; they're
-no longer read.
+`MorningMailerJob`'s 8-AM-Eastern guard reads
+`Time.now.in_time_zone('America/New_York')` explicitly, so it does
+**not** depend on a `TZ` env var. Old `SMTP_*` env vars from the
+SMTP era can be removed; they're no longer read.
 
 ### Domain verification in Resend
 
@@ -113,36 +127,43 @@ is unchanged.
 ## Scheduling — 8 AM US Eastern
 
 The intended cadence is **8:00 AM US Eastern Time** every day.
-Railway's cron scheduler evaluates schedules in UTC regardless of
-the service's `TZ` env var, and 8 AM ET moves between 12 UTC (EDT)
-and 13 UTC (EST) twice a year.  To get a stable 8 AM ET delivery
-across DST without manual schedule edits, we fire **twice** in UTC
-and let the rake task itself decide whether it's actually 8 AM
-Eastern.
+Solid Queue's scheduler evaluates `config/recurring.yml` schedules
+in UTC, and 8 AM ET moves between 12 UTC (EDT) and 13 UTC (EST)
+twice a year.  To get a stable 8 AM ET delivery across DST without
+manual schedule edits, we fire **twice** in UTC and let
+`MorningMailerJob` itself decide whether it's actually 8 AM Eastern.
 
-### Railway cron trigger
+### Solid Queue recurring task
 
-On the cron service:
+The digest is now scheduled in-process by Solid Queue, not by a
+separate Railway cron service.  The stanza in
+[`config/recurring.yml`](../config/recurring.yml):
 
-1. **Variables** → set everything in the table above.
-2. **Settings** → set the two fields:
-   - **Cron Schedule**: `0 12,13 * * *` (fires at 12:00 UTC *and* 13:00 UTC)
-   - **Custom Start Command**: `bundle exec rake morning_mailer:daily`
+```yaml
+production:
+  morning_mailer:
+    class: MorningMailerJob
+    schedule: "0 12,13 * * *"
+```
 
-   When a Cron Schedule is set, Railway runs the service as a
-   one-shot job and uses Custom Start Command as the command for
-   each invocation.
-3. `lib/tasks/morning_mailer.rake` checks `Time.now.in_time_zone('America/New_York').hour`
-   on every run and **exits without sending** when the local
-   Eastern hour isn't 8.  Net effect: during EDT (UTC-4) the 12 UTC
-   fire delivers and the 13 UTC fire skips; during EST (UTC-5) the
-   12 UTC fire skips and the 13 UTC fire delivers.  Always 8 AM ET,
-   no DST babysitting.
+fires `MorningMailerJob` at 12:00 UTC *and* 13:00 UTC.  The job's
+`perform` checks `Time.now.in_time_zone('America/New_York').hour`
+and **returns without delivering** when the local Eastern hour
+isn't 8.  Net effect: during EDT (UTC-4) the 12 UTC fire delivers
+and the 13 UTC fire skips; during EST (UTC-5) the 12 UTC fire skips
+and the 13 UTC fire delivers.  Always 8 AM ET, no DST babysitting.
 
-The cron service is a separate Railway service from the web app —
-both deploy from this repo, but only the web service has a public
-domain.  The cron service wakes up at the scheduled time, runs the
-rake task once, and exits.
+The job calls `MorningMailer.daily.deliver_later`, so a transient
+Resend hiccup becomes a queued mailer retry rather than a missed
+digest day.
+
+This runs inside the web service's Puma process (the `solid_queue`
+Puma plugin, gated on `SOLID_QUEUE_IN_PUMA=true` — see
+[`config/puma.rb`](../config/puma.rb) and
+[`docs/solid-queue-migration.md`](solid-queue-migration.md)).  There
+is no longer a dedicated cron service to maintain; deleting the old
+`morning_mailer:daily` Railway cron service is part of the Solid
+Queue migration.
 
 ### Local manual send
 

@@ -1,0 +1,26 @@
+# Recurring schedules for Solid Queue's scheduler. These replace the
+# separate Railway cron services that previously booted Rails once per
+# fire. See docs/solid-queue-migration.md.
+#
+# Schedules are evaluated in UTC. The morning mailer fires twice (12:00
+# and 13:00 UTC) so it lands at 08:00 US Eastern across the DST
+# boundary; MorningMailerJob short-circuits on the off-hour fire — the
+# same workaround the old cron service used.
+#
+# Only the production environment runs recurring tasks; development
+# stays on the :async adapter and test on :test, so neither has a
+# scheduler.
+
+production:
+  morning_mailer:
+    class: MorningMailerJob
+    schedule: "0 12,13 * * *"
+  branch_reconcile:
+    class: BranchReconcileJob
+    schedule: "*/15 * * * *"
+  claim_sweep:
+    class: ClaimSweeperJob
+    schedule: "*/5 * * * *"
+  clear_solid_queue_finished_jobs:
+    command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
+    schedule: every hour at minute 12
