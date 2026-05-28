@@ -1,10 +1,11 @@
 # Solid Queue adoption
 
-**Status:** planning. Not yet implemented.
-**Branch when implementation starts:** `feature-solid-queue`
-(this doc) → a single PR that lands the adapter switch, the Puma
-plugin, and the move of every existing cron-driven recurring task
-into a `config/recurring.yml` entry.
+**Status:** implemented on `feature-solid-queue`. The adapter
+switch, the Puma plugin, the single-DB migration, and all three
+recurring tasks (`morning_mailer`, `branch_reconcile`,
+`claim_sweep`) landed in one PR. The "synchronous code paths worth
+converting" section below remains a followup backlog.
+**Branch:** `feature-solid-queue` → single PR off `master`.
 
 This document is the design and migration plan for replacing the
 project's growing collection of Railway cron services with a
@@ -12,6 +13,28 @@ single in-Puma Solid Queue supervisor. It also catalogs the
 synchronous code paths that would become noticeably better with
 durable queueing once Solid Queue is in place — those are followups,
 not part of the adoption PR itself.
+
+## What actually shipped (deviations from the plan)
+
+- **Single database, not the Rails 8 generator's default.**
+  `bin/rails solid_queue:install` on Rails 8 assumes a *separate*
+  `queue` database: it writes `config.solid_queue.connects_to =
+  { database: { writing: :queue } }` into `production.rb` and emits
+  a standalone `db/queue_schema.rb` (loaded via a `queue:` entry in
+  `database.yml`) instead of a normal migration. We want the
+  `solid_queue_*` tables in the existing primary DB (see "Queue
+  storage" below), so the `connects_to` line was removed and
+  `db/queue_schema.rb` was rewritten as an ordinary migration
+  (`db/migrate/20260528195909_create_solid_queue_tables.rb`) that
+  lands the tables in the primary schema. `database.yml` stays
+  single-DB.
+- **`claim_sweep` shipped in the same PR**, not rebased on top
+  afterward — the claims schema (PR #99) was already on `master` by
+  the time this work started, so `ClaimSweeperJob` +
+  `config/recurring.yml` entry went in directly.
+- **`bin/jobs`** (the standalone Solid Queue CLI) was left in place
+  from the generator. It's unused in the in-Puma deployment but
+  harmless and handy for ad-hoc local worker runs.
 
 ## Motivation
 

@@ -33,3 +33,10 @@ environment ENV.fetch("RAILS_ENV") { "development" }
 
 # Allow puma to be restarted by `rails restart` command.
 plugin :tmp_restart
+
+# Run Solid Queue's supervisor (workers + recurring scheduler) inside
+# this Puma process instead of as a separate Railway service. Gated on
+# an env var so dev/test `bin/rails server` never starts background
+# processing; production opts in with SOLID_QUEUE_IN_PUMA=true. See
+# docs/solid-queue-migration.md.
+plugin :solid_queue if ENV["SOLID_QUEUE_IN_PUMA"] == "true"

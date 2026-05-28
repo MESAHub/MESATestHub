@@ -71,8 +71,11 @@ Rails.application.configure do
   # Use a different cache store in production.
   # config.cache_store = :mem_cache_store
 
-  # Use a real queuing backend for Active Job (and separate queues per environment).
-  # config.active_job.queue_adapter     = :resque
+  # Use Solid Queue for Active Job. The solid_queue_* tables live in the
+  # primary database (no separate queue DB), so there's no connects_to
+  # override — Solid Queue uses the default connection. See
+  # docs/solid-queue-migration.md.
+  config.active_job.queue_adapter = :solid_queue
   # config.active_job.queue_name_prefix = "mesa_test_hub_production"
 
   config.action_mailer.perform_caching = false
