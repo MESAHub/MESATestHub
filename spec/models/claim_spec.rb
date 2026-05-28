@@ -134,4 +134,87 @@ RSpec.describe Claim, type: :model do
         .from(claim.id).to(nil)
     end
   end
+
+  describe '.default_expires_at' do
+    it 'returns ~15 minutes from now for build scope' do
+      expect(Claim.default_expires_at(scope: 'build'))
+        .to be_within(2.seconds).of(15.minutes.from_now)
+    end
+
+    it 'returns ~12 hours from now for test scope' do
+      expect(Claim.default_expires_at(scope: 'test'))
+        .to be_within(2.seconds).of(12.hours.from_now)
+    end
+
+    it 'raises on an unknown scope' do
+      expect { Claim.default_expires_at(scope: 'audit') }
+        .to raise_error(KeyError)
+    end
+  end
+
+  describe '#fulfill!' do
+    let(:claim) { create(:claim, computer: computer, commit: commit) }
+
+    it 'flips a pending claim to fulfilled and stamps fulfilled_at' do
+      claim.fulfill!
+      claim.reload
+      expect(claim.status).to eq('fulfilled')
+      expect(claim.fulfilled_at).to be_within(2.seconds).of(Time.current)
+    end
+
+    it 'flips an expired claim to fulfilled (legitimate late submission)' do
+      claim.update_columns(status: 'expired')
+      claim.fulfill!
+      expect(claim.reload.status).to eq('fulfilled')
+    end
+
+    it 'bypasses AR validations (callable even with a stale loaded row)' do
+      # update_columns is the implementation detail that protects
+      # us from a race against the sweeper. A row that the sweeper
+      # just flipped to `expired` can still be flipped to
+      # `fulfilled` from a previously-loaded `pending` instance.
+      stale = Claim.find(claim.id)
+      Claim.where(id: claim.id).update_all(status: 'expired')
+      expect { stale.fulfill! }.not_to raise_error
+      expect(claim.reload.status).to eq('fulfilled')
+    end
+  end
+
+  describe '.sweep_expired!' do
+    let(:past)   { 1.minute.ago }
+    let(:future) { 5.minutes.from_now }
+
+    it 'flips pending claims past expires_at to expired' do
+      stale = create(:claim, computer: computer, commit: commit,
+                             expires_at: past)
+      fresh = create(:claim, computer: computer, commit: commit,
+                             expires_at: future)
+
+      expect(Claim.sweep_expired!).to eq(1)
+      expect(stale.reload.status).to eq('expired')
+      expect(fresh.reload.status).to eq('pending')
+    end
+
+    it 'leaves already-fulfilled claims alone' do
+      fulfilled = create(:claim, :fulfilled,
+                         computer: computer, commit: commit,
+                         expires_at: past)
+      Claim.sweep_expired!
+      expect(fulfilled.reload.status).to eq('fulfilled')
+    end
+
+    it 'is idempotent — a second sweep on the same window is a no-op' do
+      create(:claim, computer: computer, commit: commit, expires_at: past)
+      Claim.sweep_expired!
+      expect(Claim.sweep_expired!).to eq(0)
+    end
+
+    it 'updates updated_at on the rows it transitions' do
+      claim = create(:claim, computer: computer, commit: commit,
+                             expires_at: past,
+                             updated_at: 1.hour.ago)
+      Claim.sweep_expired!
+      expect(claim.reload.updated_at).to be_within(2.seconds).of(Time.current)
+    end
+  end
 end

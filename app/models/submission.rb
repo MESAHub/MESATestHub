@@ -15,6 +15,14 @@ class Submission < ApplicationRecord
   before_destroy :remember_affected_tcc_ids, prepend: true
   after_commit :update_commit
 
+  # Phase B of docs/dispatcher-and-claims.md. When a submission
+  # arrives carrying a claim_id (mesa_test ≥ vNEXT), flip the
+  # matching claim to `fulfilled`. Fires only on the create commit
+  # so a subsequent update / destroy doesn't trigger a stale write.
+  # The `pending → fulfilled` and `expired → fulfilled` transitions
+  # are both legal; `Claim#fulfill!` handles them uniformly.
+  after_create_commit :fulfill_claim, if: -> { claim_id.present? }
+
   paginates_per 25
 
   # Inclusive of both endpoints. Either bound is optional — pass nil
@@ -95,6 +103,14 @@ class Submission < ApplicationRecord
   end
 
   private
+
+  # Flip the referenced claim to `fulfilled`. Both the
+  # `if: -> { claim_id.present? }` guard on the callback and the
+  # FK to `claims.id` guarantee the association resolves — no
+  # safe-nav needed.
+  def fulfill_claim
+    claim.fulfill!
+  end
 
   # On destroy, capture the IDs of the TCCs this submission's
   # test_instances point at — `dependent: :destroy` will wipe the

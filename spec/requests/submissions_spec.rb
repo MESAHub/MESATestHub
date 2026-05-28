@@ -110,6 +110,85 @@ RSpec.describe 'Submissions API', type: :request do
     end
   end
 
+  # Phase B of docs/dispatcher-and-claims.md: a submission that
+# carries a `claim:` block in the request payload flips the
+  # referenced claim to `fulfilled`. Backwards-compatible — old
+  # mesa_test versions that don't send the block continue to work.
+  describe 'POST /submissions/create.json with a claim:' do
+    let(:user) do
+      create(:user, password: 'pw-12345678',
+                    password_confirmation: 'pw-12345678')
+    end
+    let(:computer) { create(:computer, user: user) }
+    let(:branch)   { create(:branch, name: 'main') }
+    let(:commit) do
+      c = create(:commit)
+      BranchMembership.create!(branch: branch, commit: c)
+      c
+    end
+    let(:valid_submitter) do
+      { email: user.email, password: 'pw-12345678', computer: computer.name }
+    end
+    let(:valid_commit) do
+      { sha: commit.sha, entire: false, empty: true, compiled: true,
+        compiler: 'gfortran', compiler_version: '13.2.0',
+        sdk_version: '23.7.3', math_backend: 'OpenBLAS' }
+    end
+
+    it 'fulfills a pending claim when claim.id is supplied' do
+      claim = create(:claim, computer: computer, commit: commit,
+                             expires_at: 10.minutes.from_now)
+      post '/submissions/create.json', params: {
+        submitter: valid_submitter,
+        commit: valid_commit,
+        claim: { id: claim.id,
+                 started_at: '2026-05-28T10:00:00Z',
+                 use_fpe: true }
+      }, as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(claim.reload.status).to eq('fulfilled')
+      expect(claim.fulfilled_at).to be_within(2.seconds).of(Time.current)
+
+      submission = Submission.last
+      expect(submission.claim_id).to eq(claim.id)
+      expect(submission.use_fpe).to be true
+      expect(submission.started_at).to be_within(1.second)
+        .of(Time.zone.parse('2026-05-28T10:00:00Z'))
+    end
+
+    it 'reactivates an already-expired claim (late submission)' do
+      # A test that took longer than the 12h TTL: the sweeper flipped
+      # the claim to `expired`, but when the submission finally
+      # arrives we should still credit it.
+      claim = create(:claim, :expired,
+                     computer: computer, commit: commit)
+      post '/submissions/create.json', params: {
+        submitter: valid_submitter,
+        commit: valid_commit,
+        claim: { id: claim.id }
+      }, as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(claim.reload.status).to eq('fulfilled')
+      expect(claim.fulfilled_at).to be_within(2.seconds).of(Time.current)
+    end
+
+    it 'is a no-op when the submission carries no claim block (legacy client)' do
+      pre_claim = create(:claim, computer: computer, commit: commit)
+
+      post '/submissions/create.json', params: {
+        submitter: valid_submitter,
+        commit: valid_commit
+      }, as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(pre_claim.reload.status).to eq('pending')
+      expect(Submission.last.claim_id).to be_nil
+    end
+
+  end
+
   describe 'GET /submissions/request_commit.json' do
     let(:user) { create(:user, password: 'pw-12345678', password_confirmation: 'pw-12345678') }
     let(:computer) { create(:computer, user: user) }
