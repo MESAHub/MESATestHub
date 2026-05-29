@@ -2,7 +2,7 @@ class CommitsController < ApplicationController
   include LogProxy
   include BranchMismatchRedirect
 
-  before_action :set_commit, only: :show
+  before_action :set_commit, only: [:show, :diff]
   layout "modern", only: [:index, :show]
 
   # Branch lookup for the commit detail page. The :branch URL segment
@@ -46,9 +46,6 @@ class CommitsController < ApplicationController
     @neighbors       = @selected_branch.commit_neighbors(@commit)
     @hero_window     = @selected_branch.focused_commit_window(@commit, size: 5)
 
-    @last_clean_commit = @selected_branch.last_clean_commit_before(@commit)
-    @diff_rows         = @commit.cells_changed_since(@last_clean_commit)
-
     @default_tab = @commit.default_detail_tab(state: @commit_state)
     requested = params[:tab].to_s.to_sym
     # Legacy `?tab=tests` redirects to the merged Summary panel,
@@ -67,6 +64,24 @@ class CommitsController < ApplicationController
     # links. Unknown values fall through to the worst-first default
     # picked in the view (`default_matrix_filter`).
     @active_filter = params[:filter].presence
+  end
+
+  # Lazy-loaded Diff panel for commits#show. The "last clean commit"
+  # walk is the single most expensive part of the detail page (up to
+  # 25 commit_state computations, ~250ms / 120+ queries), and roughly
+  # half the time it finds no clean baseline at all — so paying for it
+  # on every page load was pure waste. The Diff tab now renders as a
+  # Turbo Frame that fetches this action on first reveal; the walk only
+  # runs when someone actually opens the tab. @per_test/@per_computer
+  # are recomputed here because _tab_diff maps the diff rows' ids back
+  # to TestCase/Computer objects through them.
+  def diff
+    @selected_branch = Branch.includes(:head).named(CGI.unescape(params[:branch]))
+    @per_test          = @commit.per_test_summary
+    @per_computer      = @commit.per_computer_summary
+    @last_clean_commit = @selected_branch.last_clean_commit_before(@commit)
+    @diff_rows         = @commit.cells_changed_since(@last_clean_commit)
+    render layout: false
   end
 
   def index

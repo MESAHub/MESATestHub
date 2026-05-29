@@ -6,25 +6,23 @@
 -#            — surfaces the test-side severity now that Tests folded
 -#            into the matrix panel
 -#   Computers: failed_build count, buildfail-toned when all failed
--#   Diff: disabled (opacity-50, no click) when there's no last-clean
--#         commit to compare against.
+-#   Diff: always enabled. The "last clean commit" comparison is
+-#         computed lazily when the panel opens (commits#diff), so the
+-#         strip can't know upfront whether a baseline exists; the panel
+-#         itself renders an empty state when there's nothing to compare.
 - summary_badge = tests_tab_badge(@commit_state)
 - comp_badge    = computers_tab_badge(@commit_state)
-- diff_disabled = @last_clean_commit.nil?
 - tab_specs = [[:summary, "Summary", summary_badge], [:computers, "Computers", comp_badge], [:diff, "Diff vs last pass", nil], [:logs, "Build logs", nil]]
 
 %nav.flex.gap-1.border-b.border-border-subtle{ role: "tablist", "aria-label": "Commit detail" }
   - tab_specs.each do |id, label, badge|
     - active = (id == @active_tab)
-    - dimmed = (id == :diff && diff_disabled)
     - href = commit_path(branch: @selected_branch.name, sha: @commit.short_sha, tab: id)
     - active_class = active ? "text-fg border-b-2 border-brand -mb-px" : "text-fg-muted border-b-2 border-transparent hover:text-fg"
-    - dimmed_class = dimmed ? " opacity-50 pointer-events-none cursor-not-allowed" : ""
-    - link_class = "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium no-underline #{active_class}#{dimmed_class}"
+    - link_class = "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium no-underline #{active_class}"
     = link_to href,
               role: "tab",
               "aria-selected": active.to_s,
-              "aria-disabled": dimmed.to_s,
               class: link_class,
               data: { tabs_target: "link", tab: id, action: "click->tabs#switch" } do
       = label

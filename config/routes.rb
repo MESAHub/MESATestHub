@@ -100,6 +100,16 @@ Rails.application.routes.draw do
       as: 'commit_build_log_status',
       constraints: { branch: /.*/, sha: /[a-f0-9]+/, computer: /[^\/]+/ }
 
+  # Lazy-loaded Diff panel. commits#show renders the Diff tab as a
+  # Turbo Frame whose `src` points here; the expensive "last clean
+  # commit" walk (up to 25 commit_state computations) only runs when
+  # the user actually opens the tab, not on every page load. Must
+  # mount BEFORE the catch-all `:branch/commits/:sha` route below.
+  get '/:branch/commits/:sha/diff',
+      to: 'commits#diff',
+      as: 'commit_diff',
+      constraints: { branch: /.*/, sha: /[a-f0-9]+/ }
+
   # put this after the test case commit matcher since this is more general
   get '/:branch/commits/:sha', to: 'commits#show', as: 'commit', constraints: {branch: /.*/}
   get '/:branch/commits', to: 'commits#index', as: 'commits', constraints: {branch: /.*/}

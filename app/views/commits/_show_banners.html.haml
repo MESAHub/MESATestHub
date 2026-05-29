@@ -16,7 +16,7 @@
 - elsif build_status == :some_fail
   - banners << :build_partial
 
-- if tests[:has_uniform_fail] && @last_clean_commit
+- if tests[:has_uniform_fail]
   - banners << :failing
 
 - if tests[:has_mixed]
