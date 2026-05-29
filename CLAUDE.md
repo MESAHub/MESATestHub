@@ -259,6 +259,23 @@ helper or partial exists.
   destroyed submission during this walk, so a heavy user can
   produce thousands of after_commit invocations — slow but
   correct. See [`spec/models/user_destroy_cascade_spec.rb`](spec/models/user_destroy_cascade_spec.rb).
+- **Railway hides the real client IP behind a 100.64.0.0/10 proxy.**
+  Railway's edge sits in the RFC 6598 carrier-grade NAT range, which
+  is NOT in Rails' default trusted-proxy list — so `request.remote_ip`
+  (and Rack's raw `req.ip`) resolve to a Railway proxy address
+  (`100.64.x.x`) unless that range is trusted. `config.application.rb`
+  sets `config.action_dispatch.trusted_proxies = [IPAddr.new("100.64.0.0/10")]`
+  so the real client (from `X-Forwarded-For`) is recovered. rack-attack
+  ([`config/initializers/rack_attack.rb`](config/initializers/rack_attack.rb))
+  keys every throttle + the IP-range blocklist off a `Request#remote_ip`
+  override (`env["action_dispatch.remote_ip"]`), NOT `req.ip` — using
+  `req.ip` silently bucketed all anonymous traffic into a few proxy IPs
+  and made the `47.79.*`/`159.138.*`/… scraper blocklist dead. Regression
+  coverage: [`spec/requests/rack_attack_client_ip_spec.rb`](spec/requests/rack_attack_client_ip_spec.rb).
+  (Secondary, not yet addressed: rack-attack counters live in
+  `:memory_store`, so throttle state is per-process and resets on
+  deploy; and `Commit#show` is excluded from lograge, so the heaviest
+  page is invisible in production request logs.)
 
 ## Development commands
 

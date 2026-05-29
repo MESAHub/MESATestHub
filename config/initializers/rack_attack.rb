@@ -1,4 +1,17 @@
 class Rack::Attack
+  # Use Rails' computed client IP (ActionDispatch::RemoteIp) rather than the
+  # raw Rack::Request#ip. Behind Railway's proxy the real client only arrives
+  # in X-Forwarded-For; remote_ip strips trusted proxy hops (including the
+  # 100.64.0.0/10 range trusted in application.rb) so throttles and the
+  # IP-range blocklist below key off the actual client instead of a Railway
+  # proxy address. ActionDispatch::RemoteIp runs above Rack::Attack in the
+  # middleware stack, so env['action_dispatch.remote_ip'] is always populated.
+  class Request < ::Rack::Request
+    def remote_ip
+      @remote_ip ||= (env["action_dispatch.remote_ip"] || ip).to_s
+    end
+  end
+
   # Configure cache store (uses Rails cache by default)
   Rack::Attack.cache.store = Rails.cache
 
@@ -24,21 +37,21 @@ class Rack::Attack
     suspicious_ranges = [
       /^47\.79\./, /^159\.138\./, /^119\.(8|12|13)\./, /^189\.1\./
     ]
-    suspicious_ranges.any? { |range| req.ip.match?(range) }
+    suspicious_ranges.any? { |range| req.remote_ip.match?(range) }
   end
 
   # Throttle general requests by IP (only for unauthenticated users)
   # Allow 100 requests per 5 minutes per IP (tightened from 300 to reduce scraper abuse)
   # Authenticated users are safelisted above and bypass this limit
   throttle('req/ip', limit: 100, period: 5.minutes) do |req|
-    req.ip
+    req.remote_ip
   end
 
   # Throttle login attempts by IP (applies to everyone to prevent brute force)
   # Allow 10 login attempts per 20 minutes per IP
   throttle('logins/ip', limit: 10, period: 20.minutes) do |req|
     if req.path == '/login' && req.post?
-      req.ip
+      req.remote_ip
     end
   end
 
@@ -47,7 +60,7 @@ class Rack::Attack
   # Legitimate test result submissions should authenticate
   throttle('api/ip', limit: 100, period: 10.minutes) do |req|
     if req.path.match(/\.(json)$/) || req.path.start_with?('/submissions')
-      req.ip
+      req.remote_ip
     end
   end
 
@@ -55,7 +68,7 @@ class Rack::Attack
   # Allow 30 search requests per 5 minutes per IP  
   throttle('search/ip', limit: 30, period: 5.minutes) do |req|
     if req.path.include?('search')
-      req.ip
+      req.remote_ip
     end
   end
 
@@ -63,7 +76,7 @@ class Rack::Attack
   # This catches scrapers trying invalid test case combinations
   throttle('404s/ip', limit: 5, period: 1.hour) do |req|
     if req.env['PATH_INFO'].to_s.match?(/test_cases/) && !req.session[:user_id].present?
-      req.ip
+      req.remote_ip
     end
   end
 
@@ -115,7 +128,7 @@ class Rack::Attack
     if payload.is_a?(Hash) && payload[:request]
       req = payload[:request]
       match_type = req.env['rack.attack.match_type'] || 'unknown'
-      Rails.logger.warn "[Rack::Attack] #{match_type} #{req.ip} #{req.request_method} #{req.fullpath}"
+      Rails.logger.warn "[Rack::Attack] #{match_type} #{req.remote_ip} #{req.request_method} #{req.fullpath}"
     end
   end
 end
