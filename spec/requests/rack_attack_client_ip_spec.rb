@@ -17,9 +17,35 @@ RSpec.describe 'rack-attack client IP resolution behind Railway proxy',
 
   before { Rack::Attack.cache.store.clear }
 
+  # Cloudflare fronts the site; its edge lives in published ranges like
+  # 162.158.0.0/15 and 172.64.0.0/13. The real client only survives if both
+  # the Railway hop AND the Cloudflare hop are stripped from X-Forwarded-For.
+  let(:cloudflare_edge) { '162.158.1.1' }
+
   it 'trusts Railway 100.64.0.0/10 so remote_ip is the forwarded client' do
     expect(Rails.application.config.action_dispatch.trusted_proxies)
       .to include(an_object_satisfying { |p| p === IPAddr.new('100.64.0.14') })
+  end
+
+  it 'trusts Cloudflare edge ranges so remote_ip is the forwarded client' do
+    expect(Rails.application.config.action_dispatch.trusted_proxies)
+      .to include(an_object_satisfying { |p| p === IPAddr.new('162.158.1.1') })
+    expect(Rails.application.config.action_dispatch.trusted_proxies)
+      .to include(an_object_satisfying { |p| p === IPAddr.new('172.71.0.1') })
+  end
+
+  it 'blocks a blocklisted client forwarded through Cloudflare then Railway' do
+    # The full production hop chain: real client -> Cloudflare edge -> Railway
+    # proxy. X-Forwarded-For carries the client first, then the Cloudflare edge;
+    # REMOTE_ADDR is the Railway proxy. Both proxy hops must be stripped for the
+    # blocklist to see the real 47.79.* client again.
+    get '/',
+        headers: {
+          'REMOTE_ADDR' => railway_proxy,
+          'X-Forwarded-For' => "47.79.1.1, #{cloudflare_edge}"
+        }
+
+    expect(response).to have_http_status(:forbidden)
   end
 
   it 'blocks a blocklisted client forwarded through a Railway proxy' do

@@ -259,19 +259,29 @@ helper or partial exists.
   destroyed submission during this walk, so a heavy user can
   produce thousands of after_commit invocations — slow but
   correct. See [`spec/models/user_destroy_cascade_spec.rb`](spec/models/user_destroy_cascade_spec.rb).
-- **Railway hides the real client IP behind a 100.64.0.0/10 proxy.**
-  Railway's edge sits in the RFC 6598 carrier-grade NAT range, which
-  is NOT in Rails' default trusted-proxy list — so `request.remote_ip`
-  (and Rack's raw `req.ip`) resolve to a Railway proxy address
-  (`100.64.x.x`) unless that range is trusted. `config.application.rb`
-  sets `config.action_dispatch.trusted_proxies = [IPAddr.new("100.64.0.0/10")]`
-  so the real client (from `X-Forwarded-For`) is recovered. rack-attack
+- **Two proxy layers hide the real client IP: Cloudflare in front of
+  Railway.** Neither is in Rails' default trusted-proxy list, so
+  `request.remote_ip` (and Rack's raw `req.ip`) resolves to a proxy
+  address unless both ranges are trusted. Railway's edge is the RFC 6598
+  carrier-grade NAT range (`100.64.0.0/10`); Cloudflare fronts
+  `testhub.mesastar.org` and its edge lands in published ranges like
+  `162.158.0.0/15` and `172.64.0.0/13`. The hop chain at Rails is
+  `REMOTE_ADDR = Railway 100.64 proxy`, `X-Forwarded-For = "<real client>,
+  <Cloudflare edge>"`. `config/application.rb` trusts BOTH (Railway's
+  single CIDR plus `CLOUDFLARE_PROXY_RANGES`, the published
+  https://www.cloudflare.com/ips/ list) via
+  `config.action_dispatch.trusted_proxies`, so `ActionDispatch::RemoteIp`
+  strips both hops and recovers the real client. Trusting only Railway
+  (the original fix) left remote_ip stuck on a Cloudflare edge IP — the
+  same throttle/blocklist breakage, one layer up. rack-attack
   ([`config/initializers/rack_attack.rb`](config/initializers/rack_attack.rb))
   keys every throttle + the IP-range blocklist off a `Request#remote_ip`
   override (`env["action_dispatch.remote_ip"]`), NOT `req.ip` — using
   `req.ip` silently bucketed all anonymous traffic into a few proxy IPs
-  and made the `47.79.*`/`159.138.*`/… scraper blocklist dead. Regression
-  coverage: [`spec/requests/rack_attack_client_ip_spec.rb`](spec/requests/rack_attack_client_ip_spec.rb).
+  and made the `47.79.*`/`159.138.*`/… scraper blocklist dead. If
+  Cloudflare ever rotates its published ranges, update
+  `CLOUDFLARE_PROXY_RANGES`. Regression coverage:
+  [`spec/requests/rack_attack_client_ip_spec.rb`](spec/requests/rack_attack_client_ip_spec.rb).
   (Secondary, not yet addressed: rack-attack counters live in
   `:memory_store`, so throttle state is per-process and resets on
   deploy; and `Commit#show` is excluded from lograge, so the heaviest
