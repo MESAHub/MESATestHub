@@ -3,6 +3,15 @@ class ApplicationController < ActionController::Base
   before_action :authorize_user
   # before_action :set_all_test_cases
 
+  # Surface the (proxy-corrected) client IP and user-agent to lograge so
+  # production request logs can attribute traffic during bot surges. See
+  # the custom_options block in config/environments/production.rb.
+  def append_info_to_payload(payload)
+    super
+    payload[:remote_ip] = request.remote_ip
+    payload[:user_agent] = request.user_agent
+  end
+
   private
 
   # getting current user and admin status

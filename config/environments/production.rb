@@ -10,6 +10,14 @@ Rails.application.configure do
     event.payload[:status] == 404
   }
 
+  # Append the client IP and user-agent to every request log line. The IP is
+  # request.remote_ip (proxy-corrected via trusted_proxies in application.rb),
+  # so this both attributes bot traffic and verifies the Railway proxy-IP fix.
+  # Keep `ua` last — its value contains spaces.
+  config.lograge.custom_options = lambda do |event|
+    { ip: event.payload[:remote_ip], ua: event.payload[:user_agent] }
+  end
+
   # Code is not reloaded between requests.
   config.cache_classes = true
 
