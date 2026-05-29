@@ -161,21 +161,28 @@ helper or partial exists.
   `parse_after_param` (beginning-of-day) in
   [`commits_controller.rb`](app/controllers/commits_controller.rb).
   No Kaminari for this index; no `?page=` param.
-- **Commit detail tabs are server-pre-rendered, not Turbo Frames.**
-  `commits#show` renders every panel (Summary / Tests / Computers /
-  Diff / Logs) on each request; the `tabs_controller.js` Stimulus
-  controller toggles `hidden` between them and replaceState's the
-  URL to `?tab=<id>`. Banner action buttons route through the same
-  controller via `data-action="click->tabs#switchFromLink"`. The
-  controller's `aria-selected` + border-brand updates have to stay
-  in sync with `_show_tab_strip.html.haml`'s class list — both
-  control the underline.
+- **Commit detail tabs are server-pre-rendered, EXCEPT Diff.**
+  `commits#show` renders the Summary / Computers / Logs panels on
+  each request; the `tabs_controller.js` Stimulus controller toggles
+  `hidden` between them and replaceState's the URL to `?tab=<id>`.
+  Banner action buttons route through the same controller via
+  `data-action="click->tabs#switchFromLink"`. The controller's
+  `aria-selected` + border-brand updates have to stay in sync with
+  `_show_tab_strip.html.haml`'s class list — both control the
+  underline. The **Diff panel is the exception**: it's a lazy
+  `turbo_frame_tag "commit_diff"` whose `src` points at
+  `commits#diff` (route `commit_diff_path`) with `loading: "lazy"`,
+  so the expensive last-clean-commit walk only runs when the user
+  actually opens the tab — not on every show render. See PR #101.
 - **`Branch#last_clean_commit_before` is bounded at 25 commits.**
   Walking the recursive-CTE result and calling `commit_state` on
-  each is several queries per step, so an unbounded walk on a stale
-  branch could fan out. When nothing turns up the Diff tab gets
-  rendered with `aria-disabled="true"` and `pointer-events-none`,
-  not hidden — so users see why the comparison is missing.
+  each is several queries per step (~250ms / 120+ queries worst
+  case, and ~half the time it finds no clean baseline at all), so
+  it's deferred to the lazy Diff frame (`commits#diff`) rather than
+  run on every page load. The `_tab_diff` partial renders "No prior
+  passing commit available within the lookback window." when the
+  walk turns up nothing — the empty state lives in the panel, so the
+  tab strip no longer needs to disable the tab upfront.
 - **Multi-line Ruby in HAML attribute hashes does not work.**
   Each `- …` line is its own Ruby statement; assignments,
   conditionals, and arrays must fit on one line or move to a

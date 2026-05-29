@@ -21,6 +21,15 @@
   -# Tab panels — only the active one is shown. Stimulus toggles the
   -# `hidden` attribute on each panel when the user clicks a tab,
   -# and updates `?tab=...` on the URL so the panel is bookmarkable.
+  -# The Diff panel is a lazy Turbo Frame: the expensive last-clean-commit
+  -# walk runs in commits#diff only when the panel becomes visible (the
+  -# user opens the tab), not on every show render. The other panels stay
+  -# server-pre-rendered for instant client-side switching.
   - %i[summary computers diff logs].each do |tab|
     %section{ data: { tabs_target: "panel", tab: tab }, hidden: (tab != @active_tab) }
-      = render "commits/tab_#{tab}"
+      - if tab == :diff
+        = turbo_frame_tag "commit_diff", src: commit_diff_path(branch: @selected_branch.name, sha: @commit.short_sha), loading: "lazy" do
+          .rounded-lg.border.border-border.bg-bg-elev.p-6.text-center{ style: "box-shadow: var(--shadow-card-sm);" }
+            %p.text-fg-muted.text-sm Loading diff…
+      - else
+        = render "commits/tab_#{tab}"

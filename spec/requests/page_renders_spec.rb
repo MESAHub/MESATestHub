@@ -51,6 +51,26 @@ RSpec.describe 'Page renders', type: :request do
       expect(response).to have_http_status(:ok)
     end
 
+    it 'defers the Diff panel to a lazy Turbo Frame instead of rendering it inline' do
+      # The last-clean-commit walk is the most expensive part of the
+      # page, so the Diff tab is a lazy frame that only fetches when
+      # opened. show must emit the frame shell (src + loading state),
+      # NOT the resolved diff content.
+      get "/main/commits/#{commit.short_sha}"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('Loading diff')
+      expect(response.body).to include("/main/commits/#{commit.short_sha}/diff")
+    end
+
+    it 'renders the Diff frame endpoint as a turbo-frame' do
+      get "/main/commits/#{commit.short_sha}/diff"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('turbo-frame')
+      expect(response.body).to include('commit_diff')
+    end
+
     it 'does not crash when another recent branch has nil head_id' do
       # The "Other Active Branches" dropdown renders branch.head.short_sha;
       # a branch with no head (left in that state by an interrupted sync
