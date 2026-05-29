@@ -223,6 +223,30 @@ don't get lost.
   [`docs/dispatcher-and-claims.md`](dispatcher-and-claims.md).
   **Status:** planning complete, implementation not started.
 
+- **Adopt Solid Cache for `Rails.cache`.** Replace the
+  `:memory_store` (`config/application.rb`) with Rails 8's
+  DB-backed Solid Cache, completing the Solid* trio alongside the
+  already-adopted Solid Queue (which lives in the primary DB —
+  Solid Cache would too). **Motivation is robustness, not raw
+  speed:** `:memory_store` is process-local and wiped on every
+  deploy/restart, so it's only correct because Puma currently runs
+  a single process (`workers` is commented out in
+  `config/puma.rb`). The moment a second Railway replica or Puma
+  worker is added, `Rails.cache` and rack-attack's throttle
+  counters fragment per-process and silently diverge. Solid Cache
+  is shared across processes, survives deploys, and drops the
+  64 MB RAM ceiling; cost is a Postgres round-trip per cache op
+  (negligible at this traffic) plus a `solid_cache_entries` table
+  and a periodic trim (hangs off the existing Solid Queue
+  recurring-task machinery). **This does not speed up the hot
+  pages** — `commits#show`'s recursive-CTE matrix uses no caching
+  at all, so response-time wins there are a separate effort
+  (fragment-cache the matrix or optimize the query), independent
+  of the cache store. See the Railway-proxy-IP reality-check note
+  in [`CLAUDE.md`](../CLAUDE.md), which flagged the `:memory_store`
+  limitation. **Status:** not started; lower priority than
+  perf work on the heavy pages.
+
 ## External dependencies (no code action required)
 
 - **CORS for build-log / test-log HEAD probes from Railway.**
