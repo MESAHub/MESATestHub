@@ -2,7 +2,6 @@ class CommitsController < ApplicationController
   include LogProxy
   include BranchMismatchRedirect
 
-  skip_before_action :authorize_user, only: :show, if: :root_page?
   before_action :set_commit, only: :show
   layout "modern", only: [:index, :show]
 
@@ -361,10 +360,6 @@ class CommitsController < ApplicationController
     end
   rescue ArgumentError, Date::Error
     nil
-  end
-
-  def root_page?
-    params[:sha] == 'head' && params[:branch] == 'main'
   end
 
   def set_commit

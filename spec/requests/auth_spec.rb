@@ -66,6 +66,16 @@ RSpec.describe 'Authentication flow', type: :request do
       get '/users'
       expect(response).to have_http_status(:ok)
     end
+
+    # The root URL (commits#show on main/head) used to be the one page open
+    # to anonymous visitors. It was the only heavy endpoint a distributed
+    # scraper botnet could reach without logging in, so it was closed; the
+    # latest-commit view isn't useful to a logged-out passerby anyway.
+    it 'redirects unauthenticated requests for the root page to login' do
+      get '/'
+
+      expect(response).to redirect_to(login_url)
+    end
   end
 
   describe 'POST /check_user (JSON credential check)' do
