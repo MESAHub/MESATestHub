@@ -71,4 +71,30 @@ RSpec.describe 'rack-attack client IP resolution behind Railway proxy',
     # so the public login page renders — anything but the blocklist's 403.
     expect(response).to have_http_status(:ok)
   end
+
+  # Submissions authenticate via posted credentials, not a browser session,
+  # so the "allow authenticated users" safelist can't see them. They must be
+  # exempt from the generic per-IP throttles — a test client submitting one
+  # result per test case fires hundreds of POSTs in a burst from one IP.
+  describe 'credential-authenticated submission API' do
+    let(:client_ip) { '203.0.113.50' }
+
+    def submit
+      post '/submissions/create.json',
+           params: { submitter: { email: 'nobody@example.com',
+                                  password: 'wrong' } },
+           headers: { 'REMOTE_ADDR' => railway_proxy,
+                      'X-Forwarded-For' => client_ip }
+    end
+
+    it 'is not throttled at the generic 100/window IP limit' do
+      # The req/ip throttle caps at 100 per 5 minutes; fire well past it.
+      # None should be rack-attack's 429 — they fail credential auth with
+      # 422, which is the controller talking, not the rate limiter.
+      statuses = Array.new(120) { submit; response.status }
+
+      expect(statuses).not_to include(429)
+      expect(statuses).to all(eq(422))
+    end
+  end
 end

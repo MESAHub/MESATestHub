@@ -26,6 +26,21 @@ class Rack::Attack
     req.session[:user_id].present?
   end
 
+  # The test-client submission API authenticates via posted
+  # credentials (submitter[:email] + submitter[:password], bcrypt-
+  # verified in SubmissionsController), NOT a browser session — so the
+  # session safelist above can never see it. A computer running the
+  # MESA suite submits one POST per test case (hundreds in a burst),
+  # which blew past the generic 100-per-window IP throttles even though
+  # every request carries valid credentials. Treat these paths
+  # specially: exempt them from the general req/ip + api/ip throttles
+  # below and give them their own generous backstop. The real access
+  # control is the credential + computer-ownership check in the
+  # controller, not an IP throttle.
+  SUBMISSION_PATH = lambda do |req|
+    req.path.start_with?('/submissions')
+  end
+
   # Block requests from specific IPs that are known bad actors
   # blocklist('block bad actors') do |req|
   #   # Add specific IP addresses here if needed
@@ -42,9 +57,10 @@ class Rack::Attack
 
   # Throttle general requests by IP (only for unauthenticated users)
   # Allow 100 requests per 5 minutes per IP (tightened from 300 to reduce scraper abuse)
-  # Authenticated users are safelisted above and bypass this limit
+  # Authenticated users are safelisted above and bypass this limit.
+  # Credential-authenticated submissions are exempt (see SUBMISSION_PATH).
   throttle('req/ip', limit: 100, period: 5.minutes) do |req|
-    req.remote_ip
+    req.remote_ip unless SUBMISSION_PATH.call(req)
   end
 
   # Throttle login attempts by IP (applies to everyone to prevent brute force)
@@ -55,13 +71,25 @@ class Rack::Attack
     end
   end
 
-  # Throttle API submissions more strictly (only for unauthenticated requests)
-  # Allow 100 API requests per 10 minutes per IP
-  # Legitimate test result submissions should authenticate
+  # Throttle other JSON API traffic by IP. Excludes the submission
+  # endpoints, which carry their own credentials and get the generous
+  # backstop below — keeping them here capped legitimate test clients
+  # at 100 results per 10 minutes.
   throttle('api/ip', limit: 100, period: 10.minutes) do |req|
-    if req.path.match(/\.(json)$/) || req.path.start_with?('/submissions')
+    if req.path.match(/\.(json)$/) && !SUBMISSION_PATH.call(req)
       req.remote_ip
     end
+  end
+
+  # Generous backstop for the credential-authenticated submission API.
+  # Legitimate clients submit one result per test case — hundreds per
+  # run — and a whole compute cluster can sit behind a single NAT'd IP,
+  # so this limit is set well above any realistic burst. It exists only
+  # to bound a pathological flood; actual auth happens in the controller.
+  # Raise SUBMISSION_LIMIT if a large cluster ever legitimately trips it.
+  SUBMISSION_LIMIT = 1000
+  throttle('submissions/ip', limit: SUBMISSION_LIMIT, period: 5.minutes) do |req|
+    req.remote_ip if SUBMISSION_PATH.call(req)
   end
 
   # Throttle searches to prevent abuse (only for unauthenticated users)

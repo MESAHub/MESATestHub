@@ -293,6 +293,23 @@ helper or partial exists.
   `:memory_store`, so throttle state is per-process and resets on
   deploy; and `Commit#show` is excluded from lograge, so the heaviest
   page is invisible in production request logs.)
+- **The submission API is exempt from the per-IP throttles.** The
+  test client authenticates with `submitter[:email]` +
+  `submitter[:password]` in the JSON body (bcrypt-verified in
+  `SubmissionsController#submission_authenticated?`), NOT a browser
+  session — so the `safelist('allow authenticated users')` (which
+  checks `req.session[:user_id]`) never fires for it. A computer
+  running the MESA suite POSTs one result per test case (hundreds in
+  a burst from one IP), which used to blow past the generic `req/ip`
+  (100/5min) and `api/ip` (100/10min) throttles and return 429s.
+  `rack_attack.rb` now matches any `/submissions`-prefixed path with
+  `SUBMISSION_PATH`, excludes it from both generic throttles, and
+  gives it a generous `submissions/ip` backstop (`SUBMISSION_LIMIT =
+  1000` / 5min) that exists only to bound a pathological flood — the
+  real access control is the credential + computer-ownership check in
+  the controller. Bump `SUBMISSION_LIMIT` if a large NAT'd cluster
+  ever trips it. Regression coverage in
+  [`spec/requests/rack_attack_client_ip_spec.rb`](spec/requests/rack_attack_client_ip_spec.rb).
 
 ## Development commands
 
