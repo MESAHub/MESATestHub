@@ -275,9 +275,6 @@ GEM
     public_suffix (7.0.5)
     puma (7.2.1)
       nio4r (~> 2.0)
-    puma_worker_killer (0.3.1)
-      get_process_mem (~> 0.2)
-      puma (>= 2.7)
     raabro (1.4.0)
     racc (1.8.1)
     rack (3.2.6)
@@ -464,7 +461,6 @@ DEPENDENCIES
   octokit (~> 10.0)
   pg
   puma (~> 7.2, >= 7.2.1)
-  puma_worker_killer
   rack (>= 2.2.14)
   rack-attack
   rack-cors (>= 2.0.2)

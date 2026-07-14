@@ -7,7 +7,6 @@ ruby '3.2.2'
 
 gem 'rails', '~> 8.0.0'
 gem 'puma', '~> 7.2', '>= 7.2.1'
-gem 'puma_worker_killer'
 gem 'rack', '>= 2.2.14'
 gem 'rack-attack'
 gem 'rack-cors', '>=2.0.2', require: 'rack/cors'
