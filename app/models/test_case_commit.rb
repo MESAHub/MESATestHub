@@ -62,7 +62,9 @@ class TestCaseCommit < ApplicationRecord
       # NOTE FOR FUTURE OPERATION: apply insert_all to this nonsense. 
       TestCaseCommit.transaction do
         missing_tcc_cases.each do |test_case|
-          test_case.test_case_commits.create(commit: commit)
+          # Another process may have created it since the lookup above;
+          # the unique index makes that a lookup instead of a duplicate.
+          TestCaseCommit.create_or_find_by!(commit: commit, test_case: test_case)
         end
       end
     end

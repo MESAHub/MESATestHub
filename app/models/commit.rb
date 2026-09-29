@@ -172,9 +172,10 @@ class Commit < ApplicationRecord
   #
   # Filters out test_case_ids the commit already has TCCs for, so this
   # is idempotent in the partial-population case (some TCCs already
-  # present, others missing). There's no unique index on
-  # (commit_id, test_case_id) in the schema, so the filter is how we
-  # avoid duplicates rather than ON CONFLICT.
+  # present, others missing). The filter alone was racy — two jobs
+  # populating the same commit at once both saw nothing and both
+  # inserted a full set — so the insert also skips conflicts on the
+  # (commit_id, test_case_id) unique index.
   def self.copy_test_cases_from_parent(commit)
     parent = commit.parents.first
     return false unless parent
@@ -201,7 +202,7 @@ class Commit < ApplicationRecord
           updated_at: timestamp
         }
       end
-      TestCaseCommit.insert_all(rows)
+      TestCaseCommit.insert_all(rows, unique_by: %i[commit_id test_case_id])
     end
 
     commit.save  # before_save :update_scalars refreshes commit-level scalars
