@@ -235,9 +235,18 @@
                       = mesa_icon(:x, size: 11)
                       %span Failed
                   - else
-                    %span.inline-flex.items-center.gap-1.rounded-md.bg-bg-muted.px-2.py-0.5.text-fg-subtle{ class: "text-[11px] font-medium" }
-                      = mesa_icon(:eye_off, size: 11)
-                      %span Not reported
+                    -# Single-test submissions (neither `entire` nor
+                    -# `empty`) never carry a build status — the build
+                    -# came in its own submission — so the column
+                    -# doesn't apply. "Not reported" is only for a
+                    -# build or full-suite submission that should have
+                    -# said and didn't.
+                    - if !submission.entire && !submission.empty
+                      %span.text-fg-subtle{ title: "Single-test submission; the build was reported separately" } —
+                    - else
+                      %span.inline-flex.items-center.gap-1.rounded-md.bg-bg-muted.px-2.py-0.5.text-fg-subtle{ class: "text-[11px] font-medium" }
+                        = mesa_icon(:eye_off, size: 11)
+                        %span Not reported
                 %td.px-3.text-right.font-mono.tabular-nums.whitespace-nowrap{ class: "text-[12px]" }
                   - if count.to_i.zero?
                     %span.text-fg-subtle —
