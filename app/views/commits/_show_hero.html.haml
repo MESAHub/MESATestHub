@@ -24,10 +24,10 @@
           %span{ class: "inline-flex items-center gap-1 rounded-full border border-transparent bg-checksum-soft px-2 py-0.5 text-[11px] font-medium text-checksum-soft-text align-middle" }
             = mesa_icon(:neq, size: 11)
             #{tests[:checksum_tests]} checksum ≠
-        - if flags[:inlists_full].to_i > 0
+        - if tests[:full_tests].to_i > 0
           %span{ class: "inline-flex items-center gap-1 rounded-full border border-transparent bg-info-soft px-2 py-0.5 text-[11px] font-medium text-info-soft-text align-middle" }
             = mesa_icon(:plus, size: 11)
-            #{flags[:inlists_full]} full inlists
+            #{tests[:full_tests]} full inlists
 
       -# Commit message: first line as the headline, plus a
       -# disclosure-style expander for the body when there's more
