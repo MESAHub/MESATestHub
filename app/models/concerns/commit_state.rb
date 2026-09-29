@@ -768,7 +768,9 @@ module CommitState
     passes = instances.count(&:passed)
     fails = instances.size - passes
     return :pass_fail_mixed if passes.positive? && fails.positive?
-    return :checksum_mixed if instances.any? { |i| comparison.disagrees?(i) }
+    # This computer's own runs disagree with each other (disagreeing
+    # with other computers is what the ≠ flag and "N/M match" say).
+    return :checksum_mixed if instances.select(&:passed).map(&:checksum).reject(&:blank?).uniq.size > 1
     :unanimous
   end
 

@@ -298,8 +298,7 @@ module TestCasesHelper
     passes = instances.count(&:passed)
     fails = instances.size - passes
     return :pass_fail_mixed if passes.positive? && fails.positive?
-    comparison = _history_checksum_comparison(tcc)
-    return :checksum_mixed if instances.any? { |i| comparison.disagrees?(i) }
+    return :checksum_mixed if instances.select(&:passed).map(&:checksum).reject(&:blank?).uniq.size > 1
     :unanimous
   end
 
