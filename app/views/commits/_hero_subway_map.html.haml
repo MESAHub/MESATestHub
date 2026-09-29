@@ -1,5 +1,6 @@
--# Compact subway map for the commit detail hero. Up to 5 stations
--# centered on the focused commit (with that station enlarged and
+-# Compact subway map for the commit detail hero. Up to 5 stations,
+-# oldest on the left and newest on the right, centered on the
+-# focused commit (with that station enlarged and
 -# brand-ringed). The whole element fills the available column
 -# width up to its natural size, then `mx-auto` centers what's left
 -# on wider screens. Content scales uniformly with the wrapper so
@@ -13,10 +14,13 @@
 -# Locals:
 -#   window:      Array of Commit, newest-first (output of
 -#                `Branch#focused_commit_window`). May be shorter
--#                than 5 on stubby branches.
+-#                than 5 on stubby branches. Drawn reversed so time
+-#                runs left to right.
 -#   focused_sha: full SHA of the commit to mark as "current."
 
+- window = window.reverse
 - count = window.size
+- at_head = count.positive? && window.last.id == @selected_branch.head_id
 - if count.zero?
   %p.text-fg-subtle{ class: "text-[11px]" } no recent activity
 - else
@@ -60,18 +64,29 @@
                stroke: "var(--color-border-strong)",
                "stroke-width": 2 }
         -# Midpoint arrowheads: one small filled triangle centered
-        -# between consecutive stations, pointing LEFT (older →
-        -# newer). The map is newest-on-left to match the index
-        -# page's ordering, so the arrows now reinforce that
-        -# direction (time flows leftward in this view) instead of
-        -# fighting it. Each triangle is ~9×8px. Inline `<polygon>`
+        -# between consecutive stations, pointing RIGHT (older →
+        -# newer). Each triangle is ~9×8px. Inline `<polygon>`
         -# rather than a `marker-mid` because `<line>` elements
         -# don't accept mid markers and a `<polyline>` would put
         -# markers AT stations, not BETWEEN them.
         - (0...count - 1).each do |i|
           - mx = pad_x + station_spacing * (i + 0.5)
-          %polygon{ points: "#{mx + 4},#{center_y - 4} #{mx - 5},#{center_y} #{mx + 4},#{center_y + 4}",
+          %polygon{ points: "#{mx - 4},#{center_y - 4} #{mx + 5},#{center_y} #{mx - 4},#{center_y + 4}",
                     fill: "var(--color-border-strong)" }
+      -# Right end: a terminus bar when the newest station is the
+      -# branch head (the line ends here), otherwise a dashed tail
+      -# running off the edge toward newer commits.
+      - last_x = pad_x + station_spacing * (count - 1)
+      - if at_head
+        %line{ x1: last_x, y1: center_y, x2: last_x + 24, y2: center_y,
+               stroke: "var(--color-border-strong)", "stroke-width": 2 }
+        %line{ x1: last_x + 24, y1: center_y - 9, x2: last_x + 24, y2: center_y + 9,
+               stroke: "var(--color-border-strong)", "stroke-width": 3, "stroke-linecap": "round" }
+          %title Branch head
+      - else
+        %line{ x1: last_x, y1: center_y, x2: width, y2: center_y,
+               stroke: "var(--color-border-strong)", "stroke-width": 2, "stroke-dasharray": "3 4" }
+          %title Newer commits continue
       - window.each_with_index do |commit, i|
         - state = commit.commit_state
         - x = pad_x + station_spacing * i
