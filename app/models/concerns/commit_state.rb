@@ -75,20 +75,23 @@ module CommitState
   # Counts of each design-level flag across all of this commit's test
   # instances. Returns a hash with three keys:
   #
-  #   :fpe          — passing instances run with FPE checks enabled.
-  #                   The design wants "FPE raised during run, test
-  #                   still passed numerically"; the schema doesn't
-  #                   surface that signal explicitly, so we use
-  #                   fpe_checks=true on passing instances as a proxy
-  #                   until the model evolves.
+  #   :fpe          — cells run with FPE checks enabled. Informational
+  #                   only (like :inlists_full): it says how the test
+  #                   was run, not that anything went wrong. Actual
+  #                   FPE failures are :fpe_failure.
   #   :checksum     — cells whose checksum departs from the consensus
   #                   of instances that should agree bit-for-bit
   #                   (see ChecksumComparison).
   #   :inlists_full — passing instances run with run_optional=true
   #                   (exercised the full inlist set).
+  #   :fpe_failure  — failing cells whose failures were all trapped
+  #                   floating-point exceptions.
+  #
+  # These count *cells*. The hero tiles and index chips want *tests*
+  # — see commit_state's `checksum_tests` / `fpe_tests`.
   def flag_counts
     matrix = test_computer_matrix
-    counts = { fpe: 0, checksum: 0, inlists_full: 0 }
+    counts = { fpe: 0, checksum: 0, inlists_full: 0, fpe_failure: 0 }
     matrix.each_value do |row|
       row.each_value do |cell|
         cell[:flags].each { |kind, on| counts[kind] += 1 if on }
@@ -112,6 +115,8 @@ module CommitState
     mixed_cells = []
     uniform_failing_tests = 0
     mixed_tests = 0
+    fpe_tests = 0
+    checksum_tests = 0
     pending_tests = 0
     passing_tests = 0
 
@@ -121,7 +126,15 @@ module CommitState
       pendings = row.count { |_id, cell| cell[:status] == :pending }
       passes = row.count   { |_id, cell| cell[:status] == :pass }
       fails  = row.count   { |_id, cell| cell[:status] == :fail }
+      fpe_fails = row.count { |_id, cell| cell[:status] == :fail && cell[:flags][:fpe_failure] }
+      # Failures that weren't just a trapped FPE. An FPE-only test is
+      # its own bucket rather than "failing"/"mixed".
+      real_fails = fails - fpe_fails
       no_data = (pendings + passes + fails).zero?
+
+      # Independent of the bucket below: a mixed test's passing
+      # cells can still disagree on checksums.
+      checksum_tests += 1 if row.any? { |_id, cell| cell[:flags][:checksum] }
 
       # Classification rule: "passing" = at least one computer ran and
       # passed AND nothing failed. Pending neighbors don't downgrade
@@ -129,18 +142,20 @@ module CommitState
       # one that did reported a pass, treat the test as passing. The
       # matrix view (which surfaces individual pending cells) is the
       # place to investigate "but did everyone really run it?"
-      if fails.positive? && passes.positive?
+      if real_fails.positive? && passes.positive?
         mixed_tests += 1
         row.each do |computer_id, cell|
           mixed_cells << { test_id: test_id, computer_id: computer_id } if cell[:status] == :fail
         end
-      elsif fails.positive?
+      elsif real_fails.positive?
         # Any computer's fail makes the test failing — even when other
         # computers are still pending.
         uniform_failing_tests += 1
         row.each do |computer_id, cell|
           failing_cells << { test_id: test_id, computer_id: computer_id } if cell[:status] == :fail
         end
+      elsif fpe_fails.positive?
+        fpe_tests += 1
       elsif passes.positive?
         # Pass with no failures — the test is passing regardless of
         # pending neighbors.
@@ -167,10 +182,15 @@ module CommitState
     has_mixed = mixed_tests.positive?
     has_pending = pending_tests.positive?
 
+    # Worst-first. FPE failures are failures, so they outrank a
+    # checksum divergence on otherwise-passing tests; both outrank
+    # "still waiting on results".
     tests_token =
       if built_ids.empty? then :not_run
       elsif has_uniform_fail then :fail
       elsif has_mixed then :mixed
+      elsif fpe_tests.positive? then :fpe
+      elsif checksum_tests.positive? then :checksum
       elsif has_pending && passing_tests.zero? then :pending
       elsif has_pending then :pending_partial
       elsif passing_tests.positive? then :all_pass
@@ -189,6 +209,8 @@ module CommitState
         status: tests_token,
         uniform_failing_tests: uniform_failing_tests,
         mixed_tests: mixed_tests,
+        fpe_tests: fpe_tests,
+        checksum_tests: checksum_tests,
         pending_tests: pending_tests,
         passing_tests: passing_tests,
         failing_cells: failing_cells,
@@ -229,8 +251,8 @@ module CommitState
   #     counts: { pass:, fail:, pending:, skip:, fpe:, checksum:, inlists_full: } }
   #
   # `state` is the worst-first symbol the row should render under:
-  # :build_fail / :fail / :pending / :mixed (flagged-but-passing) /
-  # :all_pass.
+  # :build_fail / :fail / :pending / :checksum (passing, but some
+  # checksum disagrees with its comparison group) / :all_pass.
   def per_computer_summary
     matrix = test_computer_matrix
     built_ids, failed_ids = _build_membership
@@ -240,7 +262,7 @@ module CommitState
 
     rows = (built_ids + failed_ids).uniq.map do |computer_id|
       counts = { pass: 0, fail: 0, pending: 0, skip: 0,
-                 fpe: 0, checksum: 0, inlists_full: 0 }
+                 fpe: 0, checksum: 0, inlists_full: 0, fpe_failure: 0 }
 
       matrix.each_value do |row|
         cell = row[computer_id]
@@ -254,7 +276,7 @@ module CommitState
         if !built then :build_fail
         elsif counts[:fail].positive? then :fail
         elsif counts[:pending].positive? then :pending
-        elsif counts[:fpe].positive? || counts[:checksum].positive? then :mixed
+        elsif counts[:checksum].positive? then :checksum
         else :all_pass
         end
 
@@ -294,10 +316,10 @@ module CommitState
   #   { test_case:, test_case_commit:, overall:,
   #     cells_by_computer: { computer_id => cell }, counts: { pass:, fail:, ... } }
   #
-  # `overall` ∈ { :fail, :mixed, :pending, :flagged, :pass } — :flagged
-  # means everything passed but at least one cell carries an fpe or
-  # checksum flag. :flagged renders under the warning color (same as
-  # :mixed) in the design.
+  # `overall` ∈ { :fail, :mixed, :fpe, :checksum, :pending, :pass,
+  # :not_run }. :fpe means every failure was a trapped floating-point
+  # exception; :checksum means everything passed but some cell's
+  # checksum disagrees with its comparison group.
   def per_test_summary
     matrix = test_computer_matrix
     built_ids, _ = _build_membership
@@ -305,7 +327,7 @@ module CommitState
 
     rows = matrix.map do |test_id, row_cells|
       built_cells = row_cells.select { |cid, _| built_ids.include?(cid) }
-      counts = { pass: 0, fail: 0, pending: 0, fpe: 0, checksum: 0, inlists_full: 0 }
+      counts = { pass: 0, fail: 0, pending: 0, fpe: 0, checksum: 0, inlists_full: 0, fpe_failure: 0 }
       built_cells.each_value do |cell|
         counts[cell[:status]] += 1 if counts.key?(cell[:status])
         cell[:flags].each { |kind, on| counts[kind] += 1 if on }
@@ -315,16 +337,20 @@ module CommitState
       # counts as the test passing as long as nothing failed and
       # nothing reported a checksum mismatch. Pending neighbors don't
       # downgrade; truly-unresolved tests (no pass anywhere) land in
-      # :pending, and no-built-cell rows land in :not_run.
+      # :pending, and no-built-cell rows land in :not_run. FPE-only
+      # failures get their own :fpe bucket.
+      real_fails = counts[:fail] - counts[:fpe_failure]
       overall =
         if built_cells.empty? || (counts[:pass] + counts[:fail] + counts[:pending]).zero?
           :not_run
-        elsif counts[:fail].positive? && counts[:pass].positive?
+        elsif real_fails.positive? && counts[:pass].positive?
           :mixed
-        elsif counts[:fail].positive?
+        elsif real_fails.positive?
           :fail
-        elsif counts[:pass].positive? && (counts[:fpe] + counts[:checksum]).positive?
-          :flagged
+        elsif counts[:fpe_failure].positive?
+          :fpe
+        elsif counts[:pass].positive? && counts[:checksum].positive?
+          :checksum
         elsif counts[:pass].positive?
           :pass
         elsif counts[:pending].positive?
@@ -356,14 +382,14 @@ module CommitState
   # the cells whose status got worse — used by the "Diff vs last pass"
   # tab. Each entry is `{ test_case_id:, computer_id:, change:, flag_kind?: }`
   # where `change` ∈ { :new_failure, :new_mixed, :new_flag } and
-  # `flag_kind` is :fpe or :checksum when change is :new_flag.
+  # `flag_kind` is :checksum when change is :new_flag.
   #
   # "New failure" = cell was passing on `other` and is failing here.
   # "New mixed" = cell flipped from passing to mixed (the whole row's
   # state shifts, but we surface the changed cell).
-  # "New flag" = cell stayed passing but picked up an fpe or checksum
-  # flag (informational `inlists_full` is excluded — it isn't a
-  # regression).
+  # "New flag" = cell stayed passing but picked up a checksum flag
+  # (informational `inlists_full` / `fpe` are excluded — they say how
+  # the test ran, not that it regressed).
   def cells_changed_since(other_commit)
     return [] unless other_commit
 
@@ -381,7 +407,7 @@ module CommitState
           rows << { test_case_id: test_id, computer_id: computer_id,
                     change: :new_failure }
         elsif cell[:status] == :pass
-          %i[fpe checksum].each do |kind|
+          %i[checksum].each do |kind|
             if cell[:flags][kind] && !prior[:flags][kind]
               rows << { test_case_id: test_id, computer_id: computer_id,
                         change: :new_flag, flag_kind: kind }
@@ -399,7 +425,7 @@ module CommitState
   #   { test_case_id => { computer_id => { status: <Symbol>, flags: <Hash> } } }
   #
   # status ∈ { :pass, :fail, :pending, :skip, :no_build }
-  # flags ∈ { fpe: Bool, checksum: Bool, inlists_full: Bool }
+  # flags ∈ { fpe: Bool, checksum: Bool, inlists_full: Bool, fpe_failure: Bool }
   #
   # Computer axis: every computer that submitted anything for this
   # commit. Test axis: every test_case_commit (which itself records
@@ -593,9 +619,11 @@ module CommitState
                                         .to_set
   end
 
-  # A cell is "clean" (skip popover) iff it passed with no flags.
+  # A cell is "clean" (no agreement detail in the popover) iff it
+  # passed without a checksum disagreement. FPE-checks and full-inlist
+  # runs are informational, not problems.
   def _cell_clean?(cell)
-    cell[:status] == :pass && (cell[:flags] || {}).values.none? { |v| v }
+    cell[:status] == :pass && !(cell[:flags] || {})[:checksum]
   end
 
   # One ChecksumComparison per TCC, memoized for the request — the
@@ -630,7 +658,7 @@ module CommitState
   end
 
   def _cell_for(tcc:, computer_id:, instances:, submissions:)
-    base_flags = { fpe: false, checksum: false, inlists_full: false }
+    base_flags = { fpe: false, checksum: false, inlists_full: false, fpe_failure: false }
 
     if instances.empty?
       status =
@@ -659,19 +687,23 @@ module CommitState
     flags[:inlists_full] = instances.any? { |i| i.run_optional }
     flags[:fpe]          = instances.any? { |i| i.fpe_checks }
     flags[:checksum]     = instances.any? { |i| _checksum_comparison_for(tcc).disagrees?(i) }
+    # Every failing run here tripped a floating-point exception —
+    # a failure, but one to tell apart from "doesn't pass anywhere".
+    failures = instances.reject(&:passed)
+    flags[:fpe_failure]  = failures.any? && failures.all? { |i| i.failure_type == 'fpe' }
 
     { status: status, flags: flags }
   end
 
   def _computer_sort_rank(state)
-    { build_fail: 0, fail: 1, pending: 2, mixed: 3, all_pass: 4 }.fetch(state, 5)
+    { build_fail: 0, fail: 1, pending: 2, checksum: 3, all_pass: 4 }.fetch(state, 5)
   end
 
   def _test_sort_rank(overall)
     # :not_run sits next to :pending — both mean "we don't have an
     # answer yet" — so they cluster together in the Tests-tab list
     # rather than getting hidden after the all-pass section.
-    { fail: 0, mixed: 1, pending: 2, not_run: 3, flagged: 4, pass: 5 }.fetch(overall, 6)
+    { fail: 0, mixed: 1, fpe: 2, checksum: 3, pending: 4, not_run: 5, pass: 6 }.fetch(overall, 7)
   end
 
   # Sort tests by `TestCase.modules` order — star → binary → astero

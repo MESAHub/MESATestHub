@@ -29,7 +29,7 @@
 - count = commits.size
 - return if count.zero?
 - build_colors = { all_ok: "var(--color-success)", some_fail: "var(--color-warning)", all_fail: "var(--color-buildfail)", unknown: "var(--color-skipped)" }
-- tests_colors = { all_pass: "var(--color-success)", mixed: "var(--color-warning)", fail: "var(--color-danger)", pending_partial: "var(--color-info)", pending: "var(--color-skipped)", not_run: "var(--color-skipped)" }
+- tests_colors = { all_pass: "var(--color-success)", mixed: "var(--color-warning)", fail: "var(--color-danger)", fpe: "var(--color-fpe)", checksum: "var(--color-checksum)", pending_partial: "var(--color-info)", pending: "var(--color-skipped)", not_run: "var(--color-skipped)" }
 - build_color = ->(status) { build_colors[status] || "var(--color-skipped)" }
 - tests_color = ->(status) { tests_colors[status] || "var(--color-skipped)" }
 - station_spacing = 68

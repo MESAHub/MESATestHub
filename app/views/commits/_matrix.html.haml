@@ -20,7 +20,7 @@
 -#   active_filter: Initial chip filter (from URL or default).
 
 - filter_counts = tests_filter_counts(per_test)
-- chip_specs = [["failing", "Failing", "bg-danger"], ["mixed", "Mixed", "bg-warning"], ["pending", "Pending", "bg-info"], ["checksums", "Checksums", "bg-warning"], ["fpe", "FPE", "bg-warning"], ["passing", "Passing", "bg-success"], ["untested", "Untested", "bg-skipped"]]
+- chip_specs = [["failing", "Failing", "bg-danger"], ["mixed", "Mixed", "bg-warning"], ["pending", "Pending", "bg-info"], ["fpe", "FPE", "bg-fpe"], ["checksums", "Checksums", "bg-checksum"], ["passing", "Passing", "bg-success"], ["untested", "Untested", "bg-skipped"]]
 - visible_chips = chip_specs.select { |id, _label, _dot| filter_counts[id].to_i.positive? }
 - initial_filter = active_filter.presence || default_matrix_filter(per_test)
 - module_counts = per_test.each_with_object(Hash.new(0)) { |row, h| h[row[:test_case]&.module] += 1 if row[:test_case]&.module }

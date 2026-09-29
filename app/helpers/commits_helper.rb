@@ -94,6 +94,8 @@ module CommitsHelper
     return "bg-buildfail" if state[:build][:status] == :all_fail
     return "bg-danger"    if state[:tests][:has_uniform_fail]
     return "bg-warning"   if state[:tests][:has_mixed] || state[:build][:status] == :some_fail
+    return "bg-fpe"       if tests == :fpe
+    return "bg-checksum"  if tests == :checksum
     return "bg-info"      if tests == :pending_partial
     return "bg-skipped"   if tests == :pending || tests == :not_run
     "bg-success"
@@ -150,6 +152,15 @@ module CommitsHelper
       content_tag(:span, class: "#{base} bg-warning-soft text-warning-soft-text") do
         safe_join([mesa_icon(:warn, size: 11), "#{state[:tests][:mixed_tests]} mixed"], " ")
       end
+    when :fpe
+      content_tag(:span, class: "#{base} bg-fpe-soft text-fpe-soft-text") do
+        safe_join([mesa_icon(:wrench, size: 11), "#{state[:tests][:fpe_tests]} FPE"], " ")
+      end
+    when :checksum
+      content_tag(:span, class: "#{base} bg-checksum-soft text-checksum-soft-text",
+                         title: "Passing, but checksums disagree") do
+        safe_join([mesa_icon(:neq, size: 11), "#{state[:tests][:checksum_tests]} ≠"], " ")
+      end
     when :pending_partial
       content_tag(:span, class: "#{base} bg-info-soft text-info-soft-text") do
         safe_join([mesa_icon(:clock, size: 11), "Pending"], " ")
@@ -161,21 +172,25 @@ module CommitsHelper
     end
   end
 
-  # Renders the inline flag chips for a commit (fpe / checksum / inlists_full).
+  # Renders the inline flag chips for a commit: tests that failed only
+  # on a trapped FPE, tests with a checksum disagreement, and
+  # full-inlist cells. FPE and ≠ count *tests*; "FPE checks were on"
+  # is how a run was configured, not a problem, so it gets no chip.
   def flag_chips(state)
     flags = state[:flags]
+    tests = state[:tests] || {}
     chips = []
-    if flags[:fpe].to_i > 0
+    if tests[:fpe_tests].to_i > 0
       chips << content_tag(:span,
-                           safe_join([mesa_icon(:wrench, size: 10), "#{flags[:fpe]} FPE"], " "),
-                           class: "#{pill_classes(:sm)} bg-warning-soft text-warning-soft-text",
-                           title: "FPE checks raised on #{flags[:fpe]} runs")
+                           safe_join([mesa_icon(:wrench, size: 10), "#{tests[:fpe_tests]} FPE"], " "),
+                           class: "#{pill_classes(:sm)} bg-fpe-soft text-fpe-soft-text",
+                           title: "#{pluralize(tests[:fpe_tests], 'test')} failing only on floating-point exceptions")
     end
-    if flags[:checksum].to_i > 0
+    if tests[:checksum_tests].to_i > 0
       chips << content_tag(:span,
-                           safe_join([mesa_icon(:neq, size: 10), "#{flags[:checksum]} ≠"], " "),
-                           class: "#{pill_classes(:sm)} bg-warning-soft text-warning-soft-text",
-                           title: "Checksum diverged across computers")
+                           safe_join([mesa_icon(:neq, size: 10), "#{tests[:checksum_tests]} ≠"], " "),
+                           class: "#{pill_classes(:sm)} bg-checksum-soft text-checksum-soft-text",
+                           title: "#{pluralize(tests[:checksum_tests], 'test')} with disagreeing checksums")
     end
     if flags[:inlists_full].to_i > 0
       chips << content_tag(:span,
@@ -190,8 +205,8 @@ module CommitsHelper
   # Small label-over-value block used in the commit detail hero's
   # stat row. Label is uppercase 11px; value is 22px/600. `color` is
   # a Tailwind text-* utility class applied to the value.
-  def stat_block(label:, value:, color: "text-fg")
-    content_tag(:div, class: "min-w-0") do
+  def stat_block(label:, value:, color: "text-fg", title: nil)
+    content_tag(:div, class: "min-w-0", title: title) do
       safe_join([
         content_tag(:span, label, class: "mesa-label mb-1"),
         content_tag(:span, value,
@@ -228,7 +243,7 @@ module CommitsHelper
       end
       if built_cells.empty?
         not_run_count += 1
-      elsif built_cells.values.all? { |c| c[:status] == :pass && c[:flags].none? { |_, v| v } }
+      elsif built_cells.values.all? { |c| c[:status] == :pass && !c[:flags][:checksum] }
         clean_count += 1
       else
         interesting << row
@@ -271,21 +286,17 @@ module CommitsHelper
         glyph_color: "var(--color-info-soft-text)",
         label: "pending" }
     when :fail
-      label_parts = ["fail"]
-      label_parts << "FPE" if flags[:fpe]
+      label_parts = [flags[:fpe_failure] ? "fail: floating-point exception" : "fail"]
+      label_parts << "FPE checks on" if flags[:fpe] && !flags[:fpe_failure]
       label_parts << "full inlists" if flags[:inlists_full]
       label = label_parts.join(" · ")
-      # Failing cells can still carry "this was a full-inlist run"
-      # or "FPE checks were enabled" signals — the test was *run*
-      # under those conditions even though it ended in a fail. The
-      # corner badge surfaces that; the main glyph stays the X
-      # since the headline result is still a failure.
-      corner = if flags[:inlists_full] then :plus
-               elsif flags[:fpe] then :wrench
-               end
+      # Failing cells can still carry "this was a full-inlist run" —
+      # the corner badge surfaces that. A failure that was only a
+      # trapped FPE gets its own color and the wrench glyph.
+      corner = flags[:inlists_full] ? :plus : nil
       attrs = { kind: :solid,
-                bg: "var(--color-danger)",
-                glyph: :x,
+                bg: flags[:fpe_failure] ? "var(--color-fpe)" : "var(--color-danger)",
+                glyph: flags[:fpe_failure] ? :wrench : :x,
                 glyph_color: "white",
                 label: label }
       if corner
@@ -295,21 +306,17 @@ module CommitsHelper
       attrs
     when :pass
       label_parts = ["pass"]
-      label_parts << "FPE" if flags[:fpe]
       label_parts << "checksum ≠" if flags[:checksum]
+      label_parts << "FPE checks on" if flags[:fpe]
       label_parts << "full inlists" if flags[:inlists_full]
       label = label_parts.join(" · ")
 
-      if flags[:fpe] && flags[:checksum]
-        { kind: :solid, bg: "var(--color-warning)", glyph: :neq, glyph_color: "white",
-          corner: :wrench, corner_bg: "var(--color-warning-soft-text)", label: label }
-      elsif flags[:checksum]
+      # FPE checks being on is informational (the matrix groups those
+      # computers into their own column pool), so it only shows in
+      # the tooltip.
+      if flags[:checksum]
         corner = flags[:inlists_full] ? :plus : nil
-        { kind: :solid, bg: "var(--color-warning)", glyph: :neq, glyph_color: "white",
-          corner: corner, corner_bg: "var(--color-info)", label: label }
-      elsif flags[:fpe]
-        corner = flags[:inlists_full] ? :plus : nil
-        { kind: :solid, bg: "var(--color-warning)", glyph: :wrench, glyph_color: "white",
+        { kind: :solid, bg: "var(--color-checksum)", glyph: :neq, glyph_color: "white",
           corner: corner, corner_bg: "var(--color-info)", label: label }
       elsif flags[:inlists_full]
         { kind: :solid, bg: "var(--color-success)",
@@ -330,7 +337,7 @@ module CommitsHelper
     when :build_fail then "bg-buildfail"
     when :fail       then "bg-danger"
     when :pending    then "bg-info"
-    when :mixed      then "bg-warning"
+    when :checksum   then "bg-checksum"
     when :all_pass   then "bg-success"
     else "bg-skipped"
     end
@@ -343,12 +350,13 @@ module CommitsHelper
   def summary_for_computer(row)
     counts = row[:counts]
     return "no build" if row[:state] == :build_fail
-    return "#{counts[:fail]} fail" if counts[:fail].positive?
+    if counts[:fail].positive?
+      fpe = counts[:fpe_failure].to_i
+      return "#{fpe} FPE" if fpe == counts[:fail]
+      return fpe.positive? ? "#{counts[:fail] - fpe} fail · #{fpe} FPE" : "#{counts[:fail]} fail"
+    end
     return "#{counts[:pending]} pending" if counts[:pending].positive?
-    flag_parts = []
-    flag_parts << "#{counts[:fpe]} fpe" if counts[:fpe].positive?
-    flag_parts << "#{counts[:checksum]} ≠" if counts[:checksum].positive?
-    return flag_parts.join(" · ") if flag_parts.any?
+    return "#{counts[:checksum]} ≠" if counts[:checksum].positive?
     "#{counts[:pass]} ok"
   end
 
@@ -362,29 +370,31 @@ module CommitsHelper
   #   failing   — `:fail` (uniform failure across built computers)
   #   mixed     — `:mixed` (passes on some, fails on others)
   #   pending   — `:pending` (runs in progress)
-  #   checksums — passing rows with a bit-for-bit divergence
-  #               (`counts[:checksum] > 0`), after the existing
-  #               run_optional / fine-resolution exclusions
-  #   fpe       — passing rows with an FPE flag
+  #   checksums — rows where some cell's checksum disagrees with its
+  #               comparison group (see ChecksumComparison)
+  #   fpe       — rows with a failure caused by a trapped
+  #               floating-point exception
   #   passing   — `:pass` (clean pass, no flags)
   #   untested  — `:not_run` (no built-computer ever reported)
   def test_row_categories(row)
     cats = case row[:overall]
            when :fail    then ["failing"]
            when :mixed   then ["mixed"]
+           when :fpe     then ["fpe"]
+           when :checksum then ["checksums"]
            when :pending then ["pending"]
            when :pass    then ["passing"]
            when :not_run then ["untested"]
            else []
            end
     counts = row[:counts] || {}
-    # `:flagged` plus the explicit checksum/fpe counts populate the
+    # The explicit checksum / FPE-failure counts populate the
     # narrower category tags. Even a row classified as `:fail` /
     # `:mixed` can carry flag tags so the chips behave consistently
     # ("Checksums" includes every row with a checksum divergence,
     # regardless of overall state).
     cats << "checksums" if counts[:checksum].to_i.positive?
-    cats << "fpe"       if counts[:fpe].to_i.positive?
+    cats << "fpe"       if counts[:fpe_failure].to_i.positive?
     # Pending acts as a cross-cutting tag too — a row with one
     # failure plus several unreported computers belongs under
     # "Pending" as well as "Failing", so the chip surfaces
@@ -407,13 +417,13 @@ module CommitsHelper
       counts[:pending] += 1 if (row[:counts] || {})[:pending].to_i.positive? ||
                                row[:overall] == :pending
       counts[:checksum] += 1 if (row[:counts] || {})[:checksum].to_i.positive?
-      counts[:fpe]     += 1 if (row[:counts] || {})[:fpe].to_i.positive?
+      counts[:fpe]     += 1 if (row[:counts] || {})[:fpe_failure].to_i.positive?
     end
     return "failing"   if counts[:fail].positive?
     return "mixed"     if counts[:mixed].positive?
-    return "pending"   if counts[:pending].positive?
-    return "checksums" if counts[:checksum].positive?
     return "fpe"       if counts[:fpe].positive?
+    return "checksums" if counts[:checksum].positive?
+    return "pending"   if counts[:pending].positive?
     "all"
   end
 
@@ -429,14 +439,13 @@ module CommitsHelper
     counts
   end
 
-  # Dot color for a per-test summary row. The design treats :flagged
-  # the same as :mixed for the indicator color (a passing-but-flagged
-  # test is amber, not green) — different from :pass.
+  # Dot color for a per-test summary row.
   def status_dot_class_for_test(overall)
     case overall
     when :fail    then "bg-danger"
     when :mixed   then "bg-warning"
-    when :flagged then "bg-warning"
+    when :fpe     then "bg-fpe"
+    when :checksum then "bg-checksum"
     when :pending then "bg-info"
     when :pass    then "bg-success"
     else "bg-skipped"
@@ -444,19 +453,19 @@ module CommitsHelper
   end
 
   # Numeric badge for the Tests tab. Picks the first nonzero of
-  # (uniform_failing, mixed, fpe+checksum) — matches the prototype's
-  # priority. Returns `[value, tone_classes]` or nil when no badge
+  # (uniform_failing, mixed, FPE failures, checksum ≠) test counts. Returns `[value, tone_classes]` or nil when no badge
   # should render. Tone is the Tailwind class pair for the badge
   # background + text color.
   def tests_tab_badge(state)
     tests = state[:tests]
-    flags = state[:flags]
     if tests[:uniform_failing_tests].positive?
       [tests[:uniform_failing_tests], "bg-danger-soft text-danger-soft-text"]
     elsif tests[:mixed_tests].positive?
       [tests[:mixed_tests], "bg-warning-soft text-warning-soft-text"]
-    elsif (flags[:fpe].to_i + flags[:checksum].to_i).positive?
-      [flags[:fpe].to_i + flags[:checksum].to_i, "bg-warning-soft text-warning-soft-text"]
+    elsif tests[:fpe_tests].to_i.positive?
+      [tests[:fpe_tests], "bg-fpe-soft text-fpe-soft-text"]
+    elsif tests[:checksum_tests].to_i.positive?
+      [tests[:checksum_tests], "bg-checksum-soft text-checksum-soft-text"]
     end
   end
 
@@ -495,7 +504,7 @@ module CommitsHelper
       build_fail: "buildfail",
       fail: "danger",
       pending: "info",
-      mixed: "warning",
+      checksum: "checksum",
       all_pass: "success"
     }.fetch(state, "skipped")
   end
@@ -504,13 +513,11 @@ module CommitsHelper
   def summary_for_test(row)
     return "not run" if row[:overall] == :not_run
     counts = row[:counts]
+    return "#{counts[:fail]} FPE" if row[:overall] == :fpe
     return "#{counts[:fail]} fail" if counts[:fail] > 0 && counts[:pass] == 0
     return "#{counts[:fail]} fail · #{counts[:pass]} pass" if counts[:fail].positive?
     return "#{counts[:pending]} pending" if counts[:pending].positive?
-    flag_parts = []
-    flag_parts << "#{counts[:fpe]} fpe" if counts[:fpe].positive?
-    flag_parts << "#{counts[:checksum]} ≠" if counts[:checksum].positive?
-    return flag_parts.join(" · ") if flag_parts.any?
+    return "#{counts[:checksum]} ≠" if counts[:checksum].positive?
     "#{counts[:pass]} ok"
   end
 
@@ -520,11 +527,11 @@ module CommitsHelper
   # actual change so the visual matches the matrix cell encoding used
   # everywhere else in the page.
   def diff_before_cell
-    { status: :pass, flags: { fpe: false, checksum: false, inlists_full: false } }
+    { status: :pass, flags: { fpe: false, checksum: false, inlists_full: false, fpe_failure: false } }
   end
 
   def diff_after_cell(row)
-    base = { fpe: false, checksum: false, inlists_full: false }
+    base = { fpe: false, checksum: false, inlists_full: false, fpe_failure: false }
     case row[:change]
     when :new_failure
       { status: :fail, flags: base }
@@ -543,23 +550,22 @@ module CommitsHelper
     case row[:change]
     when :new_failure then "now failing"
     when :new_flag
-      row[:flag_kind] == :fpe ? "FPE raised" : "checksum ≠"
+      "checksum ≠"
     else "changed"
     end
   end
 
   # Grouped count line for the diff tab header. Returns a short
   # human-readable summary of what kinds of changes the diff contains
-  # (e.g. "3 new failures · 1 new FPE flag"). Empty rows return nil.
+  # (e.g. "3 new failures · 1 new checksum mismatch"). Empty rows
+  # return nil.
   def diff_summary_line(rows)
     return nil if rows.blank?
     failures = rows.count { |r| r[:change] == :new_failure }
-    fpe      = rows.count { |r| r[:change] == :new_flag && r[:flag_kind] == :fpe }
     checks   = rows.count { |r| r[:change] == :new_flag && r[:flag_kind] == :checksum }
 
     parts = []
     parts << pluralize(failures, "new failure") if failures.positive?
-    parts << pluralize(fpe, "new FPE flag") if fpe.positive?
     parts << "#{checks} new checksum #{checks == 1 ? 'mismatch' : 'mismatches'}" if checks.positive?
     parts.join(" · ").presence
   end

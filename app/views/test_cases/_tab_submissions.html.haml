@@ -109,8 +109,11 @@
                   .flex.items-center.gap-1.5
                     %span{ class: "inline-block h-2 w-2 rounded-full shrink-0 #{passed ? 'bg-success' : 'bg-danger'}" }
                     %span.font-medium{ class: "text-[11px] #{status_class}" }= status_word
-                    - if ti.fpe_checks
-                      %span.text-warning-soft-text{ title: "FPE checks" }
+                    - if ti.failure_type == "fpe"
+                      %span.text-fpe-soft-text{ title: "Failed on a floating-point exception" }
+                        = mesa_icon(:wrench, size: 11)
+                    - elsif ti.fpe_checks
+                      %span.text-fg-subtle{ title: "FPE checks on" }
                         = mesa_icon(:wrench, size: 11)
                     - if ti.run_optional
                       %span.text-info-soft-text{ title: "Ran full inlist set" }

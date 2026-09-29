@@ -14,14 +14,16 @@
         - if pr_number
           %span{ class: "inline-flex items-center gap-1 rounded-full border border-transparent bg-bg-muted px-2 py-0.5 text-[11px] font-medium text-fg-muted align-middle" }
             PR ##{pr_number}
-        - if flags[:fpe].to_i > 0
-          %span{ class: "inline-flex items-center gap-1 rounded-full border border-transparent bg-warning-soft px-2 py-0.5 text-[11px] font-medium text-warning-soft-text align-middle" }
+        -# FPE / ≠ pills count tests, and only render when the test
+        -# status pill isn't already saying the same thing.
+        - if tests[:fpe_tests].to_i > 0 && tests[:status] != :fpe
+          %span{ class: "inline-flex items-center gap-1 rounded-full border border-transparent bg-fpe-soft px-2 py-0.5 text-[11px] font-medium text-fpe-soft-text align-middle" }
             = mesa_icon(:wrench, size: 11)
-            #{flags[:fpe]} FPE
-        - if flags[:checksum].to_i > 0
-          %span{ class: "inline-flex items-center gap-1 rounded-full border border-transparent bg-warning-soft px-2 py-0.5 text-[11px] font-medium text-warning-soft-text align-middle" }
+            #{tests[:fpe_tests]} FPE
+        - if tests[:checksum_tests].to_i > 0 && tests[:status] != :checksum
+          %span{ class: "inline-flex items-center gap-1 rounded-full border border-transparent bg-checksum-soft px-2 py-0.5 text-[11px] font-medium text-checksum-soft-text align-middle" }
             = mesa_icon(:neq, size: 11)
-            #{flags[:checksum]} checksum ≠
+            #{tests[:checksum_tests]} checksum ≠
         - if flags[:inlists_full].to_i > 0
           %span{ class: "inline-flex items-center gap-1 rounded-full border border-transparent bg-info-soft px-2 py-0.5 text-[11px] font-medium text-info-soft-text align-middle" }
             = mesa_icon(:plus, size: 11)
@@ -64,11 +66,12 @@
 
   -# Stat row + focused 5-station subway map. Stats live in the left
   -# half (compressed); the map takes the right half so the current
-  -# commit's neighborhood is legible. FPE / ≠ stat is skipped when
-  -# zero (the pill row above already surfaces those flags when they
-  -# fire, and an always-zero tile is noise).
-  - fpe_count = flags[:fpe].to_i + flags[:checksum].to_i
-  - stats_columns = fpe_count.positive? ? "grid-cols-5" : "grid-cols-4"
+  -# commit's neighborhood is legible. The FPE and Checksum ≠ tiles
+  -# count tests and are skipped when zero (an always-zero tile is
+  -# noise).
+  - fpe_tests = tests[:fpe_tests].to_i
+  - checksum_tests = tests[:checksum_tests].to_i
+  - stats_columns = { 4 => "grid-cols-4", 5 => "grid-cols-5", 6 => "grid-cols-6" }[4 + [fpe_tests, checksum_tests].count(&:positive?)]
   .mt-5.pt-4.border-t.border-border-subtle
     .grid.gap-6{ class: "grid-cols-1 md:grid-cols-2" }
       .grid.gap-3{ class: stats_columns }
@@ -84,10 +87,16 @@
         = stat_block(label: "Pending",
                      value: tests[:pending_tests],
                      color: tests[:pending_tests].positive? ? "text-info" : "text-fg-subtle")
-        - if fpe_count.positive?
-          = stat_block(label: "FPE / ≠",
-                       value: fpe_count,
-                       color: "text-warning")
+        - if fpe_tests.positive?
+          = stat_block(label: "FPE",
+                       value: fpe_tests,
+                       color: "text-fpe",
+                       title: "Tests failing only on floating-point exceptions")
+        - if checksum_tests.positive?
+          = stat_block(label: "Checksum",
+                       value: checksum_tests,
+                       color: "text-checksum",
+                       title: "Tests whose checksums disagree between runs that should match")
       .min-w-0
         %span.mesa-label.mb-1 Recent commits
         = render "commits/hero_subway_map", window: @hero_window, focused_sha: @commit.sha

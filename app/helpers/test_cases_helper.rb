@@ -47,7 +47,7 @@ module TestCasesHelper
       ["passing",  counts[:passing],  "bg-success", "text-success-soft-text"],
       ["failing",  counts[:failing],  "bg-danger",  "text-danger-soft-text"],
       ["mixed",    counts[:mixed],    "bg-warning", "text-warning-soft-text"],
-      ["checksum", counts[:checksum], "bg-warning", "text-warning-soft-text"],
+      ["checksum", counts[:checksum], "bg-checksum", "text-checksum-soft-text"],
       ["untested", counts[:untested], "bg-skipped", "text-fg-muted"]
     ]
   end
@@ -268,20 +268,32 @@ module TestCasesHelper
              else
                :pass
              end
-    base_flags = existing&.dig(:flags) || { fpe: false, checksum: false, inlists_full: false }
+    base_flags = existing&.dig(:flags) || { fpe: false, checksum: false, inlists_full: false, fpe_failure: false }
     flags = {
       fpe:           base_flags[:fpe]           || !!ti.fpe_checks,
       checksum:      base_flags[:checksum]      || _history_checksum_comparison(tcc).disagrees?(ti),
-      inlists_full:  base_flags[:inlists_full]  || !!ti.run_optional
+      inlists_full:  base_flags[:inlists_full]  || !!ti.run_optional,
+      fpe_failure:   _merged_fpe_failure(existing, ti)
     }
     { status: status, flags: flags }
+  end
+
+  # True iff the merged cell has failures and every one of them was
+  # a trapped FPE. A passing instance leaves the running answer alone;
+  # a failing one keeps it only if it's an FPE and nothing earlier
+  # failed some other way.
+  def _merged_fpe_failure(existing, ti)
+    prior = existing&.dig(:flags, :fpe_failure) || false
+    return prior if ti.passed
+    no_prior_failure = existing.nil? || existing[:status] == :pass
+    ti.failure_type == 'fpe' && (no_prior_failure || prior)
   end
 
   # Cell-state computation for the popover specifically — agrees with
   # the visual matrix cell but recomputed here because the visual
   # cell hash isn't kept after rendering.
   def _popover_cell_state(tcc, instances)
-    base_flags = { fpe: false, checksum: false, inlists_full: false }
+    base_flags = { fpe: false, checksum: false, inlists_full: false, fpe_failure: false }
     return { status: :no_build, flags: base_flags } if instances.empty?
 
     passed = instances.count(&:passed)
@@ -294,13 +306,14 @@ module TestCasesHelper
     flags = {
       fpe:          instances.any? { |i| i.fpe_checks },
       checksum:     instances.any? { |i| _history_checksum_comparison(tcc).disagrees?(i) },
-      inlists_full: instances.any? { |i| i.run_optional }
+      inlists_full: instances.any? { |i| i.run_optional },
+      fpe_failure:  failed.positive? && instances.reject(&:passed).all? { |i| i.failure_type == 'fpe' }
     }
     { status: status, flags: flags }
   end
 
   def _popover_clean?(cell)
-    cell[:status] == :pass && (cell[:flags] || {}).values.none? { |v| v }
+    cell[:status] == :pass && !(cell[:flags] || {})[:checksum]
   end
 
   def _popover_agreement(tcc, instances)
