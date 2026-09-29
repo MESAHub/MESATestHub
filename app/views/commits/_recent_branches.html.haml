@@ -1,8 +1,9 @@
 -# Shortcut cards for the branches tested most recently (excluding
 -# the one on screen), so the index doubles as a jumping-off point
--# for wherever development is happening. Each card offers the
--# branch's commit list and its head commit, with the head's status
--# ring for an at-a-glance read.
+-# for wherever development is happening. Two click targets per card,
+-# each styled as the link it is: the branch name opens the branch's
+-# commit list, and the head-commit block (ring + SHA + message) opens
+-# that commit.
 -#
 -# Locals:
 -#   entries: output of Branch.recently_tested — [{ branch:, last_tested_at: }].
@@ -13,18 +14,18 @@
     - entries.each do |entry|
       - branch = entry[:branch]
       - head = branch.head
-      .rounded-lg.border.border-border.bg-bg-elev.p-3.flex.flex-col.gap-2.min-w-0{ style: "box-shadow: var(--shadow-card-sm);" }
-        .flex.items-baseline.justify-between.gap-2.min-w-0
-          = link_to commits_path(branch: branch.name), class: "inline-flex items-center gap-1 min-w-0 font-mono text-[13px] text-fg no-underline hover:text-brand", title: branch.name do
+      .rounded-lg.border.border-border.bg-bg-elev.p-2.flex.flex-col.gap-1.min-w-0{ style: "box-shadow: var(--shadow-card-sm);" }
+        .flex.items-baseline.justify-between.gap-2.min-w-0.px-1.pt-1
+          = link_to commits_path(branch: branch.name), class: "group/branch inline-flex items-center gap-1 min-w-0 font-mono text-[13px] text-fg no-underline hover:text-brand", title: "Commits on #{branch.name}" do
             = mesa_icon(:branch, size: 12)
-            %span.truncate= branch.name
+            %span.truncate{ class: "group-hover/branch:underline" }= branch.name
+            %span.shrink-0.text-fg-subtle{ class: "group-hover/branch:text-brand", "aria-hidden": "true" } →
           %span.shrink-0.text-fg-subtle.tabular-nums{ class: "text-[11px]", title: entry[:last_tested_at].in_time_zone.to_s }
             = "tested #{time_ago_compact(entry[:last_tested_at])}"
-        .flex.items-center.gap-2.min-w-0
+        = link_to commit_path(branch: branch.name, sha: head.short_sha), class: "flex items-center gap-2 min-w-0 rounded-md px-1 py-1.5 no-underline hover:bg-bg-subtle", title: "Head commit #{head.short_sha}: #{head.message_first_line(200)}" do
           = render "status_ring", state: head.commit_state, size: 24
           .min-w-0.flex.flex-col
-            %span.font-mono.text-brand{ class: "text-[11px]" }= head.short_sha
-            %span.truncate.text-fg-muted{ class: "text-[12px]", title: head.message_first_line(200) }= head.message_first_line(80)
-        .flex.items-center.gap-2.text-xs
-          = link_to "Commits", commits_path(branch: branch.name), class: "mesa-btn"
-          = link_to "Head commit", commit_path(branch: branch.name, sha: head.short_sha), class: "mesa-btn"
+            %span.text-fg-subtle{ class: "text-[10px] uppercase tracking-wide" }
+              Head commit
+              %span.font-mono.normal-case.tracking-normal.text-brand{ class: "text-[11px]" }= head.short_sha
+            %span.truncate.text-fg-muted{ class: "text-[12px]" }= head.message_first_line(80)

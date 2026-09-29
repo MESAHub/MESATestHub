@@ -15,36 +15,37 @@
   -# of this branch's own headline and list.
   = render "recent_branches", entries: @recent_branches_tested
 
-  -# Headline: branch chip + date chip + muted time + summary line.
-  %header.flex.flex-col.gap-2
-    .flex.flex-wrap.items-baseline.gap-x-3.gap-y-2
-      %h1.text-2xl.font-semibold.tracking-tight.text-fg Commits on
-      - picker_sections = [{ label: "Recently updated", branches: @recent_branches }, { label: "Older", branches: @older_branches }]
-      = render "branch_picker", branch: @branch, sections: picker_sections, link_for: ->(b) { commits_path(branch: b.name) }
-      %span.text-2xl.font-semibold.tracking-tight.text-fg.whitespace-nowrap on or before
-      = render "date_picker", selected_time: displayed_time, branch: @branch
-      %span.font-mono.text-fg-subtle.tabular-nums{ class: "text-[12px]" }
-        = displayed_time.strftime("%-l:%M %P %Z")
+  -# Headline (branch chip + date chip + muted time + summary line)
+  -# with Newer/Older paging on the same row, right-aligned; the paging
+  -# buttons wrap under the headline only when the row runs out of
+  -# room. Each row's status ring carries what the old subway map
+  -# showed, so paging lives here and at the bottom.
+  %header.flex.flex-wrap.items-end.justify-between.gap-x-6.gap-y-3
+    .flex.flex-col.gap-2.min-w-0
+      .flex.flex-wrap.items-baseline.gap-x-3.gap-y-2
+        %h1.text-2xl.font-semibold.tracking-tight.text-fg Commits on
+        - picker_sections = [{ label: "Recently updated", branches: @recent_branches }, { label: "Older", branches: @older_branches }]
+        = render "branch_picker", branch: @branch, sections: picker_sections, link_for: ->(b) { commits_path(branch: b.name) }
+        %span.text-2xl.font-semibold.tracking-tight.text-fg.whitespace-nowrap on or before
+        = render "date_picker", selected_time: displayed_time, branch: @branch
+        %span.font-mono.text-fg-subtle.tabular-nums{ class: "text-[12px]" }
+          = displayed_time.strftime("%-l:%M %P %Z")
 
-    %p.text-xs.text-fg-muted
-      = "#{number_with_delimiter(@max_num)} commits on this branch"
-      %span.mx-1 ·
-      = "#{visible_count} shown"
-      - if @last_activity_at
+      %p.text-xs.text-fg-muted
+        = "#{number_with_delimiter(@max_num)} commits on this branch"
         %span.mx-1 ·
-        = "newest in view #{time_ago_compact(@last_activity_at)}"
+        = "#{visible_count} shown"
+        - if @last_activity_at
+          %span.mx-1 ·
+          = "newest in view #{time_ago_compact(@last_activity_at)}"
 
-  -# Top pagination. Each row's status ring (left column) carries
-  -# what the old subway map showed — build status in the core, test
-  -# result kinds around it — so the map is gone and paging lives
-  -# here and at the bottom.
-  .flex.items-center.justify-end.gap-2.text-xs
-    = link_to "← Newer", (newer_href || commits_path(branch: @branch.name)),
-                          class: "mesa-btn #{'pointer-events-none opacity-50' if newer_disabled}",
-                          aria: { disabled: newer_disabled }
-    = link_to "Older →", (older_href || "#"),
-                          class: "mesa-btn #{'pointer-events-none opacity-50' if older_disabled}",
-                          aria: { disabled: older_disabled }
+    %nav.flex.items-center.gap-2.text-xs.shrink-0.ml-auto{ "aria-label": "Page" }
+      = link_to "← Newer", (newer_href || commits_path(branch: @branch.name)),
+                            class: "mesa-btn #{'pointer-events-none opacity-50' if newer_disabled}",
+                            aria: { disabled: newer_disabled }
+      = link_to "Older →", (older_href || "#"),
+                            class: "mesa-btn #{'pointer-events-none opacity-50' if older_disabled}",
+                            aria: { disabled: older_disabled }
 
   -# Table card.
   .rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);" }
