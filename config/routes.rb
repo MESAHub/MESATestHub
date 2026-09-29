@@ -117,7 +117,9 @@ Rails.application.routes.draw do
   # for API access to nearby commits/pull requests for a branch/commit
   get '/commits/nearby_commits.json', to: 'commits#nearby_commits'
 
-  root to: 'commits#show', sha: 'head', branch: 'main'
+  # Commits on main. Goes through a controller action (not a routing
+  # redirect) so logged-out visitors land on the login page directly.
+  root to: 'commits#root'
 
   # searching test_instances (should work for remote JSON requests)
   get '/test_instances/search', to: 'test_instances#search', as: 'search_instances'

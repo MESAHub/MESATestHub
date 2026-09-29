@@ -3,6 +3,14 @@ class CommitsController < ApplicationController
   include BranchMismatchRedirect
 
   before_action :set_commit, only: [:show, :diff]
+
+  # The landing page. Most development happens on branches now, so the
+  # commits index (with its recently-tested-branch cards) is a better
+  # front door than main's head commit — and main is still the right
+  # default list, since failures there should be rare and loud.
+  def root
+    redirect_to commits_path(branch: 'main')
+  end
   layout "modern", only: [:index, :show]
 
   # Branch lookup for the commit detail page. The :branch URL segment
@@ -179,6 +187,14 @@ class CommitsController < ApplicationController
     # Effective display cursor — what the headline + date chip read.
     @before_time = @commits.first&.commit_time || @before_time_param || Time.zone.now
 
+    # What the "When" column and the age-group headers measure from.
+    # A date picked in the calendar (bare `?before=YYYY-MM-DD`) anchors
+    # them to the end of that day; everything else — the default page
+    # and Newer/Older paging (full timestamps) — measures from now, so
+    # the newest commit doesn't read as "now" when it's weeks old.
+    @when_mode = params[:after].blank? && params[:before].to_s.match?(/\A\d{4}-\d{2}-\d{2}\z/) ? :date : :now
+    @when_anchor = @when_mode == :date ? @before_time_param : Time.zone.now
+
     @older_href =
       if @has_more_older
         commits_path(branch: @branch.name, before: (@commits.last.commit_time - 1.second).iso8601)
@@ -199,6 +215,10 @@ class CommitsController < ApplicationController
     end
 
     @last_activity_at = @commits.first&.commit_time
+
+    # Shortcut cards for where testing has happened lately, skipping
+    # the branch already on screen.
+    @recent_branches_tested = Branch.recently_tested(limit: 3, excluding: @branch)
   end
 
   # Proxy build logs hosted at the Flatiron logs server. Two reasons

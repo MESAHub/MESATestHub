@@ -273,35 +273,44 @@ module CommitsHelper
     end
   end
 
-  # Renders the inline flag chips for a commit: tests that failed only
-  # on a trapped FPE, tests with a checksum disagreement, and tests
-  # any computer ran with the full inlist set. All three count
-  # *tests*; "FPE checks were on"
-  # is how a run was configured, not a problem, so it gets no chip.
-  def flag_chips(state)
-    flags = state[:flags]
-    tests = state[:tests] || {}
-    chips = []
-    if tests[:fpe_tests].to_i > 0
-      chips << content_tag(:span,
-                           safe_join([mesa_icon(:wrench, size: 10), "#{tests[:fpe_tests]} FPE"], " "),
-                           class: "#{pill_classes(:sm)} bg-fpe-soft text-fpe-soft-text",
-                           title: "#{pluralize(tests[:fpe_tests], 'test')} failing only on floating-point exceptions")
+  # The commits index's single Tests cell: one chip per kind of
+  # problem present, worst first (failing, FPE, mixed, checksum ≠),
+  # each counting tests, capped at `max` with a "+N" overflow; a
+  # Pending chip when results are still coming in alongside them.
+  # With no problems it falls back to the one-word status pill (All
+  # passing / Pending / Untested). Full-inlist coverage trails as
+  # muted text — it describes how tests ran, not a problem.
+  def test_result_chips(state, max: 3)
+    t = state[:tests]
+    base = pill_classes(:sm)
+    specs = [
+      [t[:uniform_failing_tests], :x, "failing", "bg-danger-soft text-danger-soft-text", "fail everywhere they ran"],
+      [t[:fpe_tests], :wrench, "FPE", "bg-fpe-soft text-fpe-soft-text", "fail only on floating-point exceptions"],
+      [t[:mixed_tests], :warn, "mixed", "bg-warning-soft text-warning-soft-text", "pass on some computers, fail on others"],
+      [t[:checksum_tests], :neq, "≠", "bg-checksum-soft text-checksum-soft-text", "have disagreeing checksums"]
+    ]
+    chips = specs.filter_map do |count, icon, word, tone, meaning|
+      next unless count.to_i.positive?
+      content_tag(:span, safe_join([mesa_icon(icon, size: 10), "#{count} #{word}"], " "),
+                  class: "#{base} #{tone}", title: "#{pluralize(count, 'test')} #{meaning}")
     end
-    if tests[:checksum_tests].to_i > 0
-      chips << content_tag(:span,
-                           safe_join([mesa_icon(:neq, size: 10), "#{tests[:checksum_tests]} ≠"], " "),
-                           class: "#{pill_classes(:sm)} bg-checksum-soft text-checksum-soft-text",
-                           title: "#{pluralize(tests[:checksum_tests], 'test')} with disagreeing checksums")
+    parts = if chips.empty?
+              [test_status_pill(state, size: :sm)]
+            else
+              shown = chips.first(max)
+              shown << content_tag(:span, "+#{chips.size - max}", class: "text-fg-subtle text-[10px]") if chips.size > max
+              if t[:has_pending]
+                shown << content_tag(:span, safe_join([mesa_icon(:clock, size: 10), "Pending"], " "),
+                                     class: "#{base} bg-info-soft text-info-soft-text")
+              end
+              shown
+            end
+    if t[:full_tests].to_i.positive?
+      parts << content_tag(:span, safe_join([mesa_icon(:plus, size: 9), "#{t[:full_tests]} full"], " "),
+                           class: "inline-flex items-center gap-0.5 text-fg-subtle text-[10px] whitespace-nowrap",
+                           title: "#{pluralize(t[:full_tests], 'test case')} run with the full inlist set on at least one computer")
     end
-    if tests[:full_tests].to_i > 0
-      chips << content_tag(:span,
-                           safe_join([mesa_icon(:plus, size: 10), "#{tests[:full_tests]} full"], " "),
-                           class: "#{pill_classes(:sm)} bg-info-soft text-info-soft-text",
-                           title: "#{pluralize(tests[:full_tests], 'test case')} run with the full inlist set on at least one computer")
-    end
-    return content_tag(:span, "—", class: "text-fg-subtle") if chips.empty?
-    safe_join(chips, content_tag(:span, " ", class: "inline-block w-1"))
+    safe_join(parts, " ")
   end
 
   # Small label-over-value block used in the commit detail hero's
@@ -693,6 +702,7 @@ module CommitsHelper
   # "Day before") so they don't read as today-relative when the user
   # is browsing the distant past — "Last week" would otherwise sound
   # like real-world last week even with the cursor pinned at 2024.
+  # Group labels relative to a picked date...
   AGE_BUCKETS = [
     [:today, "Same day"],
     [:yesterday, "Day before"],
@@ -701,6 +711,12 @@ module CommitsHelper
     [:this_month, "Earlier same month"],
     [:older, "Older"]
   ].freeze
+
+  # ...and relative to now.
+  AGE_BUCKETS_NOW = {
+    today: "Today", yesterday: "Yesterday", this_week: "Earlier this week",
+    last_week: "Last week", this_month: "Earlier this month", older: "Older"
+  }.freeze
 
   def age_bucket(time, now: Time.current)
     t = time.in_time_zone(now.time_zone)
@@ -719,13 +735,31 @@ module CommitsHelper
 
   # Group an enumerable of commits into ordered age buckets. Empty
   # buckets are dropped.
-  def group_commits_by_age(commits, now: Time.current)
+  # `mode` is :now (labels read "Today", "Last week") or :date
+  # (labels read relative to a picked day: "Same day", "Week before").
+  def group_commits_by_age(commits, now: Time.current, mode: :date)
     by_bucket = AGE_BUCKETS.to_h { |id, _| [id, []] }
     commits.each { |c| by_bucket[age_bucket(c.commit_time, now: now)] << c }
     AGE_BUCKETS.filter_map do |id, label|
       next nil if by_bucket[id].empty?
-      [id, label, by_bucket[id]]
+      [id, mode == :now ? AGE_BUCKETS_NOW[id] : label, by_bucket[id]]
     end
+  end
+
+  # The commits index's "When" cell. Measured from now it reads as an
+  # age ("3h ago"); measured from a picked date it reads as an offset
+  # before the end of that day ("−3h"), with "<1m" instead of "now" so
+  # it can't be mistaken for the present.
+  def commit_when_label(time, anchor:, mode:)
+    return time_ago_compact(time) if mode == :now
+    label = short_relative_time(time, now: anchor)
+    label == "now" ? "<1m" : label
+  end
+
+  # Column header for the "When" cell: plain "When" for ages, the
+  # picked day otherwise so the offsets have a visible reference.
+  def commit_when_header(anchor:, mode:)
+    mode == :now ? "When" : "Before #{anchor.strftime('%b %-d')}"
   end
 
   # Past-tense "6d ago" / "2w ago" / "3mo ago" — the conventional shape

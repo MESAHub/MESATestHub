@@ -302,6 +302,28 @@ class Branch < ApplicationRecord
   # side's slots fill from the other side so the window keeps a
   # consistent visual length. (Branch may simply be shorter than
   # `size` in total, in which case the returned array is too.)
+  # Branches whose commits received submissions most recently, newest
+  # first, for the commits index's shortcut cards. Looks back
+  # `within` (bounded so the join stays cheap — ~85ms on production
+  # data). Returns [{ branch:, last_tested_at: }, ...] with each
+  # branch's head preloaded.
+  def self.recently_tested(limit: 3, excluding: nil, within: 30.days)
+    scope = joins('JOIN branch_memberships bm ON bm.branch_id = branches.id ' \
+                  'JOIN submissions s ON s.commit_id = bm.commit_id')
+              .where('s.created_at > ?', within.ago)
+              .where.not(head_id: nil)
+    scope = scope.where.not(id: excluding.id) if excluding
+    rows = scope.group('branches.id')
+                .order(Arel.sql('MAX(s.created_at) DESC'))
+                .limit(limit)
+                .pluck(:id, Arel.sql('MAX(s.created_at)'))
+    branches = includes(:head).where(id: rows.map(&:first)).index_by(&:id)
+    rows.filter_map do |id, at|
+      branch = branches[id]
+      { branch: branch, last_tested_at: at } if branch
+    end
+  end
+
   def focused_commit_window(focused_commit, size: 5)
     half = (size - 1) / 2
 

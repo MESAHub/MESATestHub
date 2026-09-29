@@ -171,6 +171,11 @@ helper or partial exists.
   present (worst-first from 12 o'clock), with a dashed open gap
   (min 50°) while any test is unreported — a closed ring means every
   test has a result.
+  Above the list, up to three cards link to the branches tested most
+  recently (`Branch.recently_tested`, 30-day window, excluding the
+  branch on screen). `/` goes to `commits#root`, which redirects to
+  `/main/commits` — an action rather than a routing redirect so
+  logged-out visitors hit the login page directly.
 - **Commit detail tabs are server-pre-rendered, EXCEPT Diff.**
   `commits#show` renders the Summary / Computers / Logs panels on
   each request; the `tabs_controller.js` Stimulus controller toggles
