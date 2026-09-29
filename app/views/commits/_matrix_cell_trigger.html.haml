@@ -13,6 +13,8 @@
 -#   cell:         hash from `Commit#test_computer_matrix`.
 -#   test_case:    TestCase row.
 -#   computer:     Computer row.
+-#   column_key:   CommitState#matrix_columns key (the computer id, or
+-#                 "<id>-<pool>" for a computer split across pools).
 -#   branch:       branch the commit lives on.
 -#   sha:          short SHA of the commit.
 -#   popover_data: full popover blob — looked up by key for the
@@ -21,8 +23,8 @@
 -#                 the JSON entry is missing for some reason).
 
 - attrs = matrix_cell_attrs(cell)
-- key = "#{test_case.id}-#{computer.id}"
-- is_interesting = cell && (cell[:status] != :pass || (cell[:flags] || {}).values.any? { |v| v })
+- key = "#{test_case.id}-#{column_key}"
+- is_interesting = cell && (cell[:status] != :pass || (cell[:flags] || {}).values.any? { |v| v } || cell[:runs].to_i > 1)
 - fallback_href = test_case_commit_path(branch: branch.name, sha: sha, module: test_case.module, test_case: test_case.name)
 - cell_label = "#{test_case.module}/#{test_case.name} on #{computer.name} — #{attrs[:label]}"
 

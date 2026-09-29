@@ -61,9 +61,22 @@ module CommitsHelper
                                   "height: #{corner_box}px; border-radius: 50%; " \
                                   "background: #{attrs[:corner_bg]}; color: white;")
     end
+    # Repeat submissions: a small count in the bottom-right corner
+    # (the popover lists each run).
+    runs = cell.is_a?(Hash) ? cell[:runs].to_i : 0
+    if runs > 1
+      inner += content_tag(:span, runs.to_s,
+                           class: "absolute flex items-center justify-center font-semibold tabular-nums",
+                           style: "bottom: -3px; right: -3px; min-width: 11px; height: 11px; padding: 0 2px; " \
+                                  "border-radius: 6px; font-size: 8px; line-height: 1; " \
+                                  "background: var(--color-fg); color: var(--color-bg-elev);",
+                           title: "#{runs} runs")
+      tooltip = "#{tooltip} · #{runs} runs"
+    end
+    border_style = attrs[:border] ? "border: 1px dashed #{attrs[:border]};" : ""
     content_tag(:span, inner,
                 class: "relative inline-block rounded-sm align-middle",
-                style: "#{bg_style} width: #{size_val}px; height: #{size_val}px;",
+                style: "#{bg_style} #{border_style} width: #{size_val}px; height: #{size_val}px; box-sizing: border-box;",
                 title: tooltip)
   end
 
@@ -363,6 +376,59 @@ module CommitsHelper
     [interesting, clean_count, not_run_count]
   end
 
+  # [label for multi-column groups, short code for a lone column,
+  #  tooltip]. The trailing "+" in the short codes echoes the
+  # full-inlists corner badge on matrix cells.
+  MATRIX_POOL_LABELS = {
+    sdk_default: ["SDK", "SDK", "SDK · default inlists"],
+    sdk_full: ["SDK full", "SDK+", "SDK · full inlists"],
+    other_default: ["Non-SDK", "Oth", "Non-SDK toolchain · default inlists"],
+    other_full: ["Non-SDK full", "Oth+", "Non-SDK toolchain · full inlists"],
+    fpe: ["FPE", "FPE", "FPE checks on (not compared for checksums)"],
+    no_results: ["No results", "—", "No test results on this commit yet"]
+  }.freeze
+
+  # Drawn matrix columns (CommitState#matrix_columns) bunched by
+  # checksum-comparison pool, preserving the worst-first computer
+  # order within each pool. Returns
+  #
+  #   [{ pool:, label:, title:, columns: [col + computer:], computers: }, ...]
+  #
+  # `label` is the short code when the pool is a single 22px column.
+  #
+  # in CommitState::COMPUTER_POOL_ORDER, skipping empty pools.
+  def matrix_column_groups(per_computer, columns)
+    by_computer = columns.group_by { |col| col[:computer_id] }
+    ordered = per_computer.map { |r| r[:computer] }.compact.flat_map do |c|
+      (by_computer[c.id] || []).map { |col| col.merge(computer: c) }
+    end
+    by_pool = ordered.group_by { |col| col[:pool] }
+    CommitState::COMPUTER_POOL_ORDER.filter_map do |pool|
+      next unless by_pool[pool]
+      label, short, title = MATRIX_POOL_LABELS.fetch(pool)
+      cols = by_pool[pool]
+      { pool: pool, label: cols.size > 1 ? label : short, title: title,
+        columns: cols, computers: cols.map { |col| col[:computer] } }
+    end
+  end
+
+  # Grid template + per-slot list for the pooled matrix: one 22px
+  # track per drawn column (CommitState#matrix_columns — a computer
+  # with runs in several pools appears once per pool), with an 8px
+  # spacer track between pools.
+  # `slots` is the column order the header and every body row walk,
+  # each entry either a Computer or :gap.
+  def matrix_column_layout(groups)
+    slots = []
+    groups.each_with_index do |g, i|
+      slots << :gap if i.positive?
+      slots.concat(g[:columns])
+    end
+    tracks = slots.map { |s| s == :gap ? "8px" : "22px" }
+    { slots: slots, template: (["240px"] + tracks).join(" "),
+      width: 240 + slots.sum { |s| s == :gap ? 12 : 26 } }
+  end
+
   # Visual attributes for a Test × Computer matrix cell. Returns a
   # hash the `_matrix_cell` partial uses to render the cell without
   # bringing the dispatching logic into HAML. Encoding follows the
@@ -384,6 +450,9 @@ module CommitsHelper
 
     flags = cell[:flags] || {}
     case cell[:status]
+    when :not_in_pool
+      { kind: :solid, bg: "transparent", border: "var(--color-border-subtle)",
+        label: "not run this way on this computer" }
     when :no_build
       { kind: :striped,
         bg: "var(--color-bg-subtle)",

@@ -181,6 +181,30 @@ export default class extends Controller {
     panel.style.visibility = ""
   }
 
+  // One line of the "Runs on this computer" list.
+  _renderRun(run) {
+    const bits = []
+    bits.push(this._esc(run.variant) + (typeof run.inlists === "number" ? ` · ${run.inlists} inlist${run.inlists === 1 ? "" : "s"}` : ""))
+    if (run.fpe_checks) bits.push("FPE checks")
+    let result
+    if (run.passed) {
+      result = `<span class="text-success-soft-text">pass</span>`
+    } else {
+      const why = run.fpe_failure === "likely" ? "likely FPE" : run.fpe_failure === "confirmed" ? "FPE" : (run.failure_type || "fail")
+      const tone = run.fpe_failure ? "text-fpe-soft-text" : "text-danger-soft-text"
+      result = `<span class="${tone}">FAIL · ${this._esc(why)}</span>`
+    }
+    let sum = ""
+    if (run.checksum) {
+      const tone = run.disagrees ? "text-checksum-soft-text font-medium" : "text-fg-muted"
+      const mark = run.disagrees ? " ≠" : ""
+      const match = run.match ? ` <span class="text-fg-subtle">(${this._esc(run.match)} match)</span>` : ""
+      sum = ` · <span class="font-mono ${tone}">${this._esc(run.checksum)}${mark}</span>${match}`
+    }
+    const when = run.created_at ? `<span class="text-fg-subtle tabular-nums">${this._esc(run.created_at.slice(5, 16).replace("T", " "))}</span> ` : ""
+    return `<div class="text-[11px] text-fg-muted leading-snug">${when}${result} · ${bits.join(" · ")}${sum}</div>`
+  }
+
   _renderContent(info, cell) {
     const flags = info.flags || {}
     const latest = info.latest || {}
@@ -265,6 +289,14 @@ export default class extends Controller {
       sectionRows.push(`<div class="text-[11px] text-fg-subtle">${meta.join(" · ")}</div>`)
     }
 
+    // Every run behind the cell (repeat submissions, or the runs a
+    // checksum flag came from), oldest first — so a ≠ set by one run
+    // isn't hidden behind another run's checksum above.
+    if (Array.isArray(info.runs) && info.runs.length) {
+      const lines = info.runs.map((run) => this._renderRun(run)).join("")
+      sectionRows.push(`<div class="border-t border-border-subtle pt-2"><div class="text-[10px] uppercase tracking-wide text-fg-subtle mb-1">Runs on this computer</div>${lines}</div>`)
+    }
+
     // Optional scalar-metrics block. Surfaces things like steps,
     // retries, runtime, log_rel_run_E_err — the values a user
     // chasing degradation in a passing test wants to compare across
@@ -330,7 +362,7 @@ export default class extends Controller {
         <div class="font-mono text-[12px] text-fg truncate" title="${this._esc(info.module)}/${this._esc(info.test_name)}">
           <span class="text-fg-subtle">${this._esc(info.module)}/</span>${this._esc(info.test_name)}
         </div>
-        <div class="text-[11px] text-fg-muted truncate">on <span class="font-mono text-fg">${this._esc(info.computer_name || "—")}</span></div>
+        <div class="text-[11px] text-fg-muted truncate">on <span class="font-mono text-fg">${this._esc(info.computer_name || "—")}</span>${info.column_label ? ` <span class="text-fg-subtle">· ${this._esc(info.column_label)} runs</span>` : ""}</div>
       </div>`
   }
 
