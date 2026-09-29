@@ -157,19 +157,20 @@ helper or partial exists.
   sibling tags trips an "illegal nesting" error.
 - **Cursor pagination on the commits index, two URL params.**
   `commits#index` accepts two mutually-exclusive cursors:
-  `?before=X` (default mental model — show commits with
-  `commit_time < X`, newest first, subway map initializes at
-  its newest end) and `?after=Y` (show commits with
-  `commit_time > Y`, then reversed, map initializes at its
-  oldest end). The `?after=` param exists so navigating from
-  page N to N-1 (newer) lands the user on the older slice of
-  N-1's commits — the bridge between the two pages — instead
-  of skipping forward by `page_size - 12` commits. Calendar
-  date picks always emit `?before=`. Parsing helpers:
-  `parse_before_param` (end-of-day default) and
-  `parse_after_param` (beginning-of-day) in
+  `?before=X` (show commits with `commit_time < X`, newest first —
+  the "Older" link and every calendar pick) and `?after=Y` (show the
+  oldest page of commits with `commit_time > Y`, then reversed —
+  the "Newer" link, so paging back lands on exactly the adjacent
+  page). Parsing helpers: `parse_before_param` (end-of-day default)
+  and `parse_after_param` (beginning-of-day) in
   [`commits_controller.rb`](app/controllers/commits_controller.rb).
-  No Kaminari for this index; no `?page=` param.
+  No Kaminari for this index; no `?page=` param. The index no
+  longer has a subway map: each row's
+  [`commit_status_ring`](app/helpers/commits_helper.rb) carries
+  build status (core) and one equal arc per kind of test result
+  present (worst-first from 12 o'clock), with a dashed open gap
+  (min 50°) while any test is unreported — a closed ring means every
+  test has a result.
 - **Commit detail tabs are server-pre-rendered, EXCEPT Diff.**
   `commits#show` renders the Summary / Computers / Logs panels on
   each request; the `tabs_controller.js` Stimulus controller toggles

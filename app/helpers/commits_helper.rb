@@ -67,6 +67,15 @@ module CommitsHelper
                 title: tooltip)
   end
 
+  # SVG arc from `from_deg` to `to_deg`, clockwise from 12 o'clock.
+  def _ring_arc_path(c, r, from_deg, to_deg)
+    point = ->(deg) { rad = deg * Math::PI / 180; [c + r * Math.sin(rad), c - r * Math.cos(rad)].map { |v| v.round(2) } }
+    x0, y0 = point.(from_deg)
+    x1, y1 = point.(to_deg)
+    large = (to_deg - from_deg) > 180 ? 1 : 0
+    "M#{x0} #{y0}A#{r} #{r} 0 #{large} 1 #{x1} #{y1}"
+  end
+
   def mesa_icon(name, size: 16, css: nil)
     paths = ICON_PATHS[name] or return ""
     content_tag(:svg,
@@ -83,23 +92,99 @@ module CommitsHelper
                 class: css)
   end
 
-  # Worst-first dot color for a commit state. The design's "blue =
-  # running" was repurposed in review: we don't model a "promised but
-  # not yet submitted" state, so blue now means *incomplete* (some
-  # tests passed, others have no submission), and "everything
-  # untested" collapses into the gray (`:skipped`) bucket alongside
-  # commits whose builds wiped out tests entirely.
-  def status_dot_class(state)
-    tests = state[:tests][:status]
-    return "bg-buildfail" if state[:build][:status] == :all_fail
-    return "bg-danger"    if state[:tests][:has_uniform_fail]
-    return "bg-warning"   if state[:tests][:has_mixed] || state[:build][:status] == :some_fail
-    return "bg-fpe"       if tests == :fpe
-    return "bg-checksum"  if tests == :checksum
-    return "bg-info"      if tests == :pending_partial
-    return "bg-skipped"   if tests == :pending || tests == :not_run
-    "bg-success"
+  # Fixed clockwise order for the status ring, worst first from 12
+  # o'clock, so "red at the top" means the same thing on every row.
+  STATUS_RING_ORDER = %i[fail fpe mixed checksum pass].freeze
+  STATUS_RING_COLORS = {
+    fail: "var(--color-danger)", fpe: "var(--color-fpe)", mixed: "var(--color-warning)",
+    checksum: "var(--color-checksum)", pass: "var(--color-success)"
+  }.freeze
+  STATUS_RING_BUILD_COLORS = {
+    all_ok: "var(--color-success)", some_fail: "var(--color-warning)",
+    all_fail: "var(--color-buildfail)", unknown: "var(--color-skipped)"
+  }.freeze
+  # Smallest unreported gap, in degrees, whenever anything is still
+  # unreported — so "closed ring" always means every test has a result.
+  STATUS_RING_MIN_GAP_DEG = 50
+  STATUS_RING_SEGMENT_GAP_DEG = 16
+
+  # What the status ring should show for a commit state:
+  #
+  #   segments: statuses present among its tests, in STATUS_RING_ORDER.
+  #             Categorical — each gets an equal arc regardless of how
+  #             many tests are in it (a lone failure must stay visible).
+  #   coverage: fraction of tests with any pass/fail result (0..1).
+  #             The unreported remainder is drawn as an open, dashed
+  #             gap — a progress ring on top of the category ring.
+  def status_ring_data(state)
+    tests = state[:tests]
+    present = {
+      fail: tests[:uniform_failing_tests], fpe: tests[:fpe_tests], mixed: tests[:mixed_tests],
+      checksum: tests[:checksum_tests], pass: tests[:clean_passing_tests]
+    }
+    total = tests[:total_tests].to_i
+    {
+      segments: STATUS_RING_ORDER.select { |k| present[k].to_i.positive? },
+      coverage: total.zero? ? 0.0 : (tests[:reported_tests].to_f / total).clamp(0.0, 1.0)
+    }
   end
+
+  # Inline-SVG status ring for a commits-index row: inner dot = build
+  # status, outer ring = which kinds of test results the commit has
+  # (see #status_ring_data). The unreported gap is blue while someone
+  # is working on the commit, gray otherwise.
+  def commit_status_ring(state, size: 22)
+    data = status_ring_data(state)
+    segments = data[:segments]
+    r = size / 2.0 - 2.5
+    c = size / 2.0
+    stroke = size >= 20 ? 3.5 : 3
+    open_deg = 0
+    if data[:coverage] < 1.0
+      open_deg = segments.empty? ? 360 : [(1 - data[:coverage]) * 360, STATUS_RING_MIN_GAP_DEG].max
+    end
+    shapes = []
+    if open_deg.positive?
+      track = state[:tests][:has_pending] ? "var(--color-info)" : "var(--color-skipped)"
+      shapes << tag.circle(cx: c, cy: c, r: r, fill: "none", stroke: track,
+                           "stroke-width": 1.5, "stroke-dasharray": "2 2")
+    end
+    if segments.size == 1 && open_deg.zero?
+      shapes << tag.circle(cx: c, cy: c, r: r, fill: "none",
+                           stroke: STATUS_RING_COLORS[segments.first], "stroke-width": stroke)
+    elsif segments.any?
+      each = (360 - open_deg) / segments.size
+      pad = (segments.size > 1 || open_deg.positive?) ? STATUS_RING_SEGMENT_GAP_DEG / 2.0 : 0
+      segments.each_with_index do |seg, i|
+        from = i * each + pad
+        to = (i + 1) * each - pad
+        next if to <= from
+        shapes << tag.path(d: _ring_arc_path(c, r, from, to), fill: "none",
+                           stroke: STATUS_RING_COLORS[seg], "stroke-width": stroke)
+      end
+    end
+    shapes << tag.circle(cx: c, cy: c, r: size * 0.18,
+                         fill: STATUS_RING_BUILD_COLORS[state[:build][:status]] || "var(--color-skipped)")
+    content_tag(:svg, safe_join(shapes), width: size, height: size, viewBox: "0 0 #{size} #{size}",
+                                          class: "shrink-0", role: "img",
+                                          "aria-label": status_ring_label(state))
+  end
+
+  # Tooltip / screen-reader text for the ring, worst-first.
+  def status_ring_label(state)
+    t = state[:tests]
+    parts = ["build: #{BUILD_RING_WORDS.fetch(state[:build][:status], 'no build data')}"]
+    parts << "#{t[:uniform_failing_tests]} failing" if t[:uniform_failing_tests].positive?
+    parts << "#{t[:fpe_tests]} FPE" if t[:fpe_tests].to_i.positive?
+    parts << "#{t[:mixed_tests]} mixed" if t[:mixed_tests].positive?
+    parts << "#{t[:checksum_tests]} checksum ≠" if t[:checksum_tests].to_i.positive?
+    parts << "#{t[:clean_passing_tests]} passing" if t[:clean_passing_tests].to_i.positive?
+    total = t[:total_tests].to_i
+    parts << "#{t[:reported_tests]}/#{total} tests reported" if total.positive?
+    parts.join(" · ")
+  end
+
+  BUILD_RING_WORDS = { all_ok: "all built", some_fail: "some failed", all_fail: "failed" }.freeze
 
   # Renders the build-status pill: All built / Partial / Build failed.
   def build_status_pill(state, size: :md)

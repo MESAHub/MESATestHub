@@ -102,13 +102,9 @@ class CommitsController < ApplicationController
     # Cursor pagination by commit_time. Two URL params drive it:
     #
     #   ?before=X   page of newest 25 commits with commit_time < X.
-    #               Map initializes at the "newest" view (commits
-    #               0..12 of the 25 visible on the left).
     #   ?after=Y    page of oldest 25 commits with commit_time > Y,
-    #               displayed newest-first. Map initializes at the
-    #               "oldest" view (commits 12..24) — i.e., the
-    #               bridge between this page and the older one the
-    #               user just panned from.
+    #               displayed newest-first — the "Newer" link, so
+    #               paging back lands exactly on the adjacent page.
     #
     # Bare dates parse to end-of-day for `before` (so the picked day
     # is included) and beginning-of-day for `after` (so the picked
@@ -134,7 +130,6 @@ class CommitsController < ApplicationController
       @has_more_newer = rows.size > @page_size
       rows.pop if @has_more_newer
       @commits = rows.reverse
-      @map_initial_view = :oldest
       @at_head_of_history = false
     else
       @before_time_param = parse_before_param(params[:before])
@@ -150,7 +145,6 @@ class CommitsController < ApplicationController
       @has_more_older_via_main_fetch = rows.size > @page_size
       rows.pop if @has_more_older_via_main_fetch
       @commits = rows
-      @map_initial_view = :newest
       @at_head_of_history = !@before_explicit
     end
 
@@ -196,8 +190,8 @@ class CommitsController < ApplicationController
 
     @max_num = @branch.reachable_commit_count
 
-    # Per-commit aggregated state — feeds the status dot, pills, flag
-    # chips, and the subway map. The CommitState concern memoizes its
+    # Per-commit aggregated state — feeds the status ring, pills, and
+    # flag chips. The CommitState concern memoizes its
     # queries on each Commit instance, so calling these helpers across
     # views in the same request stays cheap.
     @commit_states = @commits.each_with_object({}) do |commit, h|

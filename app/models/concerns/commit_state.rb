@@ -117,6 +117,7 @@ module CommitState
     mixed_tests = 0
     fpe_tests = 0
     checksum_tests = 0
+    checksum_passing_tests = 0
     pending_tests = 0
     passing_tests = 0
 
@@ -160,6 +161,7 @@ module CommitState
         # Pass with no failures — the test is passing regardless of
         # pending neighbors.
         passing_tests += 1
+        checksum_passing_tests += 1 if row.any? { |_id, cell| cell[:flags][:checksum] }
       elsif pendings.positive?
         # Cell-level pending: at least one built computer hasn't
         # reported a result yet. Counts as test-level pending
@@ -213,6 +215,12 @@ module CommitState
         checksum_tests: checksum_tests,
         pending_tests: pending_tests,
         passing_tests: passing_tests,
+        # Passing tests with no checksum disagreement, and how many
+        # tests have any pass/fail result at all — for the index's
+        # status ring (segments + coverage).
+        clean_passing_tests: passing_tests - checksum_passing_tests,
+        reported_tests: uniform_failing_tests + mixed_tests + fpe_tests + passing_tests,
+        total_tests: cells_by_test.size,
         failing_cells: failing_cells,
         mixed_cells: mixed_cells,
         has_uniform_fail: has_uniform_fail,
