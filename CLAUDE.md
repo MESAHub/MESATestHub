@@ -335,7 +335,26 @@ helper or partial exists.
   `tests[:checksum_tests]`), not cells. `flags[:fpe]` means only
   "FPE checks were on" — informational like `inlists_full`, never a
   warning. Stored TCC/Commit statuses still say failing/mixed for
-  FPE failures; the split is view-level.
+  FPE failures; the split is view-level. Until MESA reports
+  `failure_type: 'fpe'`, FPE failures are mostly *inferred*:
+  `TestInstance.fpe_failure_kind` returns `:likely` when a run failed
+  with FPE checks on and the same computer passed the same test on the
+  same commit with them off (flag `fpe_likely`; the digest mirrors it
+  in SQL). A lone FPE-on failure with no such rerun stays an ordinary
+  failure.
+- **The commit matrix draws columns, not computers.**
+  `CommitState#matrix_columns` gives a computer one column per
+  comparison pool it has runs in (LLNL_Dane default + full, delorean
+  with/without FPE checks), and `#column_matrix` builds each cell from
+  only that pool's runs (`:not_in_pool` when it didn't run a test that
+  way; `runs` counts repeat submissions for the badge). Popover keys
+  are `"<test_id>-<column key>"` (column key = computer id when
+  unsplit) and list every run behind the cell. `test_computer_matrix`
+  stays per-computer and still feeds summaries, filters, and statuses.
+- **Per-inlist results live in `TestCaseCommit#inlist_breakdown`.**
+  Multi-inlist tests get an inlist switch on the test-on-commit page
+  (`inlist_view_controller.js`) swapping in one table per inlist,
+  including the test-specific `inlist_data` columns.
 - **The submission API is exempt from the per-IP throttles.** The
   test client authenticates with `submitter[:email]` +
   `submitter[:password]` in the JSON body (bcrypt-verified in

@@ -1,0 +1,52 @@
+-# One table per inlist, shown by the `inlist-view` switch in the
+-# instances panel toolbar. Restores the legacy page's per-inlist tabs:
+-# each run's numbers for just that inlist, plus the test-specific
+-# values MESA reports per inlist (extra columns). Runs that skipped an
+-# inlist (default runs skip optional ones) read "not run".
+-#
+-# Locals:
+-#   breakdown: TestCaseCommit#inlist_breakdown.
+- metric_cols = [["Runtime", :runtime_minutes, ->(v) { format("%.2f m", v) }], ["Model #", :model_number, ->(v) { v }], ["Star age", :star_age, ->(v) { format("%.3e", v) }], ["Steps", :steps, ->(v) { v }], ["Retries", :retries, ->(v) { v }], ["Inlist retries", :num_retries, ->(v) { v }], ["Redos", :redos, ->(v) { v }], ["Iterations", :solver_iterations, ->(v) { v }], ["Calls made", :solver_calls_made, ->(v) { v }], ["Calls failed", :solver_calls_failed, ->(v) { v }], ["log rel E err", :log_rel_run_E_err, ->(v) { format("%.2f", v) }]]
+- breakdown[:inlists].each_with_index do |inl, idx|
+  - extra_names = breakdown[:extra][inl[:key]]
+  %div{ hidden: true, data: { inlist_view_target: "panel", inlist: inl[:key] } }
+    .px-4.pt-3.pb-1.text-fg-muted{ class: "text-[12px]" }
+      = "Inlist #{idx + 1} of #{breakdown[:inlists].size}:"
+      %code.font-mono.text-fg= inl[:key]
+    %div{ class: "overflow-x-auto pb-3" }
+      %table.w-full.border-collapse{ class: "text-[12px]" }
+        %thead
+          %tr.border-b.border-border-subtle.text-fg-subtle.uppercase.tracking-wide{ class: "text-[10px]" }
+            %th.px-2.py-2.text-left.font-semibold Status
+            %th.px-2.py-2.text-left.font-semibold Computer
+            - metric_cols.each do |label, _key, _fmt|
+              %th.px-2.py-2.text-right.font-semibold.whitespace-nowrap= label
+            - extra_names.each do |name|
+              %th.px-2.py-2.text-right.font-semibold.font-mono.normal-case.whitespace-nowrap= name
+        %tbody
+          - breakdown[:rows][inl[:key]].each do |row|
+            %tr.border-b.border-border-subtle
+              %td.px-2.py-2.whitespace-nowrap
+                - if row[:missing]
+                  %span.text-fg-subtle not run
+                - else
+                  %span{ class: row[:passed] ? "text-success-soft-text" : "text-danger-soft-text" }= row[:passed] ? "Pass" : "Fail"
+                - if row[:variant] == :full
+                  %span.text-info-soft-text{ title: "Ran full inlist set" }= mesa_icon(:plus, size: 11)
+                - if row[:fpe]
+                  %span.text-fg-subtle{ title: "FPE checks on" }= mesa_icon(:wrench, size: 11)
+              %td.px-2.py-2.font-mono.text-fg.whitespace-nowrap= row[:computer_name]
+              - metric_cols.each do |_label, key, fmt|
+                - v = row[key]
+                %td.px-2.py-2.text-right.tabular-nums.font-mono
+                  - if v.nil?
+                    %span.text-fg-subtle —
+                  - else
+                    = fmt.call(v)
+              - extra_names.each do |name|
+                - v = (row[:extra] || {})[name]
+                %td.px-2.py-2.text-right.tabular-nums.font-mono
+                  - if v.nil?
+                    %span.text-fg-subtle —
+                  - else
+                    = format("%.4g", v)
