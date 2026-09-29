@@ -340,6 +340,70 @@ module CommitState
 
   COMPUTER_POOL_ORDER = %i[sdk_default sdk_full other_default other_full fpe no_results].freeze
 
+  # The matrix's drawn columns. A computer whose runs on this commit
+  # all fall in one comparison pool keeps a single column (key = its
+  # id, so popover keys match the per-computer matrix). A computer
+  # with runs in several pools — e.g. LLNL_Dane running every test
+  # both default and full — gets one column per pool, so each cell
+  # shows only runs that are compared with each other.
+  #
+  #   [{ key:, computer_id:, pool:, split: }, ...]  (unordered)
+  def matrix_columns
+    @_matrix_columns ||= begin
+      pools = computer_pools
+      by_computer = _instances_by_computer
+      submissions.map(&:computer_id).uniq.flat_map do |cid|
+        present = (by_computer[cid] || []).map { |i| _instance_pool(i) }.uniq
+        if present.size > 1
+          present.sort_by { |p| COMPUTER_POOL_ORDER.index(p) }.map do |pool|
+            { key: "#{cid}-#{pool}", computer_id: cid, pool: pool, split: true }
+          end
+        else
+          [{ key: cid.to_s, computer_id: cid, pool: pools.dig(cid, :pool) || :no_results, split: false }]
+        end
+      end
+    end
+  end
+
+  # { test_case_id => { column_key => cell } } for matrix_columns.
+  # Unsplit columns reuse the per-computer cell; split columns build a
+  # cell from just that pool's runs (status :not_in_pool when the
+  # computer didn't run this test that way). Every cell carries
+  # `runs`, the number of instances behind it.
+  def column_matrix
+    @_column_matrix ||= begin
+      matrix = test_computer_matrix
+      subs_by_computer = submissions.group_by(&:computer_id)
+      _tccs_for_matrix.each_with_object({}) do |tcc, out|
+        row = out[tcc.test_case_id] = {}
+        by_computer = tcc.test_instances.group_by(&:computer_id)
+        matrix_columns.each do |col|
+          all_runs = by_computer[col[:computer_id]] || []
+          if col[:split]
+            runs = all_runs.select { |i| _instance_pool(i) == col[:pool] }
+            row[col[:key]] =
+              if runs.empty?
+                { status: :not_in_pool, flags: {}, runs: 0 }
+              else
+                _cell_for(tcc: tcc, computer_id: col[:computer_id], instances: runs,
+                          submissions: subs_by_computer[col[:computer_id]] || [],
+                          fpe_context: all_runs).merge(runs: runs.size)
+              end
+          else
+            row[col[:key]] = (matrix.dig(tcc.test_case_id, col[:computer_id]) || { status: :no_build, flags: {} })
+                               .merge(runs: all_runs.size)
+          end
+        end
+      end
+    end
+  end
+
+  # The instances behind one drawn column's cell for a test.
+  def column_instances(tcc, col)
+    runs = tcc.test_instances.select { |i| i.computer_id == col[:computer_id] }
+    col[:split] ? runs.select { |i| _instance_pool(i) == col[:pool] } : runs
+  end
+
   # Most recent earlier commit on which `computer` successfully
   # compiled. Used by the Computers tab to surface "last green build"
   # for a card whose build failed on this commit. Cross-branch by
@@ -526,31 +590,36 @@ module CommitState
   #                                       how many reported the same
   #                                       checksum (itself included)
   def cell_popover_data
-    matrix = test_computer_matrix
+    columns = matrix_columns
+    col_matrix = column_matrix
     tccs = _tccs_for_matrix.index_by(&:test_case_id)
     computers_by_id = submissions.includes(:computer).map(&:computer).uniq.index_by(&:id)
 
     data = {}
-    matrix.each do |test_id, row|
+    col_matrix.each do |test_id, row|
       tcc = tccs[test_id]
       next unless tcc
       tc = tcc.test_case
       next unless tc
 
       comparison = _checksum_comparison_for(tcc)
+      all_by_computer = tcc.test_instances.group_by(&:computer_id)
 
-      row.each do |computer_id, cell|
-        instances = tcc.test_instances.select { |i| i.computer_id == computer_id }
+      columns.each do |col|
+        cell = row[col[:key]]
+        next unless cell
+        instances = column_instances(tcc, col)
         latest = instances.max_by { |i| [i.created_at || Time.at(0), i.id || 0] }
 
         entry = {
           test_name: tc.name,
           module: tc.module,
-          computer_name: computers_by_id[computer_id]&.name,
+          computer_name: computers_by_id[col[:computer_id]]&.name,
           status: cell[:status],
           flags: cell[:flags],
           submission_count: instances.size
         }
+        entry[:column_label] = COMPUTER_POOL_LABELS[col[:pool]] if col[:split]
         entry[:latest] = _popover_latest(latest) if latest
         unless _cell_clean?(cell)
           entry[:agreement] = _instance_agreement(instances, comparison)
@@ -560,11 +629,25 @@ module CommitState
             entry[:checksum_match_total] = matches[:total]
           end
         end
-        data["#{test_id}-#{computer_id}"] = entry
+        # Every run behind the cell, oldest first, once there's more
+        # than one or a checksum disagreement to explain — so a
+        # flag set by one run isn't hidden behind another's checksum.
+        if instances.size > 1 || cell.dig(:flags, :checksum)
+          context = all_by_computer[col[:computer_id]] || []
+          entry[:runs] = instances.sort_by { |i| [i.created_at || Time.at(0), i.id || 0] }
+                                  .map { |i| _popover_run(i, comparison, context) }
+        end
+        data["#{test_id}-#{col[:key]}"] = entry
       end
     end
     data
   end
+
+  COMPUTER_POOL_LABELS = {
+    sdk_default: "SDK · default inlists", sdk_full: "SDK · full inlists",
+    other_default: "Non-SDK · default inlists", other_full: "Non-SDK · full inlists",
+    fpe: "FPE checks on", no_results: "No results"
+  }.freeze
 
   private
 
@@ -689,6 +772,23 @@ module CommitState
     :unanimous
   end
 
+  # One run's line in a cell popover's run list.
+  def _popover_run(instance, comparison, same_computer_runs)
+    matches = comparison.match_counts(instance)
+    {
+      created_at: instance.created_at&.iso8601,
+      passed: instance.passed,
+      variant: instance.run_optional ? "full" : "default",
+      fpe_checks: !!instance.fpe_checks,
+      inlists: instance.inlist_count,
+      failure_type: instance.failure_type && TestInstance.failure_types[instance.failure_type],
+      fpe_failure: TestInstance.fpe_failure_kind(instance, same_computer_runs),
+      checksum: instance.checksum.presence&.slice(0, 7),
+      match: matches && "#{matches[:count]}/#{matches[:total]}",
+      disagrees: comparison.disagrees?(instance)
+    }.compact
+  end
+
   def _popover_latest(instance)
     summary = instance.summary_text.to_s.strip
     summary = summary[0, 400] + (summary.length > 400 ? "…" : "") if summary.length > 400
@@ -704,7 +804,11 @@ module CommitState
     }.compact
   end
 
-  def _cell_for(tcc:, computer_id:, instances:, submissions:)
+  # `fpe_context` is every run this computer made of the test (defaults
+  # to `instances`); split matrix columns pass it so a failure in the
+  # FPE column can still be judged against the same computer's
+  # FPE-off run in another column.
+  def _cell_for(tcc:, computer_id:, instances:, submissions:, fpe_context: nil)
     base_flags = { fpe: false, checksum: false, inlists_full: false, fpe_failure: false, fpe_likely: false }
 
     if instances.empty?
@@ -737,9 +841,21 @@ module CommitState
     # Every failing run here tripped a floating-point exception —
     # reported by MESA, or inferred from this computer passing the
     # same test with FPE checks off (see TestInstance.fpe_failure_kind).
-    flags.merge!(TestInstance.fpe_failure_summary(instances))
+    flags.merge!(_fpe_flags(instances, fpe_context || instances))
 
     { status: status, flags: flags }
+  end
+
+  def _fpe_flags(instances, context)
+    failures = instances.reject(&:passed)
+    kinds = failures.map { |f| TestInstance.fpe_failure_kind(f, context) }
+    all_fpe = failures.any? && kinds.all?
+    { fpe_failure: all_fpe, fpe_likely: all_fpe && kinds.include?(:likely) }
+  end
+
+  def _instances_by_computer
+    @_instances_by_computer ||= _tccs_for_matrix.flat_map { |tcc| tcc.test_instances.to_a }
+                                                .group_by(&:computer_id)
   end
 
   def _instance_pool(instance)

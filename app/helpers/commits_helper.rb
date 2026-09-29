@@ -61,9 +61,22 @@ module CommitsHelper
                                   "height: #{corner_box}px; border-radius: 50%; " \
                                   "background: #{attrs[:corner_bg]}; color: white;")
     end
+    # Repeat submissions: a small count in the bottom-right corner
+    # (the popover lists each run).
+    runs = cell.is_a?(Hash) ? cell[:runs].to_i : 0
+    if runs > 1
+      inner += content_tag(:span, runs.to_s,
+                           class: "absolute flex items-center justify-center font-semibold tabular-nums",
+                           style: "bottom: -3px; right: -3px; min-width: 11px; height: 11px; padding: 0 2px; " \
+                                  "border-radius: 6px; font-size: 8px; line-height: 1; " \
+                                  "background: var(--color-fg); color: var(--color-bg-elev);",
+                           title: "#{runs} runs")
+      tooltip = "#{tooltip} · #{runs} runs"
+    end
+    border_style = attrs[:border] ? "border: 1px dashed #{attrs[:border]};" : ""
     content_tag(:span, inner,
                 class: "relative inline-block rounded-sm align-middle",
-                style: "#{bg_style} width: #{size_val}px; height: #{size_val}px;",
+                style: "#{bg_style} #{border_style} width: #{size_val}px; height: #{size_val}px; box-sizing: border-box;",
                 title: tooltip)
   end
 
@@ -375,35 +388,41 @@ module CommitsHelper
     no_results: ["No results", "—", "No test results on this commit yet"]
   }.freeze
 
-  # Matrix columns bunched by checksum-comparison pool (see
-  # CommitState#computer_pools), preserving the worst-first computer
+  # Drawn matrix columns (CommitState#matrix_columns) bunched by
+  # checksum-comparison pool, preserving the worst-first computer
   # order within each pool. Returns
   #
-  #   [{ pool:, label:, title:, computers: [Computer, ...] }, ...]
+  #   [{ pool:, label:, title:, columns: [col + computer:], computers: }, ...]
   #
   # `label` is the short code when the pool is a single 22px column.
   #
   # in CommitState::COMPUTER_POOL_ORDER, skipping empty pools.
-  def matrix_column_groups(per_computer, pools)
-    by_pool = per_computer.map { |r| r[:computer] }.compact
-                          .group_by { |c| pools.dig(c.id, :pool) || :no_results }
+  def matrix_column_groups(per_computer, columns)
+    by_computer = columns.group_by { |col| col[:computer_id] }
+    ordered = per_computer.map { |r| r[:computer] }.compact.flat_map do |c|
+      (by_computer[c.id] || []).map { |col| col.merge(computer: c) }
+    end
+    by_pool = ordered.group_by { |col| col[:pool] }
     CommitState::COMPUTER_POOL_ORDER.filter_map do |pool|
       next unless by_pool[pool]
       label, short, title = MATRIX_POOL_LABELS.fetch(pool)
-      computers = by_pool[pool]
-      { pool: pool, label: computers.size > 1 ? label : short, title: title, computers: computers }
+      cols = by_pool[pool]
+      { pool: pool, label: cols.size > 1 ? label : short, title: title,
+        columns: cols, computers: cols.map { |col| col[:computer] } }
     end
   end
 
   # Grid template + per-slot list for the pooled matrix: one 22px
-  # track per computer, with an 8px spacer track between pools.
+  # track per drawn column (CommitState#matrix_columns — a computer
+  # with runs in several pools appears once per pool), with an 8px
+  # spacer track between pools.
   # `slots` is the column order the header and every body row walk,
   # each entry either a Computer or :gap.
   def matrix_column_layout(groups)
     slots = []
     groups.each_with_index do |g, i|
       slots << :gap if i.positive?
-      slots.concat(g[:computers])
+      slots.concat(g[:columns])
     end
     tracks = slots.map { |s| s == :gap ? "8px" : "22px" }
     { slots: slots, template: (["240px"] + tracks).join(" "),
@@ -431,6 +450,9 @@ module CommitsHelper
 
     flags = cell[:flags] || {}
     case cell[:status]
+    when :not_in_pool
+      { kind: :solid, bg: "transparent", border: "var(--color-border-subtle)",
+        label: "not run this way on this computer" }
     when :no_build
       { kind: :striped,
         bg: "var(--color-bg-subtle)",

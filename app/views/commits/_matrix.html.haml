@@ -12,9 +12,12 @@
 -#                  worst-first). Renders all rows; chip filtering
 -#                  applied client-side.
 -#   per_computer:  output of `Commit#per_computer_summary`.
--#   computer_pools: output of `Commit#computer_pools`; columns are
+-#   matrix_columns: output of `Commit#matrix_columns`; columns are
 -#                  bunched by checksum-comparison pool with a gap
--#                  between pools.
+-#                  between pools, and a computer with runs in several
+-#                  pools gets one column per pool.
+-#   column_matrix: output of `Commit#column_matrix` — the cell for
+-#                  each (test, drawn column).
 -#   popover_data:  output of `Commit#cell_popover_data` — sparse
 -#                  hash keyed by "#{test_id}-#{computer_id}" with
 -#                  failure/checksum detail for non-clean cells.
@@ -29,7 +32,7 @@
 - module_counts = per_test.each_with_object(Hash.new(0)) { |row, h| h[row[:test_case]&.module] += 1 if row[:test_case]&.module }
 - visible_modules = ::TestCase.modules.select { |m| module_counts[m].positive? }
 - computers = per_computer.map { |r| r[:computer] }.compact
-- column_groups = matrix_column_groups(per_computer, computer_pools)
+- column_groups = matrix_column_groups(per_computer, matrix_columns)
 - layout = matrix_column_layout(column_groups)
 
 -# `popover` controller lives on the parent wrapper in
@@ -166,15 +169,16 @@
                 - if i.positive?
                   %span &nbsp;
                 %span.font-medium.uppercase.tracking-wide.text-fg-subtle.whitespace-nowrap.border-b.border-border.pb-1.text-center{ class: "text-[10px]",
-                  style: "grid-column: span #{group[:computers].size};",
-                  title: "#{group[:title]} — #{pluralize(group[:computers].size, 'computer')}" }
+                  style: "grid-column: span #{group[:columns].size};",
+                  title: "#{group[:title]} — #{pluralize(group[:columns].size, 'computer')}" }
                   = group[:label]
           .grid.gap-1{ style: "grid-template-columns: #{col_template}; align-items: end;" }
             %span{ style: "height: 90px;" } &nbsp;
-            - layout[:slots].each do |c|
-              - if c == :gap
+            - layout[:slots].each do |col|
+              - if col == :gap
                 %span &nbsp;
                 - next
+              - c = col[:computer]
               -# Long computer names (e.g. cannon_conroy_intel) would
               -# otherwise overflow the 90px header band. Truncate to a
               -# max display length with an ellipsis; the full name
@@ -183,7 +187,7 @@
               %span.font-mono.text-fg-subtle.justify-self-center.overflow-hidden{
                 class: "text-[10px]",
                 style: "writing-mode: vertical-rl; transform: rotate(180deg); height: 90px; line-height: 22px;",
-                title: computer_pools.dig(c.id, :mixed) ? "#{c.name} (mixed run types; grouped by majority)" : c.name }
+                title: col[:split] ? "#{c.name} — its #{CommitState::COMPUTER_POOL_LABELS[col[:pool]]} runs (it also has a column in another group)" : c.name }
                 = display_name
     -# Matrix body — overflow-x: auto so the body scrolls
     -# horizontally within the panel on narrow viewports instead
@@ -213,14 +217,15 @@
                          class: "truncate inline-block text-fg hover:text-brand no-underline",
                          style: "max-width: 220px;",
                          title: "View #{test_case.module}/#{test_case.name} on this commit"
-              - layout[:slots].each do |c|
-                - if c == :gap
+              - layout[:slots].each do |col|
+                - if col == :gap
                   %span &nbsp;
                   - next
                 = render "commits/matrix_cell_trigger",
-                         cell: row[:cells_by_computer][c.id],
+                         cell: column_matrix.dig(test_case.id, col[:key]),
+                         column_key: col[:key],
                          test_case: test_case,
-                         computer: c,
+                         computer: col[:computer],
                          branch: branch,
                          sha: sha,
                          popover_data: popover_data

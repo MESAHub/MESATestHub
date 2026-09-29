@@ -341,6 +341,43 @@ RSpec.describe 'commit state aggregation' do
     end
   end
 
+  describe '#matrix_columns / #column_matrix' do
+    it 'splits a computer that ran a test both default and full into one column per pool' do
+      instance(test_case: test_case_a, computer: rusty, run_optional: false, checksum: 'dflt', inlist_count: 1)
+      instance(test_case: test_case_a, computer: rusty, run_optional: true,  checksum: 'full', inlist_count: 2)
+      instance(test_case: test_case_b, computer: rusty, run_optional: true,  checksum: 'full', inlist_count: 2)
+      instance(test_case: test_case_a, computer: popeye, run_optional: true, checksum: 'full', inlist_count: 2)
+
+      cols = commit.reload.matrix_columns
+      rusty_cols = cols.select { |c| c[:computer_id] == rusty.id }
+      expect(rusty_cols.map { |c| c[:pool] }).to eq(%i[sdk_default sdk_full])
+      expect(cols.find { |c| c[:computer_id] == popeye.id }).to include(split: false, key: popeye.id.to_s)
+
+      cm = commit.column_matrix
+      default_key = rusty_cols.first[:key]
+      full_key = rusty_cols.last[:key]
+      expect(cm[test_case_a.id][default_key]).to include(status: :pass, runs: 1)
+      expect(cm[test_case_a.id][full_key]).to include(status: :pass, runs: 1)
+      expect(cm[test_case_b.id][default_key]).to include(status: :not_in_pool)
+    end
+
+    it 'keeps likely-FPE judgments across the FPE and non-FPE columns' do
+      instance(test_case: test_case_a, computer: rusty, passed: false, failure_type: 'exit_code', fpe_checks: true)
+      instance(test_case: test_case_a, computer: rusty, passed: true, fpe_checks: false)
+
+      fpe_col = commit.reload.matrix_columns.find { |c| c[:pool] == :fpe }
+      expect(commit.column_matrix[test_case_a.id][fpe_col[:key]][:flags]).to include(fpe_failure: true, fpe_likely: true)
+    end
+
+    it 'lists every run behind a repeat-submission cell in its popover' do
+      instance(test_case: test_case_a, computer: rusty, checksum: 'aaa1111')
+      instance(test_case: test_case_a, computer: rusty, checksum: 'aaa1111')
+      entry = commit.reload.cell_popover_data["#{test_case_a.id}-#{rusty.id}"]
+      expect(entry[:runs].size).to eq(2)
+      expect(entry[:runs].first).to include(variant: 'default', passed: true, checksum: 'aaa1111')
+    end
+  end
+
   describe '#computer_pools' do
     it 'places each computer in its majority checksum-comparison pool' do
       instance(test_case: test_case_a, computer: rusty)
