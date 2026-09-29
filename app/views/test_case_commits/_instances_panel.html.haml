@@ -87,11 +87,15 @@
   .px-4.py-2.border-b.border-border-subtle.flex.flex-wrap.items-center.gap-x-4.gap-y-1.text-fg-muted{ class: "text-[11px]" }
     %span.text-fg-subtle.uppercase.tracking-wide Icons
     .flex.items-center.gap-1
-      %span.text-warning-soft-text
+      %span.text-fg-subtle
         = mesa_icon(:wrench, size: 11)
-      %span FPE checks
+      %span FPE checks on
     .flex.items-center.gap-1
-      %span.text-warning-soft-text
+      %span.text-fpe-soft-text
+        = mesa_icon(:wrench, size: 11)
+      %span FPE failure
+    .flex.items-center.gap-1
+      %span.text-checksum-soft-text
         = mesa_icon(:neq, size: 11)
       %span checksum mismatch
     .flex.items-center.gap-1
