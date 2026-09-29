@@ -1,9 +1,13 @@
 # Dispatcher & claims
 
-**Status:** planning. Not yet implemented.
-**Branch when implementation starts:** `feature-dispatcher-and-claims`
-(this doc) → per-phase branches (`feature-claims-schema`,
-`feature-dispatcher-endpoint`, etc.) as work proceeds.
+**Status:** Phases A and B merged (PRs #97, #99, May 2026). Phase C
+(dispatcher endpoint) is next; D (`mesa_test` client) follows.
+Claim sweeping runs as the `claim_sweep` Solid Queue recurring task
+(`ClaimSweeperJob`, every 5 min — see `config/recurring.yml`), not
+Railway cron as originally sketched below.
+**Branches:** `feature-dispatcher-and-claims` (plan + Phase A),
+`feature-claims-schema` (Phase B); Phase C goes on
+`feature-dispatcher-endpoint` off `master`.
 
 This document is the design and implementation plan for two
 intertwined features:

@@ -221,7 +221,9 @@ don't get lost.
   `[ci fpe]`, and `[ci converge]` flags. Unblocks a future GitHub
   CI status integration. Full design and phased plan in
   [`docs/dispatcher-and-claims.md`](dispatcher-and-claims.md).
-  **Status:** planning complete, implementation not started.
+  **Status:** Phases A (schema + CI flag parsing) and B (claims
+  endpoint, sweeper, claims as the "pending" signal) merged in
+  May 2026. Phase C (dispatcher endpoint) is next.
 
 - **Adopt Solid Cache for `Rails.cache`.** Replace the
   `:memory_store` (`config/application.rb`) with Rails 8's
@@ -249,12 +251,11 @@ don't get lost.
 
 ## External dependencies (no code action required)
 
-- **CORS for build-log / test-log HEAD probes from Railway.**
-  Resolves the moment `testhub.mesastar.org` is repointed at
-  Railway — the hostname is already on the Flatiron CORS
-  allowlist. Until the DNS cutover, log proxies work but the
-  client-side existence probes 404 in the console on the Railway
-  hostname. No code change owed from this end.
+- ~~**CORS for build-log / test-log HEAD probes from Railway.**~~
+  Resolved by the DNS cutover: `testhub.mesastar.org` now points at
+  Railway (through Cloudflare), and that hostname is already on the
+  Flatiron CORS allowlist. The probes still 404 on the raw
+  `*.up.railway.app` hostname, which is expected.
 
 ## Bugs surfaced by Phase 1 specs (fixed in Phase 3)
 

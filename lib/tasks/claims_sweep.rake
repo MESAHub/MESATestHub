@@ -3,7 +3,9 @@
 # indexed UPDATE backed by `index_claims_on_expires_at_pending`
 # (a partial index on expires_at, scoped to `status = 'pending'`).
 #
-# Run from Railway cron every ~5 minutes:
+# Production runs this via the `claim_sweep` Solid Queue recurring
+# task (ClaimSweeperJob, config/recurring.yml). The rake task stays
+# for manual runs:
 #   bundle exec rake claims:sweep
 #
 # The `expired → fulfilled` reverse transition (legitimate late

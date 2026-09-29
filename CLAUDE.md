@@ -11,8 +11,8 @@ organized by commits, branches, computers, and test cases. GitHub webhooks
 drive commit ingestion from `MESAHub/mesa`.
 
 - **Production**: Railway (`mesatesthub-production.up.railway.app`),
-  Postgres service. Heroku still runs in parallel on `testhub.mesastar.org`
-  during the cutover; that domain is expected to repoint at Railway.
+  Postgres service. `testhub.mesastar.org` now points at Railway
+  through Cloudflare; the Heroku app no longer serves the domain.
 - **Solo maintainer**, low-but-important traffic (the MESA dev community).
   Downtime of a few days is tolerable; data integrity is not negotiable.
 
@@ -46,8 +46,17 @@ Before doing non-trivial work, read the appropriate doc:
   controllers under `app/javascript/controllers/`.
 - **[`docs/morning-mailer.md`](docs/morning-mailer.md)** —
   daily mesa-developers digest: data shape, anomaly-detection
-  thresholds, in-browser preview, and the Railway cron
-  configuration that fires it at 8 AM US Eastern.
+  thresholds, in-browser preview, and the Solid Queue recurring
+  task that fires it at 8 AM US Eastern.
+- **[`docs/solid-queue-migration.md`](docs/solid-queue-migration.md)**
+  — Solid Queue adoption (in-Puma supervisor, single DB). Recurring
+  schedules live in [`config/recurring.yml`](config/recurring.yml)
+  and replaced the old per-task Railway cron services.
+- **[`docs/dispatcher-and-claims.md`](docs/dispatcher-and-claims.md)**
+  — dispatcher API + `claims` model. Phases A (schema + CI flag
+  parsing) and B (claims endpoint, sweeper, claims as the
+  "pending" signal) are merged; **Phase C (dispatcher endpoint) is
+  next**.
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.
 
@@ -104,7 +113,7 @@ helper or partial exists.
   from the original plan — Rack 3's `:unprocessable_entity` →
   `:unprocessable_content` rename, `show_exceptions` becoming an enum,
   and the gems that needed bumps or removal for the resolver to settle.
-- **The test suite is small but real.** 336 specs (request + model +
+- **The test suite is small but real.** 434 specs (request + model +
   helper + job) cover auth, submissions API, GitHub webhook (now
   async via `BranchSyncJob`, payload-driven), branch deletion, the
   Octokit middleware wiring, `TestInstance.query`,
@@ -353,7 +362,10 @@ helper or partial exists.
   `kill -INT $(lsof -i :5432 -t | head -1)`.)
 
 ### Custom Rake tasks (in `lib/tasks/`)
-- `morning_mailer:daily` — daily mesa-developers digest
+- `morning_mailer:daily` — daily mesa-developers digest (production
+  fires it via the `MorningMailerJob` recurring task instead)
+- `claims:sweep` — expire stale pending claims (production runs
+  `ClaimSweeperJob` every 5 min via Solid Queue)
 - `db:pull_prod` — sync local dev DB from Railway production
 - `update_pulls:update` — GitHub PR data
 - `compute_delays`
@@ -410,8 +422,9 @@ Production (Railway service):
 - `SECRET_KEY_BASE` — random, regenerate with `bundle exec rails secret`
 - `DATABASE_URL` — reference to Railway Postgres service
 - `GIT_TOKEN`, `GIT_USERNAME`, `GITHUB_WEBHOOK_SECRET` — GitHub API + webhook
-- `OWNER_EMAIL`, `MAILGUN_SMTP_*` — outbound mail (Mailgun via Heroku
-  add-on, *to be migrated*)
+- `RESEND_API_KEY` — outbound mail via Resend's HTTPS API (Railway
+  blocks outbound SMTP; see
+  [`app/mailers/application_mailer.rb`](app/mailers/application_mailer.rb))
 - `DISABLE_SPRING` = `1` — Spring binstubs are present but must not run in
   production
 - `MISE_RUBY_COMPILE` = `false` (optional) — skip from-source Ruby build
@@ -421,12 +434,12 @@ Production (Railway service):
 
 - Spring is in the dev Gemfile and writes binstubs. Production runs Spring
   by accident if invoked through `bin/rails` without `DISABLE_SPRING`.
-- The mailer config uses Mailgun SMTP env vars but the underlying provider
-  is incidental. Switching email providers is a 4-env-var change, no code.
-- `app/mailers/morning_mailer.rb` has several hardcoded
-  `https://testhub.mesastar.org/...` URLs that build email body links. They
-  need updating before the custom domain shifts or those emails will point
-  at the old Heroku app.
+- Mail goes through the `resend` gem's ActionMailer adapter, not SMTP.
+  `Resend.api_key` is set globally — the gem ignores per-delivery
+  `resend_settings`.
+- `app/mailers/morning_mailer.rb` hardcodes `testhub.mesastar.org` as the
+  production link host on purpose — it's the canonical domain and now
+  resolves to Railway.
 
 ## When in doubt
 
