@@ -279,13 +279,23 @@ class MorningReport
     )
   end
 
-  # Ids of the given TCCs whose failing instances all carry
-  # failure_type 'fpe'. One grouped query per commit.
+  # Ids of the given TCCs whose failing instances are all FPE
+  # failures — reported (failure_type 'fpe') or likely (failed with
+  # FPE checks on while the same computer passed that test with them
+  # off; the SQL twin of TestInstance.fpe_failure_kind). One grouped
+  # query per commit.
   def fpe_only_tcc_ids(tccs)
     return Set.new if tccs.empty?
+    likely = <<~SQL.squish
+      COALESCE(test_instances.fpe_checks, false) AND EXISTS (
+        SELECT 1 FROM test_instances ok
+        WHERE ok.test_case_commit_id = test_instances.test_case_commit_id
+          AND ok.computer_id = test_instances.computer_id
+          AND ok.passed AND NOT COALESCE(ok.fpe_checks, false))
+    SQL
     TestInstance.where(test_case_commit_id: tccs.map(&:id), passed: false)
                 .group(:test_case_commit_id)
-                .having("BOOL_AND(failure_type = 'fpe')")
+                .having(Arel.sql("BOOL_AND(COALESCE(test_instances.failure_type = 'fpe', false) OR (#{likely}))"))
                 .pluck(:test_case_commit_id)
                 .to_set
   end

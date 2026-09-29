@@ -136,6 +136,20 @@ RSpec.describe MorningReport, type: :model do
       expect(summary.label_for(real_tcc)).to eq(:failing)
       expect(summary.problem_tccs).to eq([real_tcc, fpe_tcc])
     end
+
+    it 'counts a likely FPE failure (same computer passed with FPE checks off)' do
+      commit = create(:commit)
+      tc = create(:test_case, name: 'likely_fpe')
+      computer = create(:computer)
+      make_instance(commit: commit, computer: computer, test_case: tc,
+                    passed: false, failure_type: 'exit_code', fpe_checks: true)
+      make_instance(commit: commit, computer: computer, test_case: tc,
+                    passed: true, fpe_checks: false)
+
+      summary = described_class.new.send(:build_summary, commit.reload)
+      expect(summary.fpe_tccs.map(&:test_case)).to eq([tc])
+      expect(summary.mixed_tccs).to be_empty
+    end
   end
 
   describe 'CommitSummary' do
