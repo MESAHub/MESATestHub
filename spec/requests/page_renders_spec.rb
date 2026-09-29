@@ -147,6 +147,16 @@ RSpec.describe 'Page renders', type: :request do
 
       expect(response).to have_http_status(:ok)
     end
+
+    it 'measures the When column from now on the default page' do
+      get '/main/commits'
+      expect(response.body).to include('>When<')
+    end
+
+    it 'measures it from the end of a picked date' do
+      get '/main/commits', params: { before: '2026-09-04' }
+      expect(response.body).to include('Before Sep 4')
+    end
   end
 
   describe 'GET /:branch/test_cases/:module/:test_case' do

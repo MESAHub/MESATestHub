@@ -690,6 +690,7 @@ module CommitsHelper
   # "Day before") so they don't read as today-relative when the user
   # is browsing the distant past — "Last week" would otherwise sound
   # like real-world last week even with the cursor pinned at 2024.
+  # Group labels relative to a picked date...
   AGE_BUCKETS = [
     [:today, "Same day"],
     [:yesterday, "Day before"],
@@ -698,6 +699,12 @@ module CommitsHelper
     [:this_month, "Earlier same month"],
     [:older, "Older"]
   ].freeze
+
+  # ...and relative to now.
+  AGE_BUCKETS_NOW = {
+    today: "Today", yesterday: "Yesterday", this_week: "Earlier this week",
+    last_week: "Last week", this_month: "Earlier this month", older: "Older"
+  }.freeze
 
   def age_bucket(time, now: Time.current)
     t = time.in_time_zone(now.time_zone)
@@ -716,13 +723,31 @@ module CommitsHelper
 
   # Group an enumerable of commits into ordered age buckets. Empty
   # buckets are dropped.
-  def group_commits_by_age(commits, now: Time.current)
+  # `mode` is :now (labels read "Today", "Last week") or :date
+  # (labels read relative to a picked day: "Same day", "Week before").
+  def group_commits_by_age(commits, now: Time.current, mode: :date)
     by_bucket = AGE_BUCKETS.to_h { |id, _| [id, []] }
     commits.each { |c| by_bucket[age_bucket(c.commit_time, now: now)] << c }
     AGE_BUCKETS.filter_map do |id, label|
       next nil if by_bucket[id].empty?
-      [id, label, by_bucket[id]]
+      [id, mode == :now ? AGE_BUCKETS_NOW[id] : label, by_bucket[id]]
     end
+  end
+
+  # The commits index's "When" cell. Measured from now it reads as an
+  # age ("3h ago"); measured from a picked date it reads as an offset
+  # before the end of that day ("−3h"), with "<1m" instead of "now" so
+  # it can't be mistaken for the present.
+  def commit_when_label(time, anchor:, mode:)
+    return time_ago_compact(time) if mode == :now
+    label = short_relative_time(time, now: anchor)
+    label == "now" ? "<1m" : label
+  end
+
+  # Column header for the "When" cell: plain "When" for ages, the
+  # picked day otherwise so the offsets have a visible reference.
+  def commit_when_header(anchor:, mode:)
+    mode == :now ? "When" : "Before #{anchor.strftime('%b %-d')}"
   end
 
   # Past-tense "6d ago" / "2w ago" / "3mo ago" — the conventional shape

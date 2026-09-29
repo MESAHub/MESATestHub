@@ -10,6 +10,11 @@
 - displayed_time   = @before_time.in_time_zone(time_zone)
 
 .space-y-6
+  -# Shortcut cards for recently tested branches lead the page — the
+  -# jumping-off point to wherever development is happening — ahead
+  -# of this branch's own headline and list.
+  = render "recent_branches", entries: @recent_branches_tested
+
   -# Headline: branch chip + date chip + muted time + summary line.
   %header.flex.flex-col.gap-2
     .flex.flex-wrap.items-baseline.gap-x-3.gap-y-2
@@ -27,9 +32,7 @@
       = "#{visible_count} shown"
       - if @last_activity_at
         %span.mx-1 ·
-        = "newest in view #{short_relative_time(@last_activity_at)}"
-
-  = render "recent_branches", entries: @recent_branches_tested
+        = "newest in view #{time_ago_compact(@last_activity_at)}"
 
   -# Top pagination. Each row's status ring (left column) carries
   -# what the old subway map showed — build status in the core, test
@@ -55,14 +58,14 @@
       %span Build
       %span Tests
       %span Flags
-      %span.text-right When
+      %span.text-right.whitespace-nowrap{ title: @when_mode == :now ? "How long ago each commit was made" : "Time before the end of #{@when_anchor.strftime('%b %-d, %Y')}" }= commit_when_header(anchor: @when_anchor, mode: @when_mode)
 
     -# Rows, grouped by age relative to the active cursor.
     - if @commits.empty?
       .px-4.py-10.text-center.text-sm.text-fg-muted
         No commits on this branch on or before the selected date.
     - else
-      - group_commits_by_age(@commits, now: displayed_time).each do |bucket_id, bucket_label, bucket_commits|
+      - group_commits_by_age(@commits, now: @when_anchor.in_time_zone(time_zone), mode: @when_mode).each do |bucket_id, bucket_label, bucket_commits|
         .border-b.border-border-subtle.bg-bg-subtle.px-4.py-1.flex.items-center.justify-between
           %span.font-semibold.uppercase.tracking-wide.text-fg-subtle{ class: "text-[10px]" }= bucket_label
           %span.text-fg-subtle.tabular-nums{ class: "text-[10px]" }= bucket_commits.size
@@ -89,7 +92,7 @@
                   = commit_avatar(commit.author, size: 14)
                   %span.truncate= commit.author
                 %span.text-fg-subtle ·
-                %span.tabular-nums= short_relative_time(commit.commit_time, now: displayed_time)
+                %span.tabular-nums= commit_when_label(commit.commit_time, anchor: @when_anchor, mode: @when_mode)
                 - if commit.respond_to?(:pr_number) && commit.pr_number
                   %span.text-fg-subtle ·
                   %span= "##{commit.pr_number}"
@@ -120,7 +123,7 @@
             .min-w-0= build_status_pill(state, size: :sm)
             .min-w-0= test_status_pill(state, size: :sm)
             .flex.flex-wrap.items-center.gap-1.min-w-0= flag_chips(state)
-            %span.text-right.text-fg-subtle.tabular-nums{ class: "text-[11px]" }= short_relative_time(commit.commit_time, now: displayed_time)
+            %span.text-right.text-fg-subtle.tabular-nums{ class: "text-[11px]" }= commit_when_label(commit.commit_time, anchor: @when_anchor, mode: @when_mode)
 
   -# Bottom pagination mirror for long pages.
   .flex.items-center.justify-end.gap-2.text-xs

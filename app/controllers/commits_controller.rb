@@ -187,6 +187,14 @@ class CommitsController < ApplicationController
     # Effective display cursor — what the headline + date chip read.
     @before_time = @commits.first&.commit_time || @before_time_param || Time.zone.now
 
+    # What the "When" column and the age-group headers measure from.
+    # A date picked in the calendar (bare `?before=YYYY-MM-DD`) anchors
+    # them to the end of that day; everything else — the default page
+    # and Newer/Older paging (full timestamps) — measures from now, so
+    # the newest commit doesn't read as "now" when it's weeks old.
+    @when_mode = params[:after].blank? && params[:before].to_s.match?(/\A\d{4}-\d{2}-\d{2}\z/) ? :date : :now
+    @when_anchor = @when_mode == :date ? @before_time_param : Time.zone.now
+
     @older_href =
       if @has_more_older
         commits_path(branch: @branch.name, before: (@commits.last.commit_time - 1.second).iso8601)
