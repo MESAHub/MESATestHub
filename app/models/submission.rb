@@ -66,7 +66,9 @@ class Submission < ApplicationRecord
     when "empty"
       where(empty: true)
     when "individual"
-      where(empty: false, entire: false)
+      # Singleton submissions from clients that never send `entire`
+      # store it as NULL, which `entire: false` alone would drop.
+      where(empty: [false, nil], entire: [false, nil])
     when "combined"
       where(entire: true)
     else

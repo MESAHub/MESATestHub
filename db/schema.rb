@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_09_28_120000) do
+ActiveRecord::Schema[8.0].define(version: 2026_09_29_180000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -294,6 +294,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_28_120000) do
     t.integer "checksum_count", default: 0
     t.integer "passed_count", default: 0
     t.integer "failed_count", default: 0
+    t.index ["commit_id", "test_case_id"], name: "index_test_case_commits_on_commit_id_and_test_case_id", unique: true
     t.index ["commit_id"], name: "index_test_case_commits_on_commit_id"
     t.index ["test_case_id"], name: "index_test_case_commits_on_test_case_id"
   end

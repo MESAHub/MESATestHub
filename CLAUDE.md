@@ -355,6 +355,13 @@ helper or partial exists.
   Multi-inlist tests get an inlist switch on the test-on-commit page
   (`inlist_view_controller.js`) swapping in one table per inlist,
   including the test-specific `inlist_data` columns.
+- **One TestCaseCommit per (commit, test case), enforced by a unique
+  index.** There wasn't one until Sept 2026: two sync jobs populating
+  the same commit at once each inserted a full set (e87d3be got 214
+  for 107 tests), and the matrix read the empty copy, so results
+  showed under the wrong computers or not at all. Creation paths now
+  skip conflicts (`insert_all … unique_by`, `create_or_find_by!`);
+  don't add a TCC-creating path that checks-then-inserts without one.
 - **The submission API is exempt from the per-IP throttles.** The
   test client authenticates with `submitter[:email]` +
   `submitter[:password]` in the JSON body (bcrypt-verified in

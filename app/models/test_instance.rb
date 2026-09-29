@@ -796,7 +796,9 @@ class TestInstance < ApplicationRecord
       # 
       # frankly, this should never happen, as test case commits should be
       # created after each push event
-      self.test_case_commit = TestCaseCommit.create!(
+      # create_or_find_by! so a concurrent creator (sync job or
+      # another submission) can't leave two TCCs for one test.
+      self.test_case_commit = TestCaseCommit.create_or_find_by!(
         commit_id: commit.id,
         test_case_id: test_case.id
       )
