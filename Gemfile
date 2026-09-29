@@ -21,7 +21,7 @@ gem 'nokogiri', '>= 1.18.9'
 gem 'kaminari'
 gem 'loofah', '~> 2.21'
 gem 'lograge'
-gem 'rails-html-sanitizer', '~> 1.6.2'
+gem 'rails-html-sanitizer', '~> 1.7', '>= 1.7.1'
 
 # Git stuff
 gem 'octokit', '~> 10.0'
