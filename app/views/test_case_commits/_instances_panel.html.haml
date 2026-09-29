@@ -21,7 +21,7 @@
 - preset_map = TestCaseCommitsHelper::INSTANCE_COLUMN_PRESETS.transform_values { |ids| ids.join(" ") }
 
 .rounded-lg.border.border-border.bg-bg-elev.relative{ style: "box-shadow: var(--shadow-card-sm);",
-                                              data: { controller: "instance-filter column-picker",
+                                              data: { controller: "instance-filter column-picker inlist-view",
                                                       instance_filter_status_value: "all",
                                                       instance_filter_query_value: "",
                                                       column_picker_active_value: default_cols_csv,
@@ -65,6 +65,18 @@
           %span.font-mono.tabular-nums.text-fg-subtle{ class: "text-[10px]" }= count
 
     .grow
+
+    -# Inlist switch — only for multi-inlist tests. "All" is the usual
+    -# totals table; each inlist swaps in that inlist's own table.
+    - if @inlist_breakdown
+      .inline-flex.flex-wrap.items-center.rounded-md.border.border-border.bg-bg-elev.p-0.5.gap-0.5{ role: "group", "aria-label": "Show inlist" }
+        - ([{ key: "all", label: "All inlists" }] + @inlist_breakdown[:inlists]).each do |inl|
+          %button{ type: "button",
+                   "aria-pressed": (inl[:key] == "all").to_s,
+                   title: inl[:key] == "all" ? "Totals across every inlist" : inl[:key],
+                   class: "rounded-sm px-2 py-1 text-xs font-medium cursor-pointer transition-colors hover:bg-bg-muted font-mono #{inl[:key] == 'all' ? 'bg-brand-soft text-brand-soft-text' : 'text-fg-muted'}",
+                   data: { inlist_view_target: "button", inlist: inl[:key], action: "click->inlist-view#select" } }
+            = inl[:label]
 
     -# Column picker dropdown.
     .relative{ data: { controller: "dropdown" } }
@@ -110,8 +122,10 @@
     .px-4.py-10.text-center.text-fg-muted.text-sm
       No instances have been submitted for this test case on this commit.
   - else
-    %div{ class: "overflow-x-auto pb-3" }
+    %div{ class: "overflow-x-auto pb-3", data: { inlist_view_target: "panel", inlist: "all" } }
       = render "test_case_commits/instances_table"
+    - if @inlist_breakdown
+      = render "test_case_commits/inlist_tables", breakdown: @inlist_breakdown
 
   -# Empty state when filters knock everything out.
   .px-4.py-8.text-center.text-fg-subtle.text-sm{ hidden: true, data: { instance_filter_target: "empty" } }

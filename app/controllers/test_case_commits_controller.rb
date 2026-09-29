@@ -55,6 +55,8 @@ class TestCaseCommitsController < ApplicationController
     @instance_rows = @test_case_commit.instances_for_display
 
     @unique_checksums = @test_case_commit.unique_checksums
+    # Per-inlist tables (nil for single-inlist tests).
+    @inlist_breakdown = @test_case_commit.inlist_breakdown
 
     # Optional focus highlight when the user came from a specific
     # matrix cell (e.g. via `?computer=rusty`). Renders the matching

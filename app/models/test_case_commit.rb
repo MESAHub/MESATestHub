@@ -231,6 +231,62 @@ class TestCaseCommit < ApplicationRecord
     rows.map { |ti| _instance_row(ti, comparison, by_computer[ti.computer_id]) }
   end
 
+  # Per-inlist view of this test on this commit, for tests whose runs
+  # have more than one inlist. Returns nil otherwise.
+  #
+  #   { inlists: [{ key: raw inlist name, label: short name }, ...],
+  #     rows:    { key => [row, ...] },       # one row per instance
+  #     extra:   { key => [datum name, ...] } }  # test-specific columns
+  #
+  # Inlists are ordered by the run that ran the most of them (legacy
+  # behavior); names from other runs are appended. Each row carries
+  # that instance's numbers for the inlist, or `missing: true` when
+  # the run skipped it (default runs skip optional inlists). An
+  # inlist "passed" if the run went on to the next inlist, or it's
+  # the last one and the test passed.
+  def inlist_breakdown
+    instances = test_instances.includes(:computer, instance_inlists: :inlist_data)
+                              .order(:created_at).to_a
+    ordered = instances.map { |ti| ti.instance_inlists.sort_by(&:order) }
+    longest = ordered.max_by(&:size) || []
+    keys = longest.map(&:inlist)
+    ordered.flatten.map(&:inlist).each { |k| keys << k unless keys.include?(k) }
+    return nil if keys.size < 2
+
+    rows = keys.to_h { |k| [k, []] }
+    extra = keys.to_h { |k| [k, []] }
+    instances.zip(ordered).each do |ti, inlists|
+      by_name = inlists.index_by(&:inlist)
+      keys.each do |key|
+        base = { instance_id: ti.id, computer_name: ti.computer_name || ti.computer&.name,
+                 variant: ti.run_optional ? :full : :default, fpe: !!ti.fpe_checks,
+                 test_passed: ti.passed }
+        ii = by_name[key]
+        unless ii
+          rows[key] << base.merge(missing: true)
+          next
+        end
+        last = inlists.last&.inlist == key
+        data = ii.inlist_data.to_h { |d| [d.name, d.val] }
+        data.each_key { |n| extra[key] << n unless extra[key].include?(n) }
+        rows[key] << base.merge(
+          passed: last ? ti.passed : inlists.any? { |o| o.order == ii.order + 1 },
+          runtime_minutes: ii.runtime_minutes, steps: ii.steps, retries: ii.retries,
+          num_retries: ii.num_retries.to_i.negative? ? nil : ii.num_retries,
+          redos: ii.redos, solver_iterations: ii.solver_iterations,
+          solver_calls_made: ii.solver_calls_made, solver_calls_failed: ii.solver_calls_failed,
+          log_rel_run_E_err: ii.log_rel_run_E_err,
+          model_number: ii.model_number.to_i.negative? ? nil : ii.model_number,
+          star_age: ii.star_age.to_f.negative? ? nil : ii.star_age,
+          extra: data
+        )
+      end
+    end
+
+    { inlists: keys.map { |k| { key: k, label: k.to_s.sub(/\Ainlist_/, '').sub(/_header(\(\))?\z/, '') } },
+      rows: rows, extra: extra }
+  end
+
   private
 
   def _instance_row(ti, comparison, same_computer_runs)
