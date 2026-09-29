@@ -91,7 +91,7 @@ module CommitState
   # — see commit_state's `checksum_tests` / `fpe_tests`.
   def flag_counts
     matrix = test_computer_matrix
-    counts = { fpe: 0, checksum: 0, inlists_full: 0, fpe_failure: 0 }
+    counts = { fpe: 0, checksum: 0, inlists_full: 0, fpe_failure: 0, fpe_likely: 0 }
     matrix.each_value do |row|
       row.each_value do |cell|
         cell[:flags].each { |kind, on| counts[kind] += 1 if on }
@@ -262,7 +262,7 @@ module CommitState
 
     rows = (built_ids + failed_ids).uniq.map do |computer_id|
       counts = { pass: 0, fail: 0, pending: 0, skip: 0,
-                 fpe: 0, checksum: 0, inlists_full: 0, fpe_failure: 0 }
+                 fpe: 0, checksum: 0, inlists_full: 0, fpe_failure: 0, fpe_likely: 0 }
 
       matrix.each_value do |row|
         cell = row[computer_id]
@@ -327,7 +327,7 @@ module CommitState
 
     rows = matrix.map do |test_id, row_cells|
       built_cells = row_cells.select { |cid, _| built_ids.include?(cid) }
-      counts = { pass: 0, fail: 0, pending: 0, fpe: 0, checksum: 0, inlists_full: 0, fpe_failure: 0 }
+      counts = { pass: 0, fail: 0, pending: 0, fpe: 0, checksum: 0, inlists_full: 0, fpe_failure: 0, fpe_likely: 0 }
       built_cells.each_value do |cell|
         counts[cell[:status]] += 1 if counts.key?(cell[:status])
         cell[:flags].each { |kind, on| counts[kind] += 1 if on }
@@ -658,7 +658,7 @@ module CommitState
   end
 
   def _cell_for(tcc:, computer_id:, instances:, submissions:)
-    base_flags = { fpe: false, checksum: false, inlists_full: false, fpe_failure: false }
+    base_flags = { fpe: false, checksum: false, inlists_full: false, fpe_failure: false, fpe_likely: false }
 
     if instances.empty?
       status =
@@ -688,9 +688,9 @@ module CommitState
     flags[:fpe]          = instances.any? { |i| i.fpe_checks }
     flags[:checksum]     = instances.any? { |i| _checksum_comparison_for(tcc).disagrees?(i) }
     # Every failing run here tripped a floating-point exception —
-    # a failure, but one to tell apart from "doesn't pass anywhere".
-    failures = instances.reject(&:passed)
-    flags[:fpe_failure]  = failures.any? && failures.all? { |i| i.failure_type == 'fpe' }
+    # reported by MESA, or inferred from this computer passing the
+    # same test with FPE checks off (see TestInstance.fpe_failure_kind).
+    flags.merge!(TestInstance.fpe_failure_summary(instances))
 
     { status: status, flags: flags }
   end
