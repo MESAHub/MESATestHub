@@ -115,6 +115,43 @@ RSpec.describe MorningReport, type: :model do
     end
   end
 
+  describe 'FPE-only failures' do
+    it 'splits them out of failing/mixed and labels them :fpe' do
+      commit = create(:commit)
+      fpe_case = create(:test_case, name: 'fpe_case')
+      real_case = create(:test_case, name: 'real_case')
+      computer = create(:computer)
+      make_instance(commit: commit, computer: computer, test_case: fpe_case,
+                    passed: false, failure_type: 'fpe', fpe_checks: true)
+      make_instance(commit: commit, computer: computer, test_case: real_case,
+                    passed: false, failure_type: 'exit_code')
+
+      summary = described_class.new.send(:build_summary, commit.reload)
+      fpe_tcc = summary.problem_tccs.find { |t| t.test_case == fpe_case }
+      real_tcc = summary.problem_tccs.find { |t| t.test_case == real_case }
+
+      expect(summary.fpe_tccs).to eq([fpe_tcc])
+      expect(summary.failing_tccs).to eq([real_tcc])
+      expect(summary.label_for(fpe_tcc)).to eq(:fpe)
+      expect(summary.label_for(real_tcc)).to eq(:failing)
+      expect(summary.problem_tccs).to eq([real_tcc, fpe_tcc])
+    end
+
+    it 'counts a likely FPE failure (same computer passed with FPE checks off)' do
+      commit = create(:commit)
+      tc = create(:test_case, name: 'likely_fpe')
+      computer = create(:computer)
+      make_instance(commit: commit, computer: computer, test_case: tc,
+                    passed: false, failure_type: 'exit_code', fpe_checks: true)
+      make_instance(commit: commit, computer: computer, test_case: tc,
+                    passed: true, fpe_checks: false)
+
+      summary = described_class.new.send(:build_summary, commit.reload)
+      expect(summary.fpe_tccs.map(&:test_case)).to eq([tc])
+      expect(summary.mixed_tccs).to be_empty
+    end
+  end
+
   describe 'CommitSummary' do
     let(:commit) { create(:commit) }
 

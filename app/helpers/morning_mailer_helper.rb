@@ -12,8 +12,8 @@ module MorningMailerHelper
                  style: 'background:#d8f5df; color:#0a5825;' },
     failing:   { label: 'Tests: Fail',      klass: 'mesa-badge-danger',
                  style: 'background:#ffe4e6; color:#a40e26;' },
-    checksums: { label: 'Tests: Checksums', klass: 'mesa-badge-warning',
-                 style: 'background:#fef6cf; color:#6b4900;' },
+    checksums: { label: 'Tests: Checksums', klass: 'mesa-badge-checksum',
+                 style: 'background:#ede5ff; color:#5b21b6;' },
     mixed:     { label: 'Tests: Mixed',     klass: 'mesa-badge-mixed',
                  style: 'background:#fef6cf; color:#6b4900;' },
     # `:untested` is `Commit#status = -1` — the rollup hasn't
@@ -60,8 +60,10 @@ module MorningMailerHelper
   TCC_STATUS_STYLES = {
     failing:   { label: 'Fail',      klass: 'mesa-badge-danger',
                  style: 'background:#ffe4e6; color:#a40e26;' },
-    checksums: { label: 'Checksums', klass: 'mesa-badge-warning',
-                 style: 'background:#fef6cf; color:#6b4900;' },
+    checksums: { label: 'Checksums', klass: 'mesa-badge-checksum',
+                 style: 'background:#ede5ff; color:#5b21b6;' },
+    fpe:       { label: 'FPE',       klass: 'mesa-badge-fpe',
+                 style: 'background:#fde4f2; color:#9d1c6c;' },
     mixed:     { label: 'Mixed',     klass: 'mesa-badge-mixed',
                  style: 'background:#fef6cf; color:#6b4900;' }
   }.freeze
