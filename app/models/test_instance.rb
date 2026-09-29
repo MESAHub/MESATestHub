@@ -70,6 +70,36 @@ class TestInstance < ApplicationRecord
     @@compilers
   end
 
+  # Whether a failing instance was a floating-point-exception failure.
+  #
+  #   :confirmed — MESA's test suite reported failure_type 'fpe'.
+  #   :likely    — it failed with FPE checks on, and the same computer
+  #                passed the same test on the same commit with FPE
+  #                checks off. Same machine, code, and test with only
+  #                FPE trapping changed, so the trap is the likely
+  #                cause (a flaky test is the main way to fool this).
+  #   nil        — not an FPE failure, or no way to tell.
+  #
+  # `same_computer_runs` is every instance this computer submitted for
+  # the same test on the same commit (the instance itself included is
+  # fine).
+  def self.fpe_failure_kind(instance, same_computer_runs)
+    return nil if instance.passed
+    return :confirmed if instance.failure_type == 'fpe'
+    return :likely if instance.fpe_checks && same_computer_runs.any? { |o| o.passed && !o.fpe_checks }
+    nil
+  end
+
+  # Cell-level summary over one computer's runs of one test: every
+  # failure is an FPE failure (confirmed or likely), and whether any
+  # of them is only inferred.
+  def self.fpe_failure_summary(same_computer_runs)
+    failures = same_computer_runs.reject(&:passed)
+    kinds = failures.map { |f| fpe_failure_kind(f, same_computer_runs) }
+    all_fpe = failures.any? && kinds.all?
+    { fpe_failure: all_fpe, fpe_likely: all_fpe && kinds.include?(:likely) }
+  end
+
   def self.runtime_query(runtime_type)
     case runtime_type
     when :rn then :runtime_seconds

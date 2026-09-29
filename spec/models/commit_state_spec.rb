@@ -314,6 +314,25 @@ RSpec.describe 'commit state aggregation' do
       expect(commit.reload.commit_state[:tests][:status]).to eq(:checksum)
     end
 
+    it 'infers a likely FPE failure when the same computer passed with FPE checks off' do
+      instance(test_case: test_case_a, computer: rusty, passed: false, failure_type: 'exit_code', fpe_checks: true)
+      instance(test_case: test_case_a, computer: rusty, passed: true, fpe_checks: false)
+      instance(test_case: test_case_a, computer: popeye, passed: true)
+
+      cell = commit.reload.test_computer_matrix[test_case_a.id][rusty.id]
+      expect(cell[:flags]).to include(fpe_failure: true, fpe_likely: true)
+      expect(commit.commit_state[:tests]).to include(fpe_tests: 1, mixed_tests: 0)
+    end
+
+    it 'does not infer FPE without a same-computer pass with FPE checks off' do
+      instance(test_case: test_case_a, computer: rusty, passed: false, failure_type: 'exit_code', fpe_checks: true)
+      instance(test_case: test_case_a, computer: popeye, passed: true)
+
+      cell = commit.reload.test_computer_matrix[test_case_a.id][rusty.id]
+      expect(cell[:flags]).to include(fpe_failure: false)
+      expect(commit.commit_state[:tests][:mixed_tests]).to eq(1)
+    end
+
     it 'marks the FPE failure on the cell' do
       instance(test_case: test_case_a, computer: rusty, passed: false, failure_type: 'fpe', fpe_checks: true)
       cell = commit.reload.test_computer_matrix[test_case_a.id][rusty.id]

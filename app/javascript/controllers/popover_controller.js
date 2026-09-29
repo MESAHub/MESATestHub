@@ -198,6 +198,7 @@ export default class extends Controller {
       flags.checksum ? "text-checksum-soft-text" :
       "text-success-soft-text"
     const headline =
+      info.status === "fail" && flags.fpe_likely ? "FAIL · likely FPE" :
       info.status === "fail" && flags.fpe_failure ? "FAIL · FPE" :
       info.status === "fail" ? "FAIL" :
       info.status === "pending" ? "PENDING" :
@@ -215,6 +216,10 @@ export default class extends Controller {
     if (flags.inlists_full) flagPills.push(`<span class="rounded-full bg-info-soft text-info-soft-text px-1.5 py-0.5 text-[10px] font-medium">all inlists</span>`)
 
     const sectionRows = []
+
+    if (info.status === "fail" && flags.fpe_likely) {
+      sectionRows.push(`<div class="text-[11px] text-fpe-soft-text">Failed with FPE checks on; this computer passed the same test with them off.</div>`)
+    }
 
     // Mode line — colored to match the per-instance result so the
     // distinction between "this computer's run passed" (green) and

@@ -227,12 +227,13 @@ class TestCaseCommit < ApplicationRecord
              .to_a
 
     comparison = ChecksumComparison.new(rows)
-    rows.map { |ti| _instance_row(ti, comparison) }
+    by_computer = rows.group_by(&:computer_id)
+    rows.map { |ti| _instance_row(ti, comparison, by_computer[ti.computer_id]) }
   end
 
   private
 
-  def _instance_row(ti, comparison)
+  def _instance_row(ti, comparison, same_computer_runs)
     inlist_rows = ti.instance_inlists.to_a
     {
       id: ti.id,
@@ -246,7 +247,9 @@ class TestCaseCommit < ApplicationRecord
         # Only the instances whose checksum departs from their
         # comparison group's consensus, not the whole table.
         checksum: comparison.disagrees?(ti),
-        inlists_full: !!ti.run_optional
+        inlists_full: !!ti.run_optional,
+        # :confirmed / :likely / nil — see TestInstance.fpe_failure_kind.
+        fpe_failure: TestInstance.fpe_failure_kind(ti, same_computer_runs)
       },
       checksum: ti.checksum,
       restart_checksum: ti.restart_checksum,
