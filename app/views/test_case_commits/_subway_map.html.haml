@@ -2,25 +2,28 @@
 -# `_hero_subway_map`, but each station shows just ONE color — this
 -# test's status on that commit — rather than the inner-core/outer-
 -# ring split commit-show uses to encode build status separately.
--# Five stations centered on the focused commit, anchor enlarged
+-# Five stations, oldest left and newest right, centered on the
+-# focused commit, anchor enlarged
 -# and brand-ringed; stations link to the matching test-on-commit
 -# page. Hover/focus reveals a popover (SHA · age · message ·
 -# author · this test's status) via the shared `subway-map`
 -# Stimulus controller.
 -#
 -# Locals (defaulted via local_assigns):
--#   window:         Array of Commit, newest-first (focused_commit_window).
+-#   window:         Array of Commit, newest-first (focused_commit_window);
+-#                   drawn reversed so time runs left to right.
 -#   tccs_by_commit: { commit_id => TestCaseCommit } lookup.
 -#   focused_sha:    full SHA of the currently-rendered commit.
 -#   test_case:      the TestCase scoping the map.
 -#   branch:         Branch the user is browsing.
 
-- window         = local_assigns.fetch(:window)
+- window         = local_assigns.fetch(:window).reverse
 - tccs_by_commit = local_assigns.fetch(:tccs_by_commit)
 - focused_sha    = local_assigns.fetch(:focused_sha)
 - test_case      = local_assigns.fetch(:test_case)
 - branch         = local_assigns.fetch(:branch)
 - count = window.size
+- at_head = count.positive? && window.last.id == branch.head_id
 - if count.zero?
   %p.text-fg-subtle{ class: "text-[11px]" } no recent activity
 - else
@@ -52,8 +55,22 @@
                "stroke-width": 2 }
         - (0...count - 1).each do |i|
           - mx = pad_x + station_spacing * (i + 0.5)
-          %polygon{ points: "#{mx + 4},#{center_y - 4} #{mx - 5},#{center_y} #{mx + 4},#{center_y + 4}",
+          %polygon{ points: "#{mx - 4},#{center_y - 4} #{mx + 5},#{center_y} #{mx - 4},#{center_y + 4}",
                     fill: "var(--color-border-strong)" }
+      -# Right end: a terminus bar when the newest station is the
+      -# branch head (the line ends here), otherwise a dashed tail
+      -# running off the edge toward newer commits.
+      - last_x = pad_x + station_spacing * (count - 1)
+      - if at_head
+        %line{ x1: last_x, y1: center_y, x2: last_x + 24, y2: center_y,
+               stroke: "var(--color-border-strong)", "stroke-width": 2 }
+        %line{ x1: last_x + 24, y1: center_y - 9, x2: last_x + 24, y2: center_y + 9,
+               stroke: "var(--color-border-strong)", "stroke-width": 3, "stroke-linecap": "round" }
+          %title Branch head
+      - else
+        %line{ x1: last_x, y1: center_y, x2: width, y2: center_y,
+               stroke: "var(--color-border-strong)", "stroke-width": 2, "stroke-dasharray": "3 4" }
+          %title Newer commits continue
 
       - window.each_with_index do |commit, i|
         - tcc = tccs_by_commit[commit.id]
