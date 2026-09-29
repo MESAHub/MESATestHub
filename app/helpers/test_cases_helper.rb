@@ -224,14 +224,11 @@ module TestCasesHelper
     cells = {}
 
     rows.each do |tcc|
-      tcc.test_instances.each do |ti|
-        name = ti.computer&.name
+      tcc.test_instances.group_by { |ti| ti.computer&.name }.each do |name, instances|
         next unless name
 
         columns << name
-        cells[tcc.id] ||= {}
-        existing = cells[tcc.id][name]
-        cells[tcc.id][name] = merge_cell(existing, ti, tcc)
+        (cells[tcc.id] ||= {})[name] = history_cell(tcc, instances)
       end
     end
 
@@ -255,45 +252,26 @@ module TestCasesHelper
 
   private
 
-  # Combine an existing cell (if any) with another test_instance for
-  # the same (tcc, computer). Worst-result wins for `status` (so a
-  # mix of pass + fail surfaces as :fail); flags OR together so a
-  # checksum mismatch flagged on any one instance carries through.
-  def merge_cell(existing, ti, tcc)
-    new_status = ti.passed ? :pass : :fail
-    status = if existing.nil?
-               new_status
-             elsif existing[:status] == :fail || new_status == :fail
-               :fail
-             else
-               :pass
-             end
-    base_flags = existing&.dig(:flags) || { fpe: false, checksum: false, inlists_full: false, fpe_failure: false }
+  # One (tcc, computer) cell for the History matrix, built from all of
+  # that computer's runs of the test on that commit. Any failing run
+  # makes the cell :fail (the matrix has no per-instance mixed state);
+  # flags OR across runs, and the FPE-failure flags come from the
+  # shared TestInstance.fpe_failure_summary rule.
+  def history_cell(tcc, instances)
+    comparison = _history_checksum_comparison(tcc)
     flags = {
-      fpe:           base_flags[:fpe]           || !!ti.fpe_checks,
-      checksum:      base_flags[:checksum]      || _history_checksum_comparison(tcc).disagrees?(ti),
-      inlists_full:  base_flags[:inlists_full]  || !!ti.run_optional,
-      fpe_failure:   _merged_fpe_failure(existing, ti)
-    }
-    { status: status, flags: flags }
-  end
-
-  # True iff the merged cell has failures and every one of them was
-  # a trapped FPE. A passing instance leaves the running answer alone;
-  # a failing one keeps it only if it's an FPE and nothing earlier
-  # failed some other way.
-  def _merged_fpe_failure(existing, ti)
-    prior = existing&.dig(:flags, :fpe_failure) || false
-    return prior if ti.passed
-    no_prior_failure = existing.nil? || existing[:status] == :pass
-    ti.failure_type == 'fpe' && (no_prior_failure || prior)
+      fpe:          instances.any?(&:fpe_checks),
+      checksum:     instances.any? { |i| comparison.disagrees?(i) },
+      inlists_full: instances.any?(&:run_optional)
+    }.merge(TestInstance.fpe_failure_summary(instances))
+    { status: instances.all?(&:passed) ? :pass : :fail, flags: flags }
   end
 
   # Cell-state computation for the popover specifically — agrees with
   # the visual matrix cell but recomputed here because the visual
   # cell hash isn't kept after rendering.
   def _popover_cell_state(tcc, instances)
-    base_flags = { fpe: false, checksum: false, inlists_full: false, fpe_failure: false }
+    base_flags = { fpe: false, checksum: false, inlists_full: false, fpe_failure: false, fpe_likely: false }
     return { status: :no_build, flags: base_flags } if instances.empty?
 
     passed = instances.count(&:passed)
@@ -306,9 +284,8 @@ module TestCasesHelper
     flags = {
       fpe:          instances.any? { |i| i.fpe_checks },
       checksum:     instances.any? { |i| _history_checksum_comparison(tcc).disagrees?(i) },
-      inlists_full: instances.any? { |i| i.run_optional },
-      fpe_failure:  failed.positive? && instances.reject(&:passed).all? { |i| i.failure_type == 'fpe' }
-    }
+      inlists_full: instances.any? { |i| i.run_optional }
+    }.merge(TestInstance.fpe_failure_summary(instances))
     { status: status, flags: flags }
   end
 

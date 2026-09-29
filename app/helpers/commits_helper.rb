@@ -397,7 +397,10 @@ module CommitsHelper
         glyph_color: "var(--color-info-soft-text)",
         label: "pending" }
     when :fail
-      label_parts = [flags[:fpe_failure] ? "fail: floating-point exception" : "fail"]
+      label_parts = [if flags[:fpe_likely] then "fail: likely floating-point exception (passed here with FPE checks off)"
+                     elsif flags[:fpe_failure] then "fail: floating-point exception"
+                     else "fail"
+                     end]
       label_parts << "FPE checks on" if flags[:fpe] && !flags[:fpe_failure]
       label_parts << "full inlists" if flags[:inlists_full]
       label = label_parts.join(" · ")
