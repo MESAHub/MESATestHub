@@ -21,7 +21,7 @@
   %p.text-fg-subtle{ class: "text-[11px]" } no recent activity
 - else
   - build_colors = { all_ok: "var(--color-success)", some_fail: "var(--color-warning)", all_fail: "var(--color-buildfail)", unknown: "var(--color-skipped)" }
-  - tests_colors = { all_pass: "var(--color-success)", mixed: "var(--color-warning)", fail: "var(--color-danger)", pending_partial: "var(--color-info)", pending: "var(--color-skipped)", not_run: "var(--color-skipped)" }
+  - tests_colors = { all_pass: "var(--color-success)", mixed: "var(--color-warning)", fail: "var(--color-danger)", fpe: "var(--color-fpe)", checksum: "var(--color-checksum)", pending_partial: "var(--color-info)", pending: "var(--color-skipped)", not_run: "var(--color-skipped)" }
   - # Natural viewBox dimensions. The wrapper grows up to this
   - # width and the SVG fills it uniformly; on wider columns the
   - # whole content scales up proportionally rather than getting

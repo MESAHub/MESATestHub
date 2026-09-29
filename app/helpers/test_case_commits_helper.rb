@@ -112,7 +112,7 @@ module TestCaseCommitsHelper
       case n
       when 0 then "text-fg-muted"
       when 1 then "text-success-soft-text"
-      else "text-warning-soft-text"
+      else "text-checksum-soft-text"
       end
     [word, color, n]
   end
@@ -177,12 +177,13 @@ module TestCaseCommitsHelper
   # Tailwind background class for a per-TCC status dot — used by the
   # in-commit test picker and the test-history subway map. Worst-first
   # color vocabulary matches the rest of the modern UI: red = fail,
-  # amber = mixed or checksum-only, green = pass, gray = untested.
+  # amber = mixed, violet = checksum-only, green = pass, gray =
+  # untested.
   def tcc_status_dot_class(status)
     case status
     when 1 then "bg-danger"
     when 3 then "bg-warning"
-    when 2 then "bg-warning"
+    when 2 then "bg-checksum"
     when 0 then "bg-success"
     when -1 then "bg-skipped"
     else "bg-skipped"
@@ -196,7 +197,7 @@ module TestCaseCommitsHelper
     case status
     when 1 then "danger"
     when 3 then "warning"
-    when 2 then "warning"
+    when 2 then "checksum"
     when 0 then "success"
     when -1 then "skipped"
     else "skipped"

@@ -317,6 +317,19 @@ helper or partial exists.
   counts only refresh on submission — after changing the rules, run
   `rake checksums:recompute`. `Commit#status` ranks uniform failures
   (1) above mixed (3), matching `CommitState` and the mailer.
+- **Failure modes have their own colors and buckets (#107).**
+  `CommitState` classifies each test worst-first as `:fail` (fails
+  everywhere it ran) → `:mixed` (pass/fail split) → `:fpe` (every
+  failure was a trapped floating-point exception, `failure_type:
+  'fpe'`, cell flag `fpe_failure`) → `:checksum` (passing, but some
+  cell disagrees with its comparison group) → pending/pass. Colors:
+  danger red, warning amber, `--color-fpe` magenta,
+  `--color-checksum` violet (blue `info` stays "pending"). The hero
+  tiles and index chips count *tests* (`tests[:fpe_tests]`,
+  `tests[:checksum_tests]`), not cells. `flags[:fpe]` means only
+  "FPE checks were on" — informational like `inlists_full`, never a
+  warning. Stored TCC/Commit statuses still say failing/mixed for
+  FPE failures; the split is view-level.
 - **The submission API is exempt from the per-IP throttles.** The
   test client authenticates with `submitter[:email]` +
   `submitter[:password]` in the JSON body (bcrypt-verified in

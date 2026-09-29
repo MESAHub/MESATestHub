@@ -137,7 +137,7 @@
     .flex.items-center.gap-1.5.text-fg-muted{ class: "text-[11px]" }
       - if window[:entries].any?
         %span.tabular-nums= "#{window[:entries].size} commits"
-        - [[0, "bg-success"], [1, "bg-danger"], [3, "bg-warning"], [2, "bg-warning"], [-1, "bg-skipped"]].each do |status, dot|
+        - [[0, "bg-success"], [1, "bg-danger"], [3, "bg-warning"], [2, "bg-checksum"], [-1, "bg-skipped"]].each do |status, dot|
           - n = counts[status].to_i
           - next if n.zero?
           .inline-flex.items-center.gap-1

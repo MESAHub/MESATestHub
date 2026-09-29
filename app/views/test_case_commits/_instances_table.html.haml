@@ -42,11 +42,14 @@
             %span.truncate{ class: (row[:status] == :fail ? "text-danger-soft-text" : (row[:status] == :pending ? "text-info-soft-text" : "text-success-soft-text")),
                             title: instance_status_label(test_instance) }
               = instance_status_label(test_instance)
-            - if row[:flags][:fpe]
-              %span.text-warning-soft-text{ title: "FPE checks" }
+            - if row[:flags][:fpe_failure]
+              %span.text-fpe-soft-text{ title: row[:flags][:fpe_failure] == :likely ? "Likely a floating-point exception: failed with FPE checks on, passed on this computer with them off" : "Failed on a floating-point exception" }
+                = mesa_icon(:wrench, size: 11)
+            - elsif row[:flags][:fpe]
+              %span.text-fg-subtle{ title: "FPE checks on" }
                 = mesa_icon(:wrench, size: 11)
             - if row[:flags][:checksum]
-              %span.text-warning-soft-text{ title: "Checksum mismatch within commit" }
+              %span.text-checksum-soft-text{ title: "Checksum disagrees with comparable runs on this commit" }
                 = mesa_icon(:neq, size: 11)
             - if row[:flags][:inlists_full]
               %span.text-info-soft-text{ title: "Ran full inlist set" }

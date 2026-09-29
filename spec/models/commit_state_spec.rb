@@ -293,6 +293,54 @@ RSpec.describe 'commit state aggregation' do
     end
   end
 
+  describe '#commit_state failure-mode counts' do
+    before { [rusty, popeye].each { |c| submit(computer: c) } }
+
+    it 'counts FPE-only failures and checksum tests separately from failing/mixed' do
+      instance(test_case: test_case_a, computer: rusty,  passed: false, failure_type: 'fpe', fpe_checks: true)
+      instance(test_case: test_case_a, computer: popeye, passed: true)
+      instance(test_case: test_case_b, computer: rusty,  checksum: 'aaa1111')
+      instance(test_case: test_case_b, computer: popeye, checksum: 'bbb2222')
+
+      tests = commit.reload.commit_state[:tests]
+      expect(tests.slice(:uniform_failing_tests, :mixed_tests, :fpe_tests, :checksum_tests))
+        .to eq(uniform_failing_tests: 0, mixed_tests: 0, fpe_tests: 1, checksum_tests: 1)
+      expect(tests[:status]).to eq(:fpe)
+    end
+
+    it 'reports :checksum when a disagreement is the only problem' do
+      instance(test_case: test_case_a, computer: rusty,  checksum: 'aaa1111')
+      instance(test_case: test_case_a, computer: popeye, checksum: 'bbb2222')
+      expect(commit.reload.commit_state[:tests][:status]).to eq(:checksum)
+    end
+
+    it 'infers a likely FPE failure when the same computer passed with FPE checks off' do
+      instance(test_case: test_case_a, computer: rusty, passed: false, failure_type: 'exit_code', fpe_checks: true)
+      instance(test_case: test_case_a, computer: rusty, passed: true, fpe_checks: false)
+      instance(test_case: test_case_a, computer: popeye, passed: true)
+
+      cell = commit.reload.test_computer_matrix[test_case_a.id][rusty.id]
+      expect(cell[:flags]).to include(fpe_failure: true, fpe_likely: true)
+      expect(commit.commit_state[:tests]).to include(fpe_tests: 1, mixed_tests: 0)
+    end
+
+    it 'does not infer FPE without a same-computer pass with FPE checks off' do
+      instance(test_case: test_case_a, computer: rusty, passed: false, failure_type: 'exit_code', fpe_checks: true)
+      instance(test_case: test_case_a, computer: popeye, passed: true)
+
+      cell = commit.reload.test_computer_matrix[test_case_a.id][rusty.id]
+      expect(cell[:flags]).to include(fpe_failure: false)
+      expect(commit.commit_state[:tests][:mixed_tests]).to eq(1)
+    end
+
+    it 'marks the FPE failure on the cell' do
+      instance(test_case: test_case_a, computer: rusty, passed: false, failure_type: 'fpe', fpe_checks: true)
+      cell = commit.reload.test_computer_matrix[test_case_a.id][rusty.id]
+      expect(cell).to include(status: :fail)
+      expect(cell[:flags][:fpe_failure]).to be true
+    end
+  end
+
   describe 'Commit#update_scalars status precedence' do
     it 'ranks uniform failures above mixed pass/fail' do
       instance(test_case: test_case_a, computer: rusty, passed: false, failure_type: 'exit_code')
@@ -512,11 +560,33 @@ RSpec.describe 'commit state aggregation' do
       expect(row[:overall]).to eq(:mixed)
     end
 
-    it 'classifies a passing-but-flagged test as :flagged' do
+    it 'classifies a passing test with a checksum disagreement as :checksum' do
+      instance(test_case: test_case_a, computer: rusty,  passed: true, checksum: 'aaa1111')
+      instance(test_case: test_case_a, computer: popeye, passed: true, checksum: 'bbb2222')
+      row = commit.reload.per_test_summary.find { |r| r[:test_case] == test_case_a }
+      expect(row[:overall]).to eq(:checksum)
+    end
+
+    it 'treats FPE checks being on as informational, not a flag' do
       instance(test_case: test_case_a, computer: rusty, passed: true, fpe_checks: true)
       instance(test_case: test_case_a, computer: popeye, passed: true)
       row = commit.reload.per_test_summary.find { |r| r[:test_case] == test_case_a }
-      expect(row[:overall]).to eq(:flagged)
+      expect(row[:overall]).to eq(:pass)
+    end
+
+    it 'classifies a test failing only on trapped FPEs as :fpe, even when others pass' do
+      instance(test_case: test_case_a, computer: rusty, passed: false, fpe_checks: true, failure_type: 'fpe')
+      instance(test_case: test_case_a, computer: popeye, passed: true)
+      row = commit.reload.per_test_summary.find { |r| r[:test_case] == test_case_a }
+      expect(row[:overall]).to eq(:fpe)
+    end
+
+    it 'still classifies as :mixed when a non-FPE failure is present too' do
+      instance(test_case: test_case_a, computer: rusty,  passed: false, failure_type: 'fpe', fpe_checks: true)
+      instance(test_case: test_case_a, computer: popeye, passed: false, failure_type: 'exit_code')
+      instance(test_case: test_case_a, computer: derecho, passed: true)
+      row = commit.reload.per_test_summary.find { |r| r[:test_case] == test_case_a }
+      expect(row[:overall]).to eq(:mixed)
     end
 
     it 'classifies a test that passed on some computers and has pending neighbors as :pass' do
@@ -615,15 +685,22 @@ RSpec.describe 'commit state aggregation' do
       )
     end
 
-    it 'flags newly-FPE cells as :new_flag' do
+    it 'flags newly-divergent checksums as :new_flag' do
+      setup_clean_other
+      instance(test_case: test_case_a, computer: rusty,  passed: true, checksum: 'aaa1111')
+      instance(test_case: test_case_a, computer: popeye, passed: true, checksum: 'bbb2222')
+      diff = commit.reload.cells_changed_since(other_commit.reload)
+      expect(diff).to include(
+        hash_including(change: :new_flag, flag_kind: :checksum,
+                       test_case_id: test_case_a.id, computer_id: rusty.id)
+      )
+    end
+
+    it 'does not report FPE checks being turned on as a change' do
       setup_clean_other
       instance(test_case: test_case_a, computer: rusty, passed: true, fpe_checks: true)
       instance(test_case: test_case_a, computer: popeye, passed: true)
-      diff = commit.reload.cells_changed_since(other_commit.reload)
-      expect(diff).to include(
-        hash_including(change: :new_flag, flag_kind: :fpe,
-                       test_case_id: test_case_a.id, computer_id: rusty.id)
-      )
+      expect(commit.reload.cells_changed_since(other_commit.reload)).to eq([])
     end
 
     it 'returns [] when the other commit is nil' do

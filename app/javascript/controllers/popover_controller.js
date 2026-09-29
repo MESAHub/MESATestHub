@@ -188,15 +188,18 @@ export default class extends Controller {
 
     // Cross-computer status pill — what the matrix cell shows.
     // Distinct from the per-instance pass/fail of THIS computer's
-    // submission; a passing-but-flagged cell carries amber here
-    // while its mode line below still reads green for the local pass.
+    // submission; a passing cell whose checksum disagrees carries
+    // violet here while its mode line below still reads green.
     const statusTone =
+      info.status === "fail" && flags.fpe_failure ? "text-fpe-soft-text" :
       info.status === "fail" ? "text-danger-soft-text" :
       info.status === "pending" ? "text-info-soft-text" :
       info.status === "no_build" ? "text-buildfail-soft-text" :
-      (flags.fpe || flags.checksum) ? "text-warning-soft-text" :
+      flags.checksum ? "text-checksum-soft-text" :
       "text-success-soft-text"
     const headline =
+      info.status === "fail" && flags.fpe_likely ? "FAIL · likely FPE" :
+      info.status === "fail" && flags.fpe_failure ? "FAIL · FPE" :
       info.status === "fail" ? "FAIL" :
       info.status === "pending" ? "PENDING" :
       info.status === "no_build" ? "BUILD FAILED" :
@@ -206,11 +209,17 @@ export default class extends Controller {
     // "(flagged)" tag — the design wants to communicate *what*
     // is flagged, so each gets its own pill.
     const flagPills = []
-    if (flags.fpe) flagPills.push(`<span class="rounded-full bg-warning-soft text-warning-soft-text px-1.5 py-0.5 text-[10px] font-medium">FPE checks</span>`)
-    if (flags.checksum) flagPills.push(`<span class="rounded-full bg-warning-soft text-warning-soft-text px-1.5 py-0.5 text-[10px] font-medium">checksum ≠</span>`)
+    // "FPE checks" is how the run was configured, so it's neutral;
+    // an actual checksum disagreement is violet.
+    if (flags.fpe && !flags.fpe_failure) flagPills.push(`<span class="rounded-full bg-bg-muted text-fg-muted px-1.5 py-0.5 text-[10px] font-medium">FPE checks</span>`)
+    if (flags.checksum) flagPills.push(`<span class="rounded-full bg-checksum-soft text-checksum-soft-text px-1.5 py-0.5 text-[10px] font-medium">checksum ≠</span>`)
     if (flags.inlists_full) flagPills.push(`<span class="rounded-full bg-info-soft text-info-soft-text px-1.5 py-0.5 text-[10px] font-medium">all inlists</span>`)
 
     const sectionRows = []
+
+    if (info.status === "fail" && flags.fpe_likely) {
+      sectionRows.push(`<div class="text-[11px] text-fpe-soft-text">Failed with FPE checks on; this computer passed the same test with them off.</div>`)
+    }
 
     // Mode line — colored to match the per-instance result so the
     // distinction between "this computer's run passed" (green) and
@@ -236,7 +245,7 @@ export default class extends Controller {
 
     if (latest.checksum) {
       const grouping = (info.checksum_match_count && info.checksum_match_total)
-        ? ` <span class="${flags.checksum ? "text-warning-soft-text" : "text-fg-subtle"}">(${info.checksum_match_count}/${info.checksum_match_total} match)</span>`
+        ? ` <span class="${flags.checksum ? "text-checksum-soft-text" : "text-fg-subtle"}">(${info.checksum_match_count}/${info.checksum_match_total} match)</span>`
         : ""
       sectionRows.push(
         `<div class="text-[11px] text-fg-muted"><span class="text-fg-subtle">checksum</span> <span class="font-mono text-fg">${this._esc(latest.checksum)}</span>${grouping}</div>`
@@ -249,7 +258,8 @@ export default class extends Controller {
     if (info.submission_count > 1) meta.push(`${info.submission_count} submissions`)
     if (info.agreement && info.agreement !== "single" && info.agreement !== "unanimous") {
       const word = info.agreement === "pass_fail_mixed" ? "instances disagreed (pass/fail)" : "instances disagreed (checksums)"
-      meta.push(`<span class="text-warning-soft-text">${word}</span>`)
+      const tone = info.agreement === "pass_fail_mixed" ? "text-warning-soft-text" : "text-checksum-soft-text"
+      meta.push(`<span class="${tone}">${word}</span>`)
     }
     if (meta.length) {
       sectionRows.push(`<div class="text-[11px] text-fg-subtle">${meta.join(" · ")}</div>`)

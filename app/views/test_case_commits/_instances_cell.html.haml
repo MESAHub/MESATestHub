@@ -46,12 +46,12 @@
   - if cs.empty?
     %span.text-fg-subtle —
   - else
-    -# Color the checksum cell warning-tinted when this row's
+    -# Color the checksum cell violet when this row's
     -# checksum departs from its comparison group's consensus —
     -# the visual nudge tells the user where reproducibility
     -# broke down.
     - mixed = row[:flags][:checksum]
-    %span{ class: (mixed ? "text-warning-soft-text font-semibold" : "text-fg"),
+    %span{ class: (mixed ? "text-checksum-soft-text font-semibold" : "text-fg"),
            title: cs }
       = cs.length > 7 ? cs[-7..-1] : cs
 - when "model_number"

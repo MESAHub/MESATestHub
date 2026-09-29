@@ -7,12 +7,8 @@
   .flex.items-center.gap-1
     .rounded-sm{ style: "width: 14px; height: 14px; background: var(--color-success);" }
     %span pass
-  .flex.items-center.gap-1
-    .relative.rounded-sm.flex.items-center.justify-center{ style: "width: 14px; height: 14px; background: var(--color-warning); color: white;" }
-      = mesa_icon(:wrench, size: 8)
-    %span FPE
-  .flex.items-center.gap-1
-    .relative.rounded-sm.flex.items-center.justify-center{ style: "width: 14px; height: 14px; background: var(--color-warning); color: white;" }
+  .flex.items-center.gap-1{ title: "Passed, but its checksum disagrees with runs it's compared against" }
+    .relative.rounded-sm.flex.items-center.justify-center{ style: "width: 14px; height: 14px; background: var(--color-checksum); color: white;" }
       = mesa_icon(:neq, size: 8)
     %span checksum ≠
   .flex.items-center.gap-1
@@ -24,6 +20,10 @@
     .rounded-sm.flex.items-center.justify-center{ style: "width: 14px; height: 14px; background: var(--color-danger); color: white;" }
       = mesa_icon(:x, size: 8)
     %span fail
+  .flex.items-center.gap-1{ title: "Failed on a trapped floating-point exception" }
+    .rounded-sm.flex.items-center.justify-center{ style: "width: 14px; height: 14px; background: var(--color-fpe); color: white;" }
+      = mesa_icon(:wrench, size: 8)
+    %span FPE fail
   .flex.items-center.gap-1
     .rounded-sm{ style: "width: 14px; height: 14px; background: repeating-linear-gradient(45deg, var(--color-info-soft) 0 3px, var(--color-info) 3px 6px);" }
     %span pending
