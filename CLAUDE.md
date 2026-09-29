@@ -302,6 +302,21 @@ helper or partial exists.
   `:memory_store`, so throttle state is per-process and resets on
   deploy; and `Commit#show` is excluded from lograge, so the heaviest
   page is invisible in production request logs.)
+- **Checksum mismatches are judged within comparison groups, not
+  per TCC.** [`ChecksumComparison`](app/services/checksum_comparison.rb)
+  only compares passing instances with a real checksum that ran the
+  same number of inlists (`test_instances.inlist_count`, set at
+  ingest — never trust `run_optional` for this) on the same toolchain
+  class (MESA SDK vs. not; SDK *versions* pool together). FPE-checking
+  runs, non-1.0 `resolution_factor`, and the all-zeros
+  `.ignore_checksum` placeholder are excluded. The plurality checksum
+  by distinct computer is the consensus; only instances off it get
+  the cell-level `checksum` flag (a tie flags everyone).
+  `test_case_commits.checksum_count` stores the largest distinct
+  count within any group, so `> 1` still means "mismatch". Stored
+  counts only refresh on submission — after changing the rules, run
+  `rake checksums:recompute`. `Commit#status` ranks uniform failures
+  (1) above mixed (3), matching `CommitState` and the mailer.
 - **The submission API is exempt from the per-IP throttles.** The
   test client authenticates with `submitter[:email]` +
   `submitter[:password]` in the JSON body (bcrypt-verified in

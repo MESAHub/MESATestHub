@@ -53,6 +53,36 @@ RSpec.describe 'Submissions API', type: :request do
       expect(body['commit']).not_to have_key('url')
     end
 
+    describe 'test instance ingest' do
+      let!(:test_case) { create(:test_case, name: 'wd_cool', module: 'star') }
+
+      def post_instance(**instance_attrs)
+        instance = { test_case: 'wd_cool', module: 'star', omp_num_threads: 4,
+                     outcome: 'pass', checksum: 'abc123',
+                     inlists: [{ inlist: 'inlist_a', runtime_minutes: 1.0 },
+                               { inlist: 'inlist_b', runtime_minutes: 2.0 }] }.merge(instance_attrs)
+        post '/submissions/create.json',
+             params: { submitter: valid_submitter,
+                       commit: valid_commit.merge(empty: false),
+                       instances: [instance] },
+             as: :json
+      end
+
+      it 'records how many inlists ran, ignoring a client-supplied count' do
+        post_instance(inlist_count: 99)
+
+        expect(response).to have_http_status(:created)
+        expect(TestInstance.last.inlist_count).to eq(2)
+      end
+
+      it "accepts the 'fpe' failure type" do
+        post_instance(outcome: 'fail', failure_type: 'fpe', fpe_checks: true)
+
+        expect(response).to have_http_status(:created)
+        expect(TestInstance.last.failure_type).to eq('fpe')
+      end
+    end
+
     it 'rejects submissions with an invalid password' do
       post '/submissions/create.json',
            params: {

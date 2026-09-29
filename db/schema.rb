@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_05_28_195909) do
+ActiveRecord::Schema[8.0].define(version: 2026_09_28_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -349,6 +349,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_28_195909) do
     t.boolean "fpe_checks"
     t.float "cpu_hours", default: 0.0
     t.float "resolution_factor", default: 1.0
+    t.integer "inlist_count"
     t.index ["commit_id"], name: "index_test_instances_on_commit_id"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
     t.index ["submission_id"], name: "index_test_instances_on_submission_id"

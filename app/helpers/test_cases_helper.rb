@@ -194,7 +194,7 @@ module TestCasesHelper
           status: cell[:status],
           flags:  cell[:flags],
           submission_count: instances.size,
-          agreement: _popover_agreement(instances),
+          agreement: _popover_agreement(tcc, instances),
           latest:  _popover_latest_instance(latest),
           metrics: _popover_metrics(latest)
         }.compact
@@ -271,7 +271,7 @@ module TestCasesHelper
     base_flags = existing&.dig(:flags) || { fpe: false, checksum: false, inlists_full: false }
     flags = {
       fpe:           base_flags[:fpe]           || !!ti.fpe_checks,
-      checksum:      base_flags[:checksum]      || tcc.checksum_count.to_i > 1,
+      checksum:      base_flags[:checksum]      || _history_checksum_comparison(tcc).disagrees?(ti),
       inlists_full:  base_flags[:inlists_full]  || !!ti.run_optional
     }
     { status: status, flags: flags }
@@ -293,7 +293,7 @@ module TestCasesHelper
       end
     flags = {
       fpe:          instances.any? { |i| i.fpe_checks },
-      checksum:     passed.positive? && tcc.checksum_count.to_i > 1,
+      checksum:     instances.any? { |i| _history_checksum_comparison(tcc).disagrees?(i) },
       inlists_full: instances.any? { |i| i.run_optional }
     }
     { status: status, flags: flags }
@@ -303,14 +303,21 @@ module TestCasesHelper
     cell[:status] == :pass && (cell[:flags] || {}).values.none? { |v| v }
   end
 
-  def _popover_agreement(instances)
+  def _popover_agreement(tcc, instances)
     return :single if instances.size <= 1
     passes = instances.count(&:passed)
     fails = instances.size - passes
     return :pass_fail_mixed if passes.positive? && fails.positive?
-    checksums = instances.select(&:passed).map(&:checksum).compact.uniq
-    return :checksum_mixed if checksums.size > 1
+    comparison = _history_checksum_comparison(tcc)
+    return :checksum_mixed if instances.any? { |i| comparison.disagrees?(i) }
     :unanimous
+  end
+
+  # Matrix cells and popovers both ask each TCC the same question;
+  # build its ChecksumComparison once per render.
+  def _history_checksum_comparison(tcc)
+    @_history_checksum_comparisons ||= {}
+    @_history_checksum_comparisons[tcc.id] ||= tcc.checksum_comparison
   end
 
   def _popover_latest_instance(instance)
