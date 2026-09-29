@@ -190,12 +190,7 @@
                     %div{ style: "margin-top:8px; background:#fafbfc; border:1px solid #e6e8ec; border-radius:6px; padding:8px 10px;" }
                       - cs.problem_tccs.first(8).each do |tcc|
                         %div{ style: "padding:2px 0; font-size:12px;" }
-                          - tcc_status_key = case tcc.status
-                            - when 1 then :failing
-                            - when 2 then :checksums
-                            - when 3 then :mixed
-                            - else :failing
-                          = mailer_tcc_badge(tcc_status_key)
+                          = mailer_tcc_badge(cs.label_for(tcc))
                           %span{ style: "padding-left:8px;" }
                             = link_to tcc.test_case.name, mailer_test_case_commit_url(section.link_branch_name, tcc, cs.commit), class: "mesa-link mesa-fg", style: "color:#1f2328; text-decoration:none; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;"
                       - if cs.problem_tccs.size > 8

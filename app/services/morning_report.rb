@@ -116,7 +116,7 @@ class MorningReport
   CommitSummary = Struct.new(
     :commit, :status, :build_status, :tested_count,
     :computer_count, :complete_computer_count,
-    :failing_tccs, :checksum_tccs, :mixed_tccs, :passing_count,
+    :failing_tccs, :checksum_tccs, :mixed_tccs, :fpe_tccs, :passing_count,
     keyword_init: true
   ) do
     def status_label
@@ -143,8 +143,16 @@ class MorningReport
         build_label == :build_fail || build_label == :build_mixed
     end
 
+    # Worst-first, matching the commit page: failing, mixed, FPE-only
+    # failures, then checksum mismatches.
     def problem_tccs
-      failing_tccs + checksum_tccs + mixed_tccs
+      failing_tccs + mixed_tccs + (fpe_tccs || []) + checksum_tccs
+    end
+
+    # Badge key for one of `problem_tccs`.
+    def label_for(tcc)
+      return :fpe if (fpe_tccs || []).include?(tcc)
+      { 1 => :failing, 2 => :checksums, 3 => :mixed }.fetch(tcc.status, :failing)
     end
   end
 
@@ -250,6 +258,11 @@ class MorningReport
 
   def build_summary(commit)
     tccs = commit.test_case_commits.to_a
+    # Failing/mixed TCCs whose every failure was a trapped
+    # floating-point exception get their own bucket — still stored as
+    # failing/mixed, but a different kind of problem.
+    fpe_ids = fpe_only_tcc_ids(tccs.select { |t| [1, 3].include?(t.status) })
+    fpe_tccs, other_tccs = tccs.partition { |t| fpe_ids.include?(t.id) }
     CommitSummary.new(
       commit: commit,
       status: commit.status,
@@ -259,10 +272,22 @@ class MorningReport
       computer_count: commit.computer_count.to_i,
       complete_computer_count: commit.complete_computer_count.to_i,
       passing_count: commit.passed_count.to_i,
-      failing_tccs: tccs.select { |t| t.status == 1 },
-      checksum_tccs: tccs.select { |t| t.status == 2 },
-      mixed_tccs: tccs.select { |t| t.status == 3 }
+      failing_tccs: other_tccs.select { |t| t.status == 1 },
+      checksum_tccs: other_tccs.select { |t| t.status == 2 },
+      mixed_tccs: other_tccs.select { |t| t.status == 3 },
+      fpe_tccs: fpe_tccs
     )
+  end
+
+  # Ids of the given TCCs whose failing instances all carry
+  # failure_type 'fpe'. One grouped query per commit.
+  def fpe_only_tcc_ids(tccs)
+    return Set.new if tccs.empty?
+    TestInstance.where(test_case_commit_id: tccs.map(&:id), passed: false)
+                .group(:test_case_commit_id)
+                .having("BOOL_AND(failure_type = 'fpe')")
+                .pluck(:test_case_commit_id)
+                .to_set
   end
 
   def load_anomalies
