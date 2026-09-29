@@ -273,35 +273,44 @@ module CommitsHelper
     end
   end
 
-  # Renders the inline flag chips for a commit: tests that failed only
-  # on a trapped FPE, tests with a checksum disagreement, and tests
-  # any computer ran with the full inlist set. All three count
-  # *tests*; "FPE checks were on"
-  # is how a run was configured, not a problem, so it gets no chip.
-  def flag_chips(state)
-    flags = state[:flags]
-    tests = state[:tests] || {}
-    chips = []
-    if tests[:fpe_tests].to_i > 0
-      chips << content_tag(:span,
-                           safe_join([mesa_icon(:wrench, size: 10), "#{tests[:fpe_tests]} FPE"], " "),
-                           class: "#{pill_classes(:sm)} bg-fpe-soft text-fpe-soft-text",
-                           title: "#{pluralize(tests[:fpe_tests], 'test')} failing only on floating-point exceptions")
+  # The commits index's single Tests cell: one chip per kind of
+  # problem present, worst first (failing, FPE, mixed, checksum ≠),
+  # each counting tests, capped at `max` with a "+N" overflow; a
+  # Pending chip when results are still coming in alongside them.
+  # With no problems it falls back to the one-word status pill (All
+  # passing / Pending / Untested). Full-inlist coverage trails as
+  # muted text — it describes how tests ran, not a problem.
+  def test_result_chips(state, max: 3)
+    t = state[:tests]
+    base = pill_classes(:sm)
+    specs = [
+      [t[:uniform_failing_tests], :x, "failing", "bg-danger-soft text-danger-soft-text", "fail everywhere they ran"],
+      [t[:fpe_tests], :wrench, "FPE", "bg-fpe-soft text-fpe-soft-text", "fail only on floating-point exceptions"],
+      [t[:mixed_tests], :warn, "mixed", "bg-warning-soft text-warning-soft-text", "pass on some computers, fail on others"],
+      [t[:checksum_tests], :neq, "≠", "bg-checksum-soft text-checksum-soft-text", "have disagreeing checksums"]
+    ]
+    chips = specs.filter_map do |count, icon, word, tone, meaning|
+      next unless count.to_i.positive?
+      content_tag(:span, safe_join([mesa_icon(icon, size: 10), "#{count} #{word}"], " "),
+                  class: "#{base} #{tone}", title: "#{pluralize(count, 'test')} #{meaning}")
     end
-    if tests[:checksum_tests].to_i > 0
-      chips << content_tag(:span,
-                           safe_join([mesa_icon(:neq, size: 10), "#{tests[:checksum_tests]} ≠"], " "),
-                           class: "#{pill_classes(:sm)} bg-checksum-soft text-checksum-soft-text",
-                           title: "#{pluralize(tests[:checksum_tests], 'test')} with disagreeing checksums")
+    parts = if chips.empty?
+              [test_status_pill(state, size: :sm)]
+            else
+              shown = chips.first(max)
+              shown << content_tag(:span, "+#{chips.size - max}", class: "text-fg-subtle text-[10px]") if chips.size > max
+              if t[:has_pending]
+                shown << content_tag(:span, safe_join([mesa_icon(:clock, size: 10), "Pending"], " "),
+                                     class: "#{base} bg-info-soft text-info-soft-text")
+              end
+              shown
+            end
+    if t[:full_tests].to_i.positive?
+      parts << content_tag(:span, safe_join([mesa_icon(:plus, size: 9), "#{t[:full_tests]} full"], " "),
+                           class: "inline-flex items-center gap-0.5 text-fg-subtle text-[10px] whitespace-nowrap",
+                           title: "#{pluralize(t[:full_tests], 'test case')} run with the full inlist set on at least one computer")
     end
-    if tests[:full_tests].to_i > 0
-      chips << content_tag(:span,
-                           safe_join([mesa_icon(:plus, size: 10), "#{tests[:full_tests]} full"], " "),
-                           class: "#{pill_classes(:sm)} bg-info-soft text-info-soft-text",
-                           title: "#{pluralize(tests[:full_tests], 'test case')} run with the full inlist set on at least one computer")
-    end
-    return content_tag(:span, "—", class: "text-fg-subtle") if chips.empty?
-    safe_join(chips, content_tag(:span, " ", class: "inline-block w-1"))
+    safe_join(parts, " ")
   end
 
   # Small label-over-value block used in the commit detail hero's

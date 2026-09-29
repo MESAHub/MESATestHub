@@ -50,14 +50,13 @@
   .rounded-lg.border.border-border.bg-bg-elev{ style: "box-shadow: var(--shadow-card-sm);" }
     -# Table header — hidden on narrow viewports where the table layout
     -# breaks down and the mobile card layout below takes over.
-    .hidden.gap-3.border-b.border-border-subtle.bg-bg-subtle.px-4.py-2.font-semibold.uppercase.tracking-wide.text-fg-subtle{ class: "text-[10px] sm:grid grid-cols-[30px_minmax(0,2.4fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]" }
+    .hidden.gap-3.border-b.border-border-subtle.bg-bg-subtle.px-4.py-2.font-semibold.uppercase.tracking-wide.text-fg-subtle{ class: "text-[10px] sm:grid grid-cols-[30px_minmax(0,2.4fr)_minmax(0,1.2fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,2.6fr)_minmax(0,0.8fr)]" }
       %span &nbsp;
       %span Commit
       %span SHA
       %span Author
       %span Build
       %span Tests
-      %span Flags
       %span.text-right.whitespace-nowrap{ title: @when_mode == :now ? "How long ago each commit was made" : "Time before the end of #{@when_anchor.strftime('%b %-d, %Y')}" }= commit_when_header(anchor: @when_anchor, mode: @when_mode)
 
     -# Rows, grouped by age relative to the active cursor.
@@ -71,9 +70,8 @@
           %span.text-fg-subtle.tabular-nums{ class: "text-[10px]" }= bucket_commits.size
         - bucket_commits.each do |commit|
           - state = @commit_states[commit.id]
-          - flag_count = state[:tests][:fpe_tests].to_i + state[:tests][:checksum_tests].to_i + state[:tests][:full_tests].to_i
 
-          -# Mobile row (< sm). The 8-column desktop grid below has no
+          -# Mobile row (< sm). The 7-column desktop grid below has no
           -# chance of fitting status pills + author + flags in a 343px
           -# content area, so on mobile we stack the same information
           -# in three lines: message, identity meta (sha · author · age
@@ -101,13 +99,12 @@
                   %span= "#{commit.test_case_count} tests"
               .flex.flex-wrap.items-center.gap-1.5
                 = build_status_pill(state, size: :sm)
-                = test_status_pill(state, size: :sm)
-                - if flag_count > 0
-                  = flag_chips(state)
+                = test_result_chips(state)
 
-          -# Desktop row (≥ sm). Original 8-column grid layout, unchanged.
+          -# Desktop row (≥ sm). 7-column grid; Tests carries every result kind
+          -# (Flags merged into it — they overlapped once FPE and ≠ became statuses).
           = link_to commit_path(branch: @branch.name, sha: commit.short_sha),
-                   class: "hidden sm:grid gap-3 border-b border-border-subtle px-4 py-3 text-sm text-fg no-underline hover:bg-bg-subtle items-center grid-cols-[30px_minmax(0,2.4fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]" do
+                   class: "hidden sm:grid gap-3 border-b border-border-subtle px-4 py-3 text-sm text-fg no-underline hover:bg-bg-subtle items-center grid-cols-[30px_minmax(0,2.4fr)_minmax(0,1.2fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,2.6fr)_minmax(0,0.8fr)]" do
             %span.flex= render "status_ring", state: state, size: 30
             .min-w-0.flex.flex-col.gap-0.5
               %span.truncate.font-medium.text-fg= commit.message_first_line(80)
@@ -121,8 +118,7 @@
               = commit_avatar(commit.author)
               %span.truncate.text-fg-muted{ class: "text-[12px]" }= commit.author
             .min-w-0= build_status_pill(state, size: :sm)
-            .min-w-0= test_status_pill(state, size: :sm)
-            .flex.flex-wrap.items-center.gap-1.min-w-0= flag_chips(state)
+            .flex.flex-wrap.items-center.gap-1.min-w-0= test_result_chips(state)
             %span.text-right.text-fg-subtle.tabular-nums{ class: "text-[11px]" }= commit_when_label(commit.commit_time, anchor: @when_anchor, mode: @when_mode)
 
   -# Bottom pagination mirror for long pages.
