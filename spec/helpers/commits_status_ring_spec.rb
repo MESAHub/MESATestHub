@@ -2,7 +2,7 @@ require 'rails_helper'
 
 RSpec.describe CommitsHelper, type: :helper do
   def state(build: :all_ok, has_pending: false, **tests)
-    base = { uniform_failing_tests: 0, fpe_tests: 0, mixed_tests: 0, checksum_tests: 0,
+    base = { uniform_failing_tests: 0, fpe_tests: 0, mixed_tests: 0, checksum_tests: 0, checksum_passing_tests: 0,
              clean_passing_tests: 0, reported_tests: 0, total_tests: 0, has_pending: has_pending }
     { build: { status: build }, tests: base.merge(tests) }
   end
@@ -10,7 +10,7 @@ RSpec.describe CommitsHelper, type: :helper do
   describe '#status_ring_data' do
     it 'lists present statuses worst-first, one arc each regardless of count' do
       data = helper.status_ring_data(state(clean_passing_tests: 100, uniform_failing_tests: 2,
-                                           checksum_tests: 1, reported_tests: 103, total_tests: 103))
+                                           checksum_passing_tests: 1, reported_tests: 103, total_tests: 103))
       expect(data[:segments]).to eq(%i[fail checksum pass])
       expect(data[:coverage]).to eq(1.0)
     end
