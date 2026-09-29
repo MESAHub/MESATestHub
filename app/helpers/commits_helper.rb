@@ -237,6 +237,53 @@ module CommitsHelper
     [interesting, clean_count, not_run_count]
   end
 
+  # [label for multi-column groups, short code for a lone column,
+  #  tooltip]. The trailing "+" in the short codes echoes the
+  # full-inlists corner badge on matrix cells.
+  MATRIX_POOL_LABELS = {
+    sdk_default: ["SDK", "SDK", "SDK · default inlists"],
+    sdk_full: ["SDK full", "SDK+", "SDK · full inlists"],
+    other_default: ["Non-SDK", "Oth", "Non-SDK toolchain · default inlists"],
+    other_full: ["Non-SDK full", "Oth+", "Non-SDK toolchain · full inlists"],
+    fpe: ["FPE", "FPE", "FPE checks on (not compared for checksums)"],
+    no_results: ["No results", "—", "No test results on this commit yet"]
+  }.freeze
+
+  # Matrix columns bunched by checksum-comparison pool (see
+  # CommitState#computer_pools), preserving the worst-first computer
+  # order within each pool. Returns
+  #
+  #   [{ pool:, label:, title:, computers: [Computer, ...] }, ...]
+  #
+  # `label` is the short code when the pool is a single 22px column.
+  #
+  # in CommitState::COMPUTER_POOL_ORDER, skipping empty pools.
+  def matrix_column_groups(per_computer, pools)
+    by_pool = per_computer.map { |r| r[:computer] }.compact
+                          .group_by { |c| pools.dig(c.id, :pool) || :no_results }
+    CommitState::COMPUTER_POOL_ORDER.filter_map do |pool|
+      next unless by_pool[pool]
+      label, short, title = MATRIX_POOL_LABELS.fetch(pool)
+      computers = by_pool[pool]
+      { pool: pool, label: computers.size > 1 ? label : short, title: title, computers: computers }
+    end
+  end
+
+  # Grid template + per-slot list for the pooled matrix: one 22px
+  # track per computer, with an 8px spacer track between pools.
+  # `slots` is the column order the header and every body row walk,
+  # each entry either a Computer or :gap.
+  def matrix_column_layout(groups)
+    slots = []
+    groups.each_with_index do |g, i|
+      slots << :gap if i.positive?
+      slots.concat(g[:computers])
+    end
+    tracks = slots.map { |s| s == :gap ? "8px" : "22px" }
+    { slots: slots, template: (["240px"] + tracks).join(" "),
+      width: 240 + slots.sum { |s| s == :gap ? 12 : 26 } }
+  end
+
   # Visual attributes for a Test × Computer matrix cell. Returns a
   # hash the `_matrix_cell` partial uses to render the cell without
   # bringing the dispatching logic into HAML. Encoding follows the

@@ -271,6 +271,37 @@ module CommitState
     rows.sort_by { |r| [_computer_sort_rank(r[:state]), r[:computer]&.name.to_s] }
   end
 
+  # Which checksum-comparison pool each computer's runs on this
+  # commit mostly fall into, for grouping matrix columns. Mirrors the
+  # ChecksumComparison split at the computer level: FPE-checking runs
+  # (never compared) get their own pool; otherwise SDK vs. non-SDK
+  # crossed with full vs. default runs. `run_optional` stands in for
+  # inlist count here — close enough for a column layout, and the
+  # cell flags still come from the exact per-instance comparison.
+  #
+  #   { computer_id => { pool: Symbol, mixed: Bool } }
+  #
+  # pool ∈ :sdk_default, :sdk_full, :other_default, :other_full,
+  #        :fpe, :no_results. `mixed` is true when the computer's
+  # runs straddle pools and it was placed by majority.
+  def computer_pools
+    @_computer_pools ||= begin
+      by_computer = _tccs_for_matrix.flat_map { |tcc| tcc.test_instances.to_a }
+                                    .group_by(&:computer_id)
+      submissions.map(&:computer_id).uniq.each_with_object({}) do |cid, out|
+        pools = (by_computer[cid] || []).map { |i| _instance_pool(i) }.tally
+        if pools.empty?
+          out[cid] = { pool: :no_results, mixed: false }
+        else
+          out[cid] = { pool: pools.max_by { |pool, n| [n, -COMPUTER_POOL_ORDER.index(pool)] }.first,
+                       mixed: pools.size > 1 }
+        end
+      end
+    end
+  end
+
+  COMPUTER_POOL_ORDER = %i[sdk_default sdk_full other_default other_full fpe no_results].freeze
+
   # Most recent earlier commit on which `computer` successfully
   # compiled. Used by the Computers tab to surface "last green build"
   # for a card whose build failed on this commit. Cross-branch by
@@ -661,6 +692,12 @@ module CommitState
     flags[:checksum]     = instances.any? { |i| _checksum_comparison_for(tcc).disagrees?(i) }
 
     { status: status, flags: flags }
+  end
+
+  def _instance_pool(instance)
+    return :fpe if instance.fpe_checks
+    toolchain = instance.sdk_version.present? ? 'sdk' : 'other'
+    :"#{toolchain}_#{instance.run_optional ? 'full' : 'default'}"
   end
 
   def _computer_sort_rank(state)

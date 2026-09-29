@@ -293,6 +293,27 @@ RSpec.describe 'commit state aggregation' do
     end
   end
 
+  describe '#computer_pools' do
+    it 'places each computer in its majority checksum-comparison pool' do
+      instance(test_case: test_case_a, computer: rusty)
+      instance(test_case: test_case_a, computer: popeye, run_optional: true)
+      instance(test_case: test_case_a, computer: derecho, sdk_version: nil, compiler: 'ifort')
+      instance(test_case: test_case_a, computer: frontera, fpe_checks: true)
+      instance(test_case: test_case_a, computer: ranger, run_optional: true)
+      instance(test_case: test_case_b, computer: ranger, run_optional: true)
+      instance(test_case: test_case_c, computer: ranger, run_optional: false)
+      submit(computer: expanse)
+
+      pools = commit.reload.computer_pools
+      expect(pools.transform_values { |v| v[:pool] }).to eq(
+        rusty.id => :sdk_default, popeye.id => :sdk_full, derecho.id => :other_default,
+        frontera.id => :fpe, ranger.id => :sdk_full, expanse.id => :no_results
+      )
+      expect(pools[ranger.id][:mixed]).to be true
+      expect(pools[rusty.id][:mixed]).to be false
+    end
+  end
+
   describe 'Commit#update_scalars status precedence' do
     it 'ranks uniform failures above mixed pass/fail' do
       instance(test_case: test_case_a, computer: rusty, passed: false, failure_type: 'exit_code')
