@@ -3,6 +3,14 @@ class CommitsController < ApplicationController
   include BranchMismatchRedirect
 
   before_action :set_commit, only: [:show, :diff]
+
+  # The landing page. Most development happens on branches now, so the
+  # commits index (with its recently-tested-branch cards) is a better
+  # front door than main's head commit — and main is still the right
+  # default list, since failures there should be rare and loud.
+  def root
+    redirect_to commits_path(branch: 'main')
+  end
   layout "modern", only: [:index, :show]
 
   # Branch lookup for the commit detail page. The :branch URL segment
@@ -199,6 +207,10 @@ class CommitsController < ApplicationController
     end
 
     @last_activity_at = @commits.first&.commit_time
+
+    # Shortcut cards for where testing has happened lately, skipping
+    # the branch already on screen.
+    @recent_branches_tested = Branch.recently_tested(limit: 3, excluding: @branch)
   end
 
   # Proxy build logs hosted at the Flatiron logs server. Two reasons

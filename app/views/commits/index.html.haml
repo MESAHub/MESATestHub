@@ -29,6 +29,8 @@
         %span.mx-1 ·
         = "newest in view #{short_relative_time(@last_activity_at)}"
 
+  = render "recent_branches", entries: @recent_branches_tested
+
   -# Top pagination. Each row's status ring (left column) carries
   -# what the old subway map showed — build status in the core, test
   -# result kinds around it — so the map is gone and paging lives

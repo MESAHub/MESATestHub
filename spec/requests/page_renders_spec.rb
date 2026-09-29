@@ -180,13 +180,35 @@ RSpec.describe 'Page renders', type: :request do
     end
   end
 
-  describe 'GET / (root → commit head)' do
-    it 'renders when there is a main branch with a head commit' do
-      # The root route is commits#show with sha=head, branch=main. set_commit
-      # resolves these via Commit.parse_sha which looks up the head of main.
+  describe 'GET / (root → commits on main)' do
+    it 'redirects to the main commits index' do
       get '/'
 
-      expect(response).to have_http_status(:ok)
+      expect(response).to redirect_to('/main/commits')
+    end
+  end
+
+  describe 'recently tested branch cards' do
+    it 'shows other recently tested branches on the commits index' do
+      feature = create(:branch, name: 'feature/fast')
+      fc = create(:commit, message: 'Speed up the solver')
+      BranchMembership.create!(branch: feature, commit: fc)
+      feature.update!(head: fc)
+      create(:submission, commit: fc, computer: create(:computer, user: user))
+
+      get '/main/commits'
+
+      expect(response.body).to include('Recently tested branches')
+      expect(response.body).to include('feature/fast')
+      expect(response.body).to include(fc.short_sha)
+    end
+
+    it 'leaves the branch on screen out of the cards' do
+      create(:submission, commit: commit, computer: create(:computer, user: user))
+
+      get '/main/commits'
+
+      expect(response.body).not_to include('Recently tested branches')
     end
   end
 
