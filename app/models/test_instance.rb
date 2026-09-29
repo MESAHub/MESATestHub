@@ -18,7 +18,11 @@ class TestInstance < ApplicationRecord
     'photo_diff' => 'Photo Diff',
     'compilation' => 'Compilation',
     'stderr' => 'Stderr (mesa_error?)',
-    'exit_code' => 'Exit Code'
+    'exit_code' => 'Exit Code',
+    # A floating-point exception trapped during an FPE-checking run.
+    # MESA's test suite has to learn to emit this; accepting it here
+    # first means clients that start sending it don't get rejected.
+    'fpe' => 'Floating-Point Exception'
   })
 
   @@compilers = %w[gfortran ifort SDK]
@@ -160,6 +164,10 @@ class TestInstance < ApplicationRecord
         # adding linear quantities; will take log at the end
       end
     end
+
+    # Always derived from the inlists actually submitted, never taken
+    # from the params — checksum comparison groups on it.
+    instance.inlist_count = instance_params[:inlists] ? instance.instance_inlists.size : nil
 
     # with runtime minutes and number of threads, can calculate cpu hours
     instance.cpu_hours = instance.runtime_minutes / 60.0 * instance.omp_num_threads

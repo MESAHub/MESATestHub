@@ -81,10 +81,9 @@ module CommitState
   #                   surface that signal explicitly, so we use
   #                   fpe_checks=true on passing instances as a proxy
   #                   until the model evolves.
-  #   :checksum     — passing instances whose owning test_case_commit
-  #                   has more than one unique checksum across
-  #                   computers (bit-for-bit reproducibility broken,
-  #                   per the design).
+  #   :checksum     — cells whose checksum departs from the consensus
+  #                   of instances that should agree bit-for-bit
+  #                   (see ChecksumComparison).
   #   :inlists_full — passing instances run with run_optional=true
   #                   (exercised the full inlist set).
   def flag_counts
@@ -448,13 +447,13 @@ module CommitState
   #   agreement                         — :single | :unanimous |
   #                                       :pass_fail_mixed | :checksum_mixed
   #   checksum_match_count / _total     — only when this cell carries
-  #                                       a checksum flag; how many
-  #                                       built-computers' latest
-  #                                       checksums match this one
+  #                                       a checksum flag; of the
+  #                                       computers in the latest
+  #                                       instance's comparison group,
+  #                                       how many reported the same
+  #                                       checksum (itself included)
   def cell_popover_data
     matrix = test_computer_matrix
-    built_ids, _ = _build_membership
-    built_set = built_ids.to_set
     tccs = _tccs_for_matrix.index_by(&:test_case_id)
     computers_by_id = submissions.includes(:computer).map(&:computer).uniq.index_by(&:id)
 
@@ -465,8 +464,7 @@ module CommitState
       tc = tcc.test_case
       next unless tc
 
-      sibling_counts = _checksum_sibling_counts(tcc, built_set)
-      built_total = built_set.size
+      comparison = _checksum_comparison_for(tcc)
 
       row.each do |computer_id, cell|
         instances = tcc.test_instances.select { |i| i.computer_id == computer_id }
@@ -482,10 +480,11 @@ module CommitState
         }
         entry[:latest] = _popover_latest(latest) if latest
         unless _cell_clean?(cell)
-          entry[:agreement] = _instance_agreement(instances)
-          if cell[:flags][:checksum] && sibling_counts[computer_id]
-            entry[:checksum_match_count] = sibling_counts[computer_id]
-            entry[:checksum_match_total] = built_total
+          entry[:agreement] = _instance_agreement(instances, comparison)
+          matches = cell[:flags][:checksum] && latest && comparison.match_counts(latest)
+          if matches
+            entry[:checksum_match_count] = matches[:count]
+            entry[:checksum_match_total] = matches[:total]
           end
         end
         data["#{test_id}-#{computer_id}"] = entry
@@ -599,32 +598,19 @@ module CommitState
     cell[:status] == :pass && (cell[:flags] || {}).values.none? { |v| v }
   end
 
-  # For each computer (with a passing instance whose checksum is set),
-  # how many *other* built computers share that checksum. Used by the
-  # popover to surface checksum grouping without rendering the full
-  # table.
-  def _checksum_sibling_counts(tcc, built_set)
-    per_computer = {}
-    tcc.test_instances.each do |i|
-      next unless i.passed
-      next if i.checksum.blank?
-      next unless built_set.include?(i.computer_id)
-      cur = per_computer[i.computer_id]
-      newer = cur.nil? || ((i.created_at || Time.at(0)) >= (cur.created_at || Time.at(0)))
-      per_computer[i.computer_id] = i if newer
-    end
-    return {} if per_computer.empty?
-    counts = per_computer.values.map(&:checksum).tally
-    per_computer.transform_values { |inst| counts[inst.checksum] || 0 }
+  # One ChecksumComparison per TCC, memoized for the request — the
+  # matrix, popover data, and summaries all ask the same question.
+  def _checksum_comparison_for(tcc)
+    @_checksum_comparisons ||= {}
+    @_checksum_comparisons[tcc.id] ||= tcc.checksum_comparison
   end
 
-  def _instance_agreement(instances)
+  def _instance_agreement(instances, comparison)
     return :single if instances.size <= 1
     passes = instances.count(&:passed)
     fails = instances.size - passes
     return :pass_fail_mixed if passes.positive? && fails.positive?
-    checksums = instances.select(&:passed).map(&:checksum).compact.uniq
-    return :checksum_mixed if checksums.size > 1
+    return :checksum_mixed if instances.any? { |i| comparison.disagrees?(i) }
     :unanimous
   end
 
@@ -666,13 +652,13 @@ module CommitState
 
     # `inlists_full` and `fpe` describe how the test was *run*, not
     # whether it ended in a pass — a failing test that ran the full
-    # inlist set still carries that signal. `checksum` only makes
-    # sense when at least one instance produced a checksum (so we
-    # gate it on a passing instance below).
+    # inlist set still carries that signal. `checksum` is set only on
+    # cells holding an instance that disagrees with its comparison
+    # group — not on every passing cell of a row with a mismatch.
     flags = base_flags.dup
     flags[:inlists_full] = instances.any? { |i| i.run_optional }
     flags[:fpe]          = instances.any? { |i| i.fpe_checks }
-    flags[:checksum]     = passed.positive? && tcc.checksum_count.to_i > 1
+    flags[:checksum]     = instances.any? { |i| _checksum_comparison_for(tcc).disagrees?(i) }
 
     { status: status, flags: flags }
   end

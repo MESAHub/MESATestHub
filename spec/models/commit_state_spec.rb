@@ -265,6 +265,44 @@ RSpec.describe 'commit state aggregation' do
       # Both passing cells in that TCC pick up the divergence.
       expect(counts[:checksum]).to eq(2)
     end
+
+    it 'flags only the outlier cell when a majority agrees' do
+      [rusty, popeye, derecho].each { |c| instance(test_case: test_case_a, computer: c, checksum: 'aaa1111') }
+      instance(test_case: test_case_a, computer: frontera, checksum: 'bbb2222')
+
+      matrix = commit.reload.test_computer_matrix
+      flagged = matrix[test_case_a.id].select { |_cid, cell| cell[:flags][:checksum] }.keys
+      expect(flagged).to eq([frontera.id])
+    end
+
+    it 'does not flag a full run against a default run that ran fewer inlists' do
+      instance(test_case: test_case_a, computer: rusty,  checksum: 'aaa1111', inlist_count: 2)
+      instance(test_case: test_case_a, computer: popeye, checksum: 'bbb2222', inlist_count: 4, run_optional: true)
+
+      expect(commit.reload.flag_counts[:checksum]).to eq(0)
+      expect(tcc_for(test_case_a).reload.status).to eq(0)
+    end
+
+    it 'marks the TCC mixed_checksums when comparable runs disagree' do
+      instance(test_case: test_case_a, computer: rusty,  checksum: 'aaa1111')
+      instance(test_case: test_case_a, computer: popeye, checksum: 'bbb2222')
+
+      tcc = tcc_for(test_case_a).reload
+      expect(tcc.checksum_count).to eq(2)
+      expect(tcc.status).to eq(2)
+    end
+  end
+
+  describe 'Commit#update_scalars status precedence' do
+    it 'ranks uniform failures above mixed pass/fail' do
+      instance(test_case: test_case_a, computer: rusty, passed: false, failure_type: 'exit_code')
+      instance(test_case: test_case_b, computer: rusty, passed: true)
+      instance(test_case: test_case_b, computer: popeye, passed: false, failure_type: 'exit_code')
+
+      c = Commit.find(commit.id)
+      c.update_scalars
+      expect([c.failed_count, c.mixed_count, c.status]).to eq([1, 1, 1])
+    end
   end
 
   describe '#test_computer_matrix' do

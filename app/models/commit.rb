@@ -691,10 +691,12 @@ class Commit < ApplicationRecord
     self.complete_computer_count = computer_info.select do |spec|
       spec[:frac] == 1.0
     end.count
-    self.status = if mixed_count > 0
-                    3
-                  elsif failed_count > 0
+    # Uniform failures outrank mixed pass/fail, matching CommitState
+    # and the morning mailer's worst-first ordering.
+    self.status = if failed_count > 0
                     1
+                  elsif mixed_count > 0
+                    3
                   elsif checksum_count > 0
                     2
                   elsif passed_count == test_case_count && test_case_count > 0

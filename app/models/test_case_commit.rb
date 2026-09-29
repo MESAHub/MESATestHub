@@ -97,28 +97,30 @@ class TestCaseCommit < ApplicationRecord
     self.computer_count = submission_count.zero? ? 0 : computers.uniq.count
   end
 
+  # Which instances are expected to agree bit-for-bit, and which
+  # don't. See ChecksumComparison for the grouping rules. Uses the
+  # loaded association when it's there (commits#show eager-loads
+  # test_instances for every TCC), otherwise a narrow SELECT.
+  def checksum_comparison
+    instances = if test_instances.loaded?
+                  test_instances.to_a
+                else
+                  test_instances.select(*ChecksumComparison::COLUMNS).to_a
+                end
+    ChecksumComparison.new(instances)
+  end
+
+  # Checksums that disagree within a comparison group. Empty when
+  # everything comparable agrees.
   def unique_checksums
-    # all non-empty, non-nil checksums from submissions to this test case for
-    # this commit. Also ignore instances that ran optional inlists or had 
-    # finer resolution than the default settings, since
-    # they are not necessarily expected to have identical checksums
-    
-    # check to see if things are loaded. Gross, but this happens on the
-    # most common resource (commit#show), which eager-loads tons of stuff
-    # so this avoids unnecessary hits to the database.
-    if test_instances.loaded?
-      test_instances.reject do |ti|
-        ti.run_optional || ti.resolution_factor < 0.99
-      end.map(&:checksum)
-    else
-      test_instances.where.not(run_optional: true).where.not(resolution_factor: 0...0.99).pluck(:checksum)
-    end.uniq.reject(&:nil?).reject(&:empty?)
+    checksum_comparison.conflicting_checksums
   end
 
   def update_checksum_count
-    # updates, but does not save, the number of unique checksums that computers
-    # have submitted for this test case for this commit
-    self.checksum_count = unique_checksums.count
+    # updates, but does not save, the largest number of distinct
+    # checksums within any group of instances that should agree
+    # (> 1 means bit-for-bit reproducibility broke)
+    self.checksum_count = checksum_comparison.max_distinct
   end
 
   def passing_instances
@@ -224,12 +226,13 @@ class TestCaseCommit < ApplicationRecord
              .references(:computers)
              .to_a
 
-    rows.map { |ti| _instance_row(ti) }
+    comparison = ChecksumComparison.new(rows)
+    rows.map { |ti| _instance_row(ti, comparison) }
   end
 
   private
 
-  def _instance_row(ti)
+  def _instance_row(ti, comparison)
     inlist_rows = ti.instance_inlists.to_a
     {
       id: ti.id,
@@ -240,10 +243,9 @@ class TestCaseCommit < ApplicationRecord
       status: ti.passed ? :pass : :fail,
       flags: {
         fpe: !!ti.fpe_checks,
-        # Checksum divergence is a TCC-level signal in the current
-        # model; surface it on every row so the view can flag the
-        # whole table.
-        checksum: checksum_count.to_i > 1,
+        # Only the instances whose checksum departs from their
+        # comparison group's consensus, not the whole table.
+        checksum: comparison.disagrees?(ti),
         inlists_full: !!ti.run_optional
       },
       checksum: ti.checksum,

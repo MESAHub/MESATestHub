@@ -47,10 +47,10 @@
     %span.text-fg-subtle —
   - else
     -# Color the checksum cell warning-tinted when this row's
-    -# checksum is one of multiple unique checksums for the TCC —
+    -# checksum departs from its comparison group's consensus —
     -# the visual nudge tells the user where reproducibility
     -# broke down.
-    - mixed = (@unique_checksums.size > 1) && @unique_checksums.include?(cs)
+    - mixed = row[:flags][:checksum]
     %span{ class: (mixed ? "text-warning-soft-text font-semibold" : "text-fg"),
            title: cs }
       = cs.length > 7 ? cs[-7..-1] : cs
