@@ -118,6 +118,7 @@ module CommitState
     fpe_tests = 0
     checksum_tests = 0
     checksum_passing_tests = 0
+    full_tests = 0
     pending_tests = 0
     passing_tests = 0
 
@@ -136,6 +137,8 @@ module CommitState
       # Independent of the bucket below: a mixed test's passing
       # cells can still disagree on checksums.
       checksum_tests += 1 if row.any? { |_id, cell| cell[:flags][:checksum] }
+      # Tests that at least one computer ran with the full inlist set.
+      full_tests += 1 if row.any? { |_id, cell| cell[:flags][:inlists_full] }
 
       # Classification rule: "passing" = at least one computer ran and
       # passed AND nothing failed. Pending neighbors don't downgrade
@@ -213,12 +216,17 @@ module CommitState
         mixed_tests: mixed_tests,
         fpe_tests: fpe_tests,
         checksum_tests: checksum_tests,
+        full_tests: full_tests,
         pending_tests: pending_tests,
         passing_tests: passing_tests,
         # Passing tests with no checksum disagreement, and how many
         # tests have any pass/fail result at all — for the index's
         # status ring (segments + coverage).
         clean_passing_tests: passing_tests - checksum_passing_tests,
+        # Otherwise-passing tests with a ≠ — the ring's disjoint
+        # checksum bucket (checksum_tests also counts mixed/failing
+        # tests whose passing runs disagree).
+        checksum_passing_tests: checksum_passing_tests,
         reported_tests: uniform_failing_tests + mixed_tests + fpe_tests + passing_tests,
         total_tests: cells_by_test.size,
         failing_cells: failing_cells,
