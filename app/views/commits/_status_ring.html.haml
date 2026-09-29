@@ -1,0 +1,39 @@
+-# Status ring for a commits-index row plus a hover popover that
+-# explains it: build status (core), each kind of test result with
+-# its color and count (dimmed when absent), and how many tests have
+-# reported (the dashed gap). CSS-only — the popover shows on
+-# hover of the ring itself via a named Tailwind group, so it works
+-# inside the row's link without any JS.
+-#
+-# Locals:
+-#   state: CommitState#commit_state hash.
+-#   size:  ring diameter in px.
+- tests = state[:tests]
+- total = tests[:total_tests].to_i
+- reported = tests[:reported_tests].to_i
+- gap_color = tests[:has_pending] ? "var(--color-info)" : "var(--color-skipped)"
+%span.relative.inline-flex{ class: "group/ring" }
+  = commit_status_ring(state, size: size)
+  %span.absolute.hidden.z-30.rounded-md.border.border-border.bg-bg-elev.p-3.text-fg.font-normal{
+    class: "group-hover/ring:block left-full top-1/2 -translate-y-1/2 ml-2 w-64 text-[11px] leading-snug",
+    style: "box-shadow: var(--shadow-card-md, 0 8px 20px rgba(0,0,0,.14));",
+    role: "tooltip" }
+    %span.flex.items-center.gap-2
+      %span.inline-block.h-2.w-2.rounded-full.shrink-0{ style: "background: #{CommitsHelper::STATUS_RING_BUILD_COLORS[state[:build][:status]] || 'var(--color-skipped)'};" }
+      %span.text-fg-muted Center dot · build
+      %span.ml-auto.font-medium= CommitsHelper::BUILD_RING_WORDS.fetch(state[:build][:status], "no build data")
+    %span.mt-2.block.border-t.border-border-subtle.pt-2.text-fg-subtle Ring · test results
+    - status_ring_legend_rows(tests).each do |label, color, count|
+      %span.mt-1.flex.items-center.gap-2{ class: count.positive? ? "" : "opacity-50" }
+        %span.inline-block.h-2.w-2.rounded-full.shrink-0{ style: "background: #{color};" }
+        %span= label
+        %span.ml-auto.tabular-nums.font-medium= count
+    %span.mt-1.flex.items-center.gap-2{ class: reported < total ? "" : "opacity-50" }
+      %span.inline-block.h-2.w-2.rounded-full.shrink-0.border{ style: "border-color: #{gap_color}; border-style: dashed;" }
+      %span= tests[:has_pending] ? "Not reported (in progress)" : "Not reported"
+      %span.ml-auto.tabular-nums.font-medium= total - reported
+    - extra_neq = tests[:checksum_tests].to_i - tests[:checksum_passing_tests].to_i
+    - if extra_neq.positive?
+      %span.mt-1.block.text-fg-subtle= "+ #{pluralize(extra_neq, 'failing/mixed test')} also #{extra_neq == 1 ? 'has' : 'have'} a checksum ≠"
+    %span.mt-2.block.border-t.border-border-subtle.pt-2.text-fg-subtle
+      Each test counts once, under its worst result. One arc per kind of result present, worst first from the top. A gap means some tests haven't reported yet.

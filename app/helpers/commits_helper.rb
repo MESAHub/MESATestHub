@@ -111,6 +111,8 @@ module CommitsHelper
   # What the status ring should show for a commit state:
   #
   #   segments: statuses present among its tests, in STATUS_RING_ORDER.
+  #             Buckets are disjoint (each test lands in exactly one),
+  #             so "checksum" means otherwise-passing tests with a ≠.
   #             Categorical — each gets an equal arc regardless of how
   #             many tests are in it (a lone failure must stay visible).
   #   coverage: fraction of tests with any pass/fail result (0..1).
@@ -120,7 +122,7 @@ module CommitsHelper
     tests = state[:tests]
     present = {
       fail: tests[:uniform_failing_tests], fpe: tests[:fpe_tests], mixed: tests[:mixed_tests],
-      checksum: tests[:checksum_tests], pass: tests[:clean_passing_tests]
+      checksum: tests[:checksum_passing_tests], pass: tests[:clean_passing_tests]
     }
     total = tests[:total_tests].to_i
     {
@@ -136,9 +138,11 @@ module CommitsHelper
   def commit_status_ring(state, size: 22)
     data = status_ring_data(state)
     segments = data[:segments]
-    r = size / 2.0 - 2.5
+    # Stroke scales with the ring so a larger ring reads bolder, not
+    # just wider.
+    stroke = (size * 0.14).round(1)
+    r = size / 2.0 - stroke / 2 - 0.5
     c = size / 2.0
-    stroke = size >= 20 ? 3.5 : 3
     open_deg = 0
     if data[:coverage] < 1.0
       open_deg = segments.empty? ? 360 : [(1 - data[:coverage]) * 360, STATUS_RING_MIN_GAP_DEG].max
@@ -177,7 +181,7 @@ module CommitsHelper
     parts << "#{t[:uniform_failing_tests]} failing" if t[:uniform_failing_tests].positive?
     parts << "#{t[:fpe_tests]} FPE" if t[:fpe_tests].to_i.positive?
     parts << "#{t[:mixed_tests]} mixed" if t[:mixed_tests].positive?
-    parts << "#{t[:checksum_tests]} checksum ≠" if t[:checksum_tests].to_i.positive?
+    parts << "#{t[:checksum_passing_tests]} checksum ≠" if t[:checksum_passing_tests].to_i.positive?
     parts << "#{t[:clean_passing_tests]} passing" if t[:clean_passing_tests].to_i.positive?
     total = t[:total_tests].to_i
     parts << "#{t[:reported_tests]}/#{total} tests reported" if total.positive?
@@ -185,6 +189,18 @@ module CommitsHelper
   end
 
   BUILD_RING_WORDS = { all_ok: "all built", some_fail: "some failed", all_fail: "failed" }.freeze
+
+  # [label, color, test count] per ring status, in ring order, for the
+  # status-ring popover.
+  def status_ring_legend_rows(tests)
+    counts = {
+      fail: tests[:uniform_failing_tests], fpe: tests[:fpe_tests], mixed: tests[:mixed_tests],
+      checksum: tests[:checksum_passing_tests], pass: tests[:clean_passing_tests]
+    }
+    labels = { fail: "Failing", fpe: "FPE failure", mixed: "Mixed pass/fail",
+               checksum: "Checksum ≠", pass: "Passing" }
+    STATUS_RING_ORDER.map { |k| [labels[k], STATUS_RING_COLORS[k], counts[k].to_i] }
+  end
 
   # Renders the build-status pill: All built / Partial / Build failed.
   def build_status_pill(state, size: :md)
@@ -258,8 +274,9 @@ module CommitsHelper
   end
 
   # Renders the inline flag chips for a commit: tests that failed only
-  # on a trapped FPE, tests with a checksum disagreement, and
-  # full-inlist cells. FPE and ≠ count *tests*; "FPE checks were on"
+  # on a trapped FPE, tests with a checksum disagreement, and tests
+  # any computer ran with the full inlist set. All three count
+  # *tests*; "FPE checks were on"
   # is how a run was configured, not a problem, so it gets no chip.
   def flag_chips(state)
     flags = state[:flags]
@@ -277,11 +294,11 @@ module CommitsHelper
                            class: "#{pill_classes(:sm)} bg-checksum-soft text-checksum-soft-text",
                            title: "#{pluralize(tests[:checksum_tests], 'test')} with disagreeing checksums")
     end
-    if flags[:inlists_full].to_i > 0
+    if tests[:full_tests].to_i > 0
       chips << content_tag(:span,
-                           safe_join([mesa_icon(:plus, size: 10), "#{flags[:inlists_full]} full"], " "),
+                           safe_join([mesa_icon(:plus, size: 10), "#{tests[:full_tests]} full"], " "),
                            class: "#{pill_classes(:sm)} bg-info-soft text-info-soft-text",
-                           title: "Full inlist sets exercised")
+                           title: "#{pluralize(tests[:full_tests], 'test case')} run with the full inlist set on at least one computer")
     end
     return content_tag(:span, "—", class: "text-fg-subtle") if chips.empty?
     safe_join(chips, content_tag(:span, " ", class: "inline-block w-1"))
