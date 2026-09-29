@@ -15,7 +15,11 @@ that replaced the SVN-era `Version` rows.
   test instances whose runtime or RAM is far above the recent
   cohort of `(test_case, computer, run_optional, fpe_checks)`
   matches.  Result is cached in `Rails.cache` for 24 hours per
-  `date.iso8601` key.
+  `date.iso8601` key.  Each commit's problem tests list worst-first — failing, mixed,
+  FPE-only failures (every failure a trapped floating-point
+  exception, `failure_type: 'fpe'`; still stored as failing/mixed),
+  then checksum mismatches — with badges colored to match the web
+  UI (magenta FPE, violet checksums).
 - **[`app/mailers/morning_mailer.rb`](../app/mailers/morning_mailer.rb)**
   Single `#daily` action that builds the report and renders the
   email.  Hardcoded recipients in `MorningMailer::RECIPIENTS`
