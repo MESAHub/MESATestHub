@@ -23,6 +23,7 @@
     = render "commits/matrix",
              per_test: @per_test,
              per_computer: @per_computer,
+             computer_pools: @commit.computer_pools,
              popover_data: @popover_data,
              branch: @selected_branch,
              sha: @commit.short_sha,
