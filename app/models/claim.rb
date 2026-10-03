@@ -5,10 +5,11 @@
 #
 # Created via POST /api/v1/claims (Phase B) — the controller writes
 # the row and starts the wall-clock TTL via
-# `Claim.default_expires_at`. Fulfilled by an `after_create_commit`
-# callback on Submission when a submission arrives carrying the
-# claim's id; the same callback handles the `expired → fulfilled`
-# transition for legitimately-late submissions. Pending claims past
+# `Claim.default_expires_at`. Fulfilled by Submission#fulfill_claims
+# when a submission arrives that names the claim's id or answers it
+# (same computer + commit; for test claims, an instance of that test);
+# the same callback handles the `expired → fulfilled` transition for
+# legitimately-late submissions. Pending claims past
 # `expires_at` get swept to `expired` by `ClaimSweeperJob`.
 #
 # The CHECK constraint `claims_scope_fk_coherence` enforces the
@@ -19,14 +20,14 @@ class Claim < ApplicationRecord
   SCOPES   = %w[build test].freeze
   STATUSES = %w[pending fulfilled expired].freeze
 
-  # V1 TTLs (docs/dispatcher-and-claims.md "TTLs"): builds are
-  # always quick, so 15 min is plenty; tests can legitimately run
-  # for hours, and short TTLs would produce noisy false
-  # expirations. Phase E swaps the test side for a historical-
-  # runtime calculation; the build side stays fixed because the
-  # easy case doesn't need help.
+  # V1 TTLs (docs/dispatcher-and-claims.md "TTLs"). A MESA build
+  # takes 10–40 minutes, longer with FPE checks or a busy machine, so
+  # builds get an hour (the original 15 minutes would expire most real
+  # builds before their result arrived). Tests can legitimately run
+  # for hours. Phase E swaps the test side for a historical-runtime
+  # calculation.
   TTL_FOR_SCOPE = {
-    'build' => 15.minutes,
+    'build' => 1.hour,
     'test'  => 12.hours
   }.freeze
 

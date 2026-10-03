@@ -22,6 +22,8 @@ module Api
         return unless authenticate_claim
         return unless validate_scope
 
+        return create_all_test_claims if @scope == 'test' && bool_param(:all_test_cases)
+
         if @scope == 'test'
           return unless resolve_test_case_commit
         end
@@ -50,6 +52,30 @@ module Api
       end
 
       private
+
+      # `scope: 'test', all_test_cases: true` claims every test on the
+      # commit in one request — what a client running the whole suite
+      # in one go (`mesa_test install_and_test SHA`) sends, instead of a
+      # hundred separate claims. Skips tests this computer already holds
+      # a pending claim on. Each test still gets its own row, so the
+      # matrix shows them pending one by one and a whole-suite
+      # submission fulfills them all (Submission#fulfill_claims).
+      def create_all_test_claims
+        now = Time.current
+        expires_at = Claim.default_expires_at(scope: 'test')
+        held = Claim.pending.where(computer: @computer, commit: @commit, scope: 'test')
+                    .select(:test_case_commit_id)
+        rows = @commit.test_case_commits.where.not(id: held).pluck(:id).map do |tcc_id|
+          { computer_id: @computer.id, commit_id: @commit.id, test_case_commit_id: tcc_id,
+            scope: 'test', status: 'pending',
+            use_fpe: bool_param(:use_fpe), use_full_inlists: bool_param(:use_full_inlists),
+            use_converge: bool_param(:use_converge),
+            dispatched_at: parse_iso_datetime(claim_params[:dispatched_at]),
+            expires_at: expires_at, created_at: now, updated_at: now }
+        end
+        ids = rows.empty? ? [] : Claim.insert_all(rows, returning: :id).rows.flatten
+        render json: { claim_ids: ids, expires_at: expires_at.iso8601 }, status: :created
+      end
 
       # Same shape as SubmissionsController#authenticate_submission:
       # verify the user, scope the computer to that user, and look
@@ -105,7 +131,7 @@ module Api
           :commit_sha, :scope,
           :test_case_module, :test_case_name,
           :use_fpe, :use_full_inlists, :use_converge,
-          :dispatched_at
+          :dispatched_at, :all_test_cases
         )
       end
 

@@ -206,6 +206,15 @@ RSpec.describe WorkDispatcher do
       expect(dispatch(scope: 'test', commit: commit)).to be_nil
     end
 
+    it 'counts a non-default resolution_factor run as covering [ci converge]' do
+      commit.update!(wants_converge: true)
+      run!(tcc_a, on: other, resolution_factor: 0.8)
+
+      rec = dispatch(scope: 'test', commit: commit, converge: true)
+      expect(rec.test_case_commit).to eq(tcc_b)
+      expect(rec.flags[:converge]).to be true
+    end
+
     it 'treats a pending full-inlists claim as covering the request' do
       commit.update!(wants_full_inlists: true)
       run!(tcc_a)

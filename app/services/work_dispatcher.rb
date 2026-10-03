@@ -139,9 +139,8 @@ class WorkDispatcher
     return nil if tccs.empty?
 
     runs = TestInstance.where(commit_id: commit.id)
-                       .left_joins(:submission)
-                       .pluck(:test_case_commit_id, :computer_id, :run_optional,
-                              :fpe_checks, 'submissions.use_converge')
+                       .pluck(:test_case_commit_id, :computer_id,
+                              *CONFIGS.keys.map { |c| Arel.sql(Commit::CI_RUN_CONDITIONS[c]) })
                        .group_by(&:first)
     claims = Claim.pending.where(commit_id: commit.id, scope: 'test')
                   .pluck(:test_case_commit_id, :computer_id, :use_full_inlists,

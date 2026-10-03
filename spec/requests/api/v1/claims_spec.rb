@@ -50,7 +50,36 @@ RSpec.describe 'POST /api/v1/claims', type: :request do
       expect(claim.commit).to eq(commit)
       expect(claim.test_case_commit).to be_nil
       expect(claim.use_full_inlists).to be true
-      expect(claim.expires_at).to be_within(5.seconds).of(15.minutes.from_now)
+      expect(claim.expires_at).to be_within(5.seconds).of(1.hour.from_now)
+    end
+  end
+
+  describe 'all test cases at once' do
+    let!(:tccs) { create_list(:test_case_commit, 3, commit: commit) }
+
+    def claim_all
+      post '/api/v1/claims',
+           params: { submitter: valid_submitter,
+                     claim: { commit_sha: commit.sha, scope: 'test', all_test_cases: true } },
+           as: :json
+    end
+
+    it 'creates one pending test claim per test on the commit' do
+      expect { claim_all }.to change(Claim, :count).by(3)
+
+      expect(response).to have_http_status(:created)
+      json = JSON.parse(response.body)
+      expect(json['claim_ids'].size).to eq(3)
+      claims = Claim.where(id: json['claim_ids'])
+      expect(claims.map(&:test_case_commit_id)).to match_array(tccs.map(&:id))
+      expect(claims.map(&:status).uniq).to eq(['pending'])
+      expect(claims.first.expires_at).to be_within(5.seconds).of(12.hours.from_now)
+    end
+
+    it 'skips tests this computer already holds a pending claim on' do
+      create(:claim, :test_scope, computer: computer, commit: commit, test_case_commit: tccs.first)
+
+      expect { claim_all }.to change(Claim, :count).by(2)
     end
   end
 

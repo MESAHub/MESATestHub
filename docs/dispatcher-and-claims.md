@@ -16,10 +16,9 @@ The main corrections:
   under `submitter:` + `claim:` / `dispatch:`; test cases are named
   by `test_case_module` + `test_case_name`.
 - "Has this configuration been run?" comes from `test_instances`
-  (`run_optional`, `fpe_checks`), which MESA has reported for years —
-  not from the `submissions.use_*` columns, which only a claims-aware
-  client will ever fill. Only `[ci converge]` has no instance-level
-  signal.
+  (`run_optional`, `fpe_checks`, `resolution_factor`), which MESA has
+  reported for years — not from the `submissions.use_*` columns,
+  which only a claims-aware client will ever fill.
 - The coverage term no longer subtracts one point per
   `test_instance` (a single computer submits ~100 per commit, so
   every tested commit floored at zero). Coverage now counts
@@ -240,10 +239,9 @@ add_column :submissions, :use_converge, :boolean, default: false, null: false
 - `use_*` — what flags the client says it ran with. **Resolved in
   Phase C:** `test_instances` already carries `run_optional` and
   `fpe_checks` per run, straight from MESA's own test output, and
-  every client fills them in today. Those columns are what decides
-  whether a full-inlists or FPE request has been met. Only
-  `use_converge` matters on its own, because nothing else records
-  convergence runs.
+  every client fills them in today. Those columns, plus
+  `resolution_factor` for converge, decide whether a request has been
+  met. The `use_*` columns are informational only.
 
 ### TCC pre-existence
 
@@ -371,6 +369,14 @@ bypassed dispatch entirely.
 }
 ```
 
+**Claiming a whole suite:** `scope: "test", all_test_cases: true`
+(with no test name) creates one claim per test on the commit in a
+single request. It skips tests this computer already holds a pending
+claim on, and responds with `{ "claim_ids": [...], "expires_at": ... }`.
+`mesa_test install_and_test SHA` uses this, since it runs every test
+in one go. Each test is still its own row, so the matrix shows them
+pending individually.
+
 The client writes `claim_id` to its local YAML (build YAML for
 build claims, per-test YAML for test claims) so the eventual
 submission can attach it.
@@ -423,19 +429,31 @@ remove it along with `Commit.test_candidate`.
   `expires_at` and flips its status. No data arrived.
 - **expired → fulfilled**: a late submission arrives. The claim
   flips back to `fulfilled` with `fulfilled_at` set. This is a
-  legal and expected transition (think: build that took 20 min on
-  a 15-min TTL because of queue waiting).
+  legal and expected transition (think: build that took 70 min on
+  a 1-hour TTL because of queue waiting).
 
-The transition is implemented in the `Submission` callback that
-fires on create: look up the claim, set `fulfilled_at`, set
-`status = 'fulfilled'`. Don't check the prior status — both
-`pending` and `expired` move to `fulfilled` on submission arrival.
+### Fulfillment
+
+`Submission#fulfill_claims` (`after_create_commit`) fulfills:
+
+- the claim named by `claim_id`, if the submission sends one, and
+- **every pending or expired claim this computer holds on this
+  commit that the submission answers.** Build claims are answered by
+  any submission: reporting a build, or test results, which imply a
+  build. A test claim is answered by an instance of its test.
+
+Matching (added in Phase D) means a client never has to keep track
+of claim ids. A whole-suite `entire` submission fulfills the build
+claim and every test claim in one go. Prior status isn't checked:
+`pending` and `expired` both move to `fulfilled`.
 
 ### TTLs
 
 V1: fixed values.
 
-- **Build claims**: 15 minutes.
+- **Build claims**: 1 hour. (Originally 15 minutes, raised in Phase D
+  because a MESA build takes 10–40 minutes, longer with FPE checks.
+  Most real builds would have expired before reporting.)
 - **Test claims**: 12 hours.
 
 These are wall clock from claim creation. They're deliberately
@@ -457,7 +475,7 @@ else
 end
 ```
 
-Capped at 24h. Build claims stay fixed at 15 min — no point in
+Capped at 24h. Build claims stay fixed at 1 hour — no point in
 historical regression for the easy case.
 
 ### Why claims are never deleted
@@ -535,7 +553,21 @@ open question 4).
 |---|---|
 | `[ci optional]` | `test_instances.run_optional = true` |
 | `[ci fpe]` | `test_instances.fpe_checks = true` |
-| `[ci converge]` | its submission's `use_converge = true` (no instance-level signal) |
+| `[ci converge]` | `test_instances.resolution_factor ≠ 1` |
+
+These are the env vars MESA's `each_test_run` reads and echoes into
+each test's `testhub.yml`:
+
+- **Full inlists:** `MESA_SKIP_OPTIONAL` *unset*. Optional inlists
+  run by default; most clients set the variable to skip them.
+- **FPE:** `MESA_FPE_CHECKS_ON=1`. This is **build-time** as well:
+  `make/defaults-module.mk` turns on `WITH_FPE_CHECKS`, so an FPE run
+  needs an FPE build. A test-scope `can_fpe` therefore means "the
+  build I'm testing was compiled with FPE checks". The client chooses
+  FPE when it builds, and every test of that build runs with it.
+- **Converge:** `MESA_TEST_SUITE_RESOLUTION_FACTOR` set to a factor.
+  Past `[ci converge]` runs used 0.5–0.9; 484 of the 485 instances
+  with a factor other than 1 sit on `[ci converge]` commits.
 
 At the commit level, `commits.<x>_satisfied_at` is set the first
 time a **single computer** has covered **every** TCC on the commit
@@ -744,7 +776,7 @@ read the stored columns.
 - `Claim.sweep_expired!`, run every 5 minutes by `ClaimSweeperJob`
   (Solid Queue recurring task `claim_sweep`); `rake claims:sweep`
   for manual runs.
-- Fixed TTLs: `Claim::TTL_FOR_SCOPE` (15 min build, 12 h test).
+- Fixed TTLs: `Claim::TTL_FOR_SCOPE` (15 min build — raised to 1 h in Phase D — and 12 h test).
 - Submissions accept `claim: { id, started_at, use_* }`;
   `Submission#fulfill_claim` (`after_create_commit`) moves the claim
   from pending or expired to fulfilled.
@@ -785,13 +817,26 @@ behaves correctly.
 
 ### Phase D: `mesa_test` client work
 
-**Repo:** [`MESAHub/mesa_test`](https://github.com/MESAHub/mesa_test)
-(separate repo; out of scope for this branch)
-**Estimate:** unknown — depends on existing client structure.
+**Repos:** `MESAHub/mesa_test` (client, branch `feature-claims-client`)
+plus a small testhub PR (`feature-claims-client-support`).
 **Goal:** Real-world end-to-end usability.
 
-Covered in [`mesa_test` client changes](#mesa_test-client-changes)
-above. Plan and track separately.
+**Testhub side (Oct 2026):**
+- Claims are fulfilled by matching computer, commit, and test, so the
+  client never tracks claim ids (see [Fulfillment](#fulfillment)).
+- `all_test_cases: true` claims a whole suite in one request.
+- Converge satisfaction reads `resolution_factor`.
+- The build TTL goes from 15 minutes to 1 hour.
+
+**Client side:** see [`mesa_test` client changes](#mesa_test-client-changes).
+Two simplifications from the original sketch:
+- Because fulfillment is by matching, the client keeps no claim-id
+  state on disk, and `claim_strategy` isn't needed for V1.
+- `install_and_test SHA` keeps its whole-suite behavior, plus a
+  build claim and an all-tests claim. `install_and_test best` is the
+  new dispatch-driven loop: build dispatch → claim → install → submit
+  the build → per-test dispatch pinned to the SHA → claim → run →
+  submit, until a 204.
 
 ### Phase E (V2+): Smart TTLs
 
@@ -859,9 +904,10 @@ These don't block the plan but need decisions when the relevant
 code gets written. Listed here so they don't get lost.
 
 1. ~~**`use_fpe` etc. on Submission vs. TestInstance.**~~
-   **Resolved (Phase C):** decided by `test_instances.run_optional`
-   / `fpe_checks`, which every client already sends; `Submission#use_*`
-   only matters for converge. See [Configurations](#configurations).
+   **Resolved (Phase C/D):** decided by `test_instances.run_optional`
+   / `fpe_checks` / `resolution_factor`, which every client already
+   sends. `Submission#use_*` is informational. See
+   [Configurations](#configurations).
 2. **Late-fulfillment status distinction.** Currently planned: just
    `fulfilled`, no distinction between "fulfilled on time" and
    "fulfilled late." Derivable from `fulfilled_at - expires_at`.

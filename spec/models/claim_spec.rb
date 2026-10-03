@@ -136,9 +136,9 @@ RSpec.describe Claim, type: :model do
   end
 
   describe '.default_expires_at' do
-    it 'returns ~15 minutes from now for build scope' do
+    it 'returns ~1 hour from now for build scope' do
       expect(Claim.default_expires_at(scope: 'build'))
-        .to be_within(2.seconds).of(15.minutes.from_now)
+        .to be_within(2.seconds).of(1.hour.from_now)
     end
 
     it 'returns ~12 hours from now for test scope' do

@@ -4,7 +4,7 @@ FactoryBot.define do
     association :commit
     scope { 'build' }
     status { 'pending' }
-    expires_at { 15.minutes.from_now }
+    expires_at { 1.hour.from_now }
 
     trait :test_scope do
       scope { 'test' }
