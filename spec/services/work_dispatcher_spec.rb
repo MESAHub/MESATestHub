@@ -215,6 +215,21 @@ RSpec.describe WorkDispatcher do
       expect(rec.flags[:converge]).to be true
     end
 
+    it 'asks for one run-time mode per run, so a test needing two gets two runs' do
+      commit.update!(wants_full_inlists: true, wants_converge: true)
+      run!(tcc_b, on: other, run_optional: true)
+      run!(tcc_b, on: other, resolution_factor: 0.8)
+
+      first = dispatch(scope: 'test', commit: commit, full_inlists: true, converge: true)
+      expect(first.test_case_commit).to eq(tcc_a)
+      expect(first.flags).to eq(full_inlists: true, fpe: false, converge: false)
+
+      run!(tcc_a, run_optional: true)
+      second = dispatch(scope: 'test', commit: commit, full_inlists: true, converge: true)
+      expect(second.test_case_commit).to eq(tcc_a)
+      expect(second.flags).to eq(full_inlists: false, fpe: false, converge: true)
+    end
+
     it 'treats a pending full-inlists claim as covering the request' do
       commit.update!(wants_full_inlists: true)
       run!(tcc_a)

@@ -647,7 +647,12 @@ Rank eligible TCCs by:
    distinct computers with pending claims),
 3. then module and name, so the order is stable.
 
-Return the top one, with its needed configurations as `flags`.
+Return the top one. Its `flags` carry FPE, if needed (a property of
+the whole build, so it costs nothing extra), plus **at most one**
+run-time mode. A full-inlists run at a converge resolution factor
+answers neither request cleanly, and checksum comparison excludes it,
+so a test that needs both gets two runs on successive dispatches
+(found in the Phase D end-to-end run).
 
 Coefficients are placeholders. Tune them once real dispatch traffic
 exists. Don't over-engineer V1.
