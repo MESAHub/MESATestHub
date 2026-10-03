@@ -1,0 +1,43 @@
+- content_for :title, "API key · #{@computer.name}"
+
+-# Shown exactly once, right after generation (ComputersController
+-# #create_api_key). Only the digest is stored, so there's no way to
+-# show this key again — the copy button and the warning say so.
+.space-y-4
+  %nav.flex.flex-wrap.items-center.gap-2.text-sm.text-fg-muted
+    = link_to user_computer_path(@user, @computer),
+             class: "inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-bg-muted hover:text-fg no-underline" do
+      = mesa_icon(:arrow_left, size: 14)
+      %span.font-mono= @computer.name
+    %span.text-fg-subtle /
+    %span.text-fg API key
+
+  .rounded-lg.border.border-border.bg-bg-elev.p-5.space-y-4{ style: "box-shadow: var(--shadow-card-sm);" }
+    %div
+      %span.mesa-label New API key for #{@computer.name}
+      %p.mt-2.text-fg{ class: "text-[13px]" }
+        Copy it now. This is the only time it will be shown; if you lose
+        it, generate a new one.
+    .flex.flex-wrap.items-center.gap-2
+      %code.block.min-w-0.flex-1.break-all.rounded-md.border.border-border.bg-bg-muted.px-3.py-2.font-mono.text-fg{ class: "text-[13px]", data: { api_key: true } }= @api_key
+      %button.mesa-btn{ type: "button",
+                        style: "padding: 5px 12px; font-size: 12px;",
+                        data: { controller: "copy-button", copy_button_text_value: @api_key, action: "click->copy-button#copy" } }
+        = mesa_icon(:copy, size: 13)
+        %span{ data: { copy_button_target: "label" } } Copy key
+    .text-fg-muted.space-y-2{ class: "text-[13px]" }
+      %p
+        On
+        %span.font-mono= @computer.name
+        run
+        %code.font-mono mesa_test setup
+        and paste the key when asked, or set
+        %code.font-mono MESATESTHUB_API_KEY
+        in its environment. The key identifies this computer by itself, so
+        mesa_test no longer needs your password.
+      %p
+        Anyone with this key can submit results as
+        = succeed "." do
+          %span.font-mono= @computer.name
+        If it leaks, replace or revoke it from the computer's page.
+    = link_to "Done", user_computer_path(@user, @computer), class: "mesa-btn"

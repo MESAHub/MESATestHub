@@ -15,7 +15,16 @@ RSpec.describe 'rack-attack client IP resolution behind Railway proxy',
   # the real client rides in X-Forwarded-For.
   let(:railway_proxy) { '100.64.0.5' }
 
-  before { Rack::Attack.cache.store.clear }
+  # The test environment's cache is :null_store, under which throttles
+  # never count anything and every "not throttled" assertion passes
+  # vacuously. Give rack-attack a real store for these examples.
+  around do |example|
+    original = Rack::Attack.cache.store
+    Rack::Attack.cache.store = ActiveSupport::Cache::MemoryStore.new
+    example.run
+  ensure
+    Rack::Attack.cache.store = original
+  end
 
   # Cloudflare fronts the site; its edge lives in published ranges like
   # 162.158.0.0/15 and 172.64.0.0/13. The real client only survives if both
@@ -95,6 +104,49 @@ RSpec.describe 'rack-attack client IP resolution behind Railway proxy',
 
       expect(statuses).not_to include(429)
       expect(statuses).to all(eq(422))
+    end
+
+    it 'exempts the /api/v1 claims + dispatch endpoints the same way' do
+      # A claims-aware client claims each test before running it, so
+      # claims burst exactly like submissions do.
+      statuses = Array.new(120) do
+        post '/api/v1/claims',
+             params: { submitter: { email: 'nobody@example.com', password: 'wrong' },
+                       claim: { scope: 'build' } },
+             headers: { 'REMOTE_ADDR' => railway_proxy, 'X-Forwarded-For' => client_ip }
+        response.status
+      end
+
+      expect(statuses).not_to include(429)
+    end
+  end
+
+  # A valid per-computer API key identifies the client, like a browser
+  # session does, so it bypasses the per-IP throttles — but only a key
+  # that actually matches a computer.
+  describe 'API-key safelist' do
+    let(:client_ip) { '203.0.113.60' }
+    let(:computer) { create(:computer) }
+
+    def search_with(key)
+      get '/test_instances/search_count.json',
+          params: { query_text: 'passed: true' },
+          headers: { 'REMOTE_ADDR' => railway_proxy, 'X-Forwarded-For' => client_ip,
+                     'Authorization' => "Bearer #{key}" }
+      response.status
+    end
+
+    it 'lets a valid key past the search/ip throttle' do
+      key = computer.generate_api_key!
+      statuses = Array.new(40) { search_with(key) }
+
+      expect(statuses).to all(eq(200))
+    end
+
+    it 'does not safelist an unknown key' do
+      statuses = Array.new(40) { search_with('mth_not-a-real-key') }
+
+      expect(statuses).to include(429)
     end
   end
 end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_09_29_180000) do
+ActiveRecord::Schema[8.0].define(version: 2026_10_03_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -104,6 +104,11 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_29_180000) do
     t.datetime "created_at", precision: nil, default: -> { "now()" }, null: false
     t.datetime "updated_at", precision: nil, default: -> { "now()" }, null: false
     t.bigint "user_id"
+    t.string "api_key_digest"
+    t.string "api_key_prefix"
+    t.datetime "api_key_created_at"
+    t.datetime "api_key_last_used_at"
+    t.index ["api_key_digest"], name: "index_computers_on_api_key_digest", unique: true
     t.index ["name"], name: "index_computers_on_name", unique: true
     t.index ["user_id"], name: "index_computers_on_user_id"
   end

@@ -153,4 +153,14 @@ Rails.application.routes.draw do
   # global list of all computers (admins only)
   get 'all_computers', to: 'computers#index_all', as: 'all_computers'
 
+  # Per-computer API key (docs/api-keys.md): generate/replace (shown
+  # once) and revoke. Owner or admin only.
+  post 'users/:user_id/computers/:id/api_key', to: 'computers#create_api_key',
+                                               as: 'computer_api_key'
+  delete 'users/:user_id/computers/:id/api_key', to: 'computers#destroy_api_key'
+  # Reloading the one-time key page lands back on the computer page
+  # rather than a routing error (the key itself is gone for good).
+  get 'users/:user_id/computers/:id/api_key',
+      to: redirect('/users/%{user_id}/computers/%{id}')
+
 end

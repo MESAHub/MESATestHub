@@ -227,7 +227,9 @@ don't get lost.
   merged Oct 2026. Phase D (`mesa_test` client) is next.
 
 - **Per-computer API keys** (decided Oct 2026; ship alongside
-  dispatcher Phase D). Replace the email + password that `mesa_test`
+  dispatcher Phase D). **Status:** testhub side implemented Oct 2026;
+  see [`docs/api-keys.md`](api-keys.md). Password auth is kept
+  working indefinitely for now. Replace the email + password that `mesa_test`
   sends with every submission, claim, and dispatch.
   - **Why:**
     - That password sits in plain text in `~/.mesa_test.yml`, often

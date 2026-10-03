@@ -59,6 +59,9 @@ Before doing non-trivial work, read the appropriate doc:
   `WorkDispatcher` service, CI-request satisfaction tracking) are
   merged; **Phase D (`mesa_test` client) is next**, together with
   per-computer API keys (see the roadmap's feature backlog).
+- **[`docs/api-keys.md`](docs/api-keys.md)** — per-computer API
+  keys (`Authorization: Bearer mth_…`) accepted on every client
+  endpoint alongside the legacy email + password, which keeps working.
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.
 
@@ -364,6 +367,16 @@ helper or partial exists.
   showed under the wrong computers or not at all. Creation paths now
   skip conflicts (`insert_all … unique_by`, `create_or_find_by!`);
   don't add a TCC-creating path that checks-then-inserts without one.
+- **Client API auth is two-track: per-computer API key or email +
+  password.** `ApiKeyAuthentication` (included in
+  ApplicationController) reads `Authorization: Bearer`. No key means
+  the legacy credential path runs unchanged. A key is judged alone:
+  an unknown key is a 401 even when a valid password rides along, so
+  revoking a key really cuts the machine off. Only a SHA-256 digest
+  is stored (`computers.api_key_digest`). The plaintext is rendered
+  once by `computers#create_api_key` and never put in the flash. Don't
+  add a client endpoint that checks only passwords. See
+  [`docs/api-keys.md`](docs/api-keys.md).
 - **The submission API is exempt from the per-IP throttles.** The
   test client authenticates with `submitter[:email]` +
   `submitter[:password]` in the JSON body (bcrypt-verified in
@@ -374,13 +387,17 @@ helper or partial exists.
   a burst from one IP), which used to blow past the generic `req/ip`
   (100/5min) and `api/ip` (100/10min) throttles and return 429s.
   `rack_attack.rb` now matches any `/submissions`-prefixed path with
-  `SUBMISSION_PATH`, excludes it from both generic throttles, and
+  `SUBMISSION_PATH` (which also covers `/api/v1/` — claims burst
+  the same way), excludes it from both generic throttles, and
   gives it a generous `submissions/ip` backstop (`SUBMISSION_LIMIT =
   1000` / 5min) that exists only to bound a pathological flood — the
   real access control is the credential + computer-ownership check in
   the controller. Bump `SUBMISSION_LIMIT` if a large NAT'd cluster
-  ever trips it. Regression coverage in
-  [`spec/requests/rack_attack_client_ip_spec.rb`](spec/requests/rack_attack_client_ip_spec.rb).
+  ever trips it. Requests carrying a valid API key are safelisted
+  outright. Regression coverage in
+  [`spec/requests/rack_attack_client_ip_spec.rb`](spec/requests/rack_attack_client_ip_spec.rb)
+  — the test env's cache is `:null_store`, so that spec swaps in a
+  `MemoryStore`; without it no throttle ever fires in tests.
 
 ## Development commands
 

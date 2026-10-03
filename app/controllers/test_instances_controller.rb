@@ -88,18 +88,28 @@ class TestInstancesController < ApplicationController
 
   # Authenticates the JSON-API path. Hits the existing session
   # first (so a logged-in browser making a fetch() against the
-  # JSON endpoint just works) and falls back to email + password
-  # params (so a long-lived CLI client can keep submitting
-  # without a browser session).
+  # JSON endpoint just works), then a computer's API key (acting as
+  # the computer's owner), then email + password params (so older
+  # CLI clients keep working).
   def authenticated?
     @user = current_user
     return true if @user
+
+    case api_key_computer
+    when Computer
+      @user = api_key_computer.user
+      return true
+    when false
+      return false
+    end
 
     @user = User.find_by(email: params[:email])
     @user && @user.authenticate(params[:password])
   end
 
   def fail_authenticate_json
+    return render_invalid_api_key if api_key_computer == false
+
     render json: { error: 'Invalid e-mail or password.' },
            status: :unprocessable_content
   end

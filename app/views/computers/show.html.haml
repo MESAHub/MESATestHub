@@ -87,6 +87,52 @@
           %dt.text-fg-subtle Since
           %dd.text-fg-muted{ class: "text-[12px]" }= format_date(@earliest)
 
+  -# API key card (docs/api-keys.md). Owner/admin only: shows which
+  -# key is active (prefix + dates, never the key itself) and the
+  -# generate / replace / revoke actions. Generating renders
+  -# create_api_key, the one place the plaintext is ever shown, so the
+  -# form opts out of Turbo to allow a 200 render after a POST — which
+  -# also means Replace confirms via plain onsubmit, not turbo_confirm.
+  - if self_or_admin?
+    .rounded-lg.border.border-border.bg-bg-elev.p-5{ style: "box-shadow: var(--shadow-card-sm);" }
+      .flex.flex-wrap.items-start.justify-between.gap-3
+        .min-w-0
+          %span.mesa-label API key
+          - if @computer.api_key?
+            %p.mt-2.text-fg{ class: "text-[13px]" }
+              Active key
+              %span.font-mono.text-fg= "#{@computer.api_key_prefix}…"
+              %span.text-fg-muted
+                = "· created #{format_date(@computer.api_key_created_at)} · "
+                - if @computer.api_key_last_used_at
+                  = "last used #{time_ago_in_words(@computer.api_key_last_used_at)} ago"
+                - else
+                  never used yet
+          - else
+            %p.mt-2.text-fg-muted{ class: "text-[13px]" }
+              No API key yet. mesa_test can still submit with your email and
+              password; a key lets this computer submit without storing your
+              password, and can be revoked on its own.
+        .shrink-0.flex.items-center.gap-1
+          - if @computer.api_key?
+            = button_to computer_api_key_path(@user, @computer),
+                       form: { data: { turbo: false }, onsubmit: "return confirm(#{"Replace #{@computer.name}'s API key? The current key stops working immediately.".to_json})" },
+                       class: "mesa-btn",
+                       style: "padding: 4px 10px; font-size: 12px;" do
+              Replace key
+            = button_to computer_api_key_path(@user, @computer),
+                       method: :delete,
+                       form: { data: { turbo_confirm: "Revoke #{@computer.name}'s API key? Clients using it will be refused." } },
+                       class: "mesa-btn",
+                       style: "padding: 4px 10px; font-size: 12px; color: var(--color-danger-soft-text); border-color: var(--color-danger-soft); background: transparent;" do
+              Revoke
+          - else
+            = button_to computer_api_key_path(@user, @computer),
+                       form: { data: { turbo: false } },
+                       class: "mesa-btn mesa-btn-primary",
+                       style: "padding: 4px 10px; font-size: 12px;" do
+              Generate key
+
   -# Submissions card. The whole thing — header band, filter form,
   -# selection bar, table, modal — sits under a single
   -# `submission-selection` Stimulus controller scope so the
