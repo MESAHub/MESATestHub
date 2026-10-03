@@ -1,13 +1,37 @@
 # Dispatcher & claims
 
-**Status:** Phases A and B merged (PRs #97, #99, May 2026). Phase C
-(dispatcher endpoint) is next; D (`mesa_test` client) follows.
-Claim sweeping runs as the `claim_sweep` Solid Queue recurring task
-(`ClaimSweeperJob`, every 5 min — see `config/recurring.yml`), not
-Railway cron as originally sketched below.
-**Branches:** `feature-dispatcher-and-claims` (plan + Phase A),
-`feature-claims-schema` (Phase B); Phase C goes on
-`feature-dispatcher-endpoint` off `master`.
+**Status:** Phases A and B merged (MESAHub/MESATestHub#97, #99, May
+2026). Phase C (dispatcher endpoint) in progress on
+`feature-dispatcher-endpoint` (Oct 2026); D (`mesa_test` client)
+follows. Claim sweeping runs as the `claim_sweep` Solid Queue
+recurring task (`ClaimSweeperJob`, every 5 min — see
+`config/recurring.yml`).
+
+**Plan revised Oct 2026** before starting Phase C, to match what
+Phases A/B actually shipped and what changed in the app since May.
+The main corrections:
+
+- Auth is the `submitter:` email/password block shared with the
+  submissions API, not a per-computer `api_key`; request bodies nest
+  under `submitter:` + `claim:` / `dispatch:`; test cases are named
+  by `test_case_module` + `test_case_name`.
+- "Has this configuration been run?" comes from `test_instances`
+  (`run_optional`, `fpe_checks`), which MESA has reported for years —
+  not from the `submissions.use_*` columns, which only a claims-aware
+  client will ever fill. Only `[ci converge]` has no instance-level
+  signal.
+- The coverage term no longer subtracts one point per
+  `test_instance` (a single computer submits ~100 per commit, so
+  every tested commit floored at zero). Coverage now counts
+  *computers*, and the dispatcher never re-recommends a commit the
+  asking computer already submitted on — the rule the legacy
+  `request_commit` endpoint always had.
+- `scope: "test"` dispatch accepts the `commit_sha` the client just
+  built. Without it the dispatcher could hand back a test on a
+  commit the client never compiled.
+- The legacy `GET /submissions/request_commit.json`
+  (`Commit.test_candidate`) is now documented below. `mesa_test`
+  1.2.0 doesn't call it.
 
 This document is the design and implementation plan for two
 intertwined features:
@@ -208,16 +232,18 @@ add_column :submissions, :use_converge, :boolean, default: false, null: false
 
 - `claim_id` — nullable for backwards compat with old `mesa_test`
   versions that don't know about claims. Populated when the
-  submission carries a `claim_id` in its payload.
+  submission carries a `claim:` block with an `id`.
 - `started_at` — when the actual work began, measured locally by
   the client. Used to disentangle queue delay from real runtime
   (see [Lifecycle](#lifecycle)). Nullable for compat; not
   required.
-- `use_*` — what flags this submission was run with. Needed to
-  determine whether the submission satisfies a `wants_*` preference
-  on the commit. Existing tracking on `TestInstance` may already
-  cover some of this; verify during implementation and dedupe if
-  so.
+- `use_*` — what flags the client says it ran with. **Resolved in
+  Phase C:** `test_instances` already carries `run_optional` and
+  `fpe_checks` per run, straight from MESA's own test output, and
+  every client fills them in today. Those columns are what decides
+  whether a full-inlists or FPE request has been met. Only
+  `use_converge` matters on its own, because nothing else records
+  convergence runs.
 
 ### TCC pre-existence
 
@@ -225,9 +251,20 @@ Test case commits are created at commit instantiation (the
 existing topology sync infers the test case list from the parent
 commit or refetches the manifest if files have changed). Claims
 with `scope='test'` can therefore reference an existing TCC
-directly — no find-or-create dance in the claim path.
+directly — no find-or-create dance in the claim path. Since Sept
+2026 a unique index on `(commit_id, test_case_id)` guarantees one
+TCC per test per commit, so "the TCC for this test on this commit"
+is unambiguous for both claims and dispatch.
 
 ## API surface
+
+All three endpoints authenticate the same way as the legacy
+submissions API: a `submitter:` hash with `email`, `password`, and
+`computer`. The password is bcrypt-checked against the user, and
+the computer has to belong to that user. Auth failures return 422
+with `{ "error": ... }`, the same shape the submissions endpoint
+uses. `mesa_test` already stores these credentials, so it needs no
+new config.
 
 ### `POST /api/v1/dispatch`
 
@@ -237,13 +274,13 @@ Read-only. Asks the testhub for a recommendation.
 
 ```json
 {
-  "computer": "tycho",
-  "api_key": "...",
-  "capabilities": {
+  "submitter": { "email": "...", "password": "...", "computer": "tycho" },
+  "dispatch": {
+    "scope": "test",
+    "commit_sha": "abc123...",
     "can_fpe": true,
     "can_full_inlists": true,
-    "can_converge": true,
-    "scope": "test"
+    "can_converge": false
   }
 }
 ```
@@ -251,74 +288,81 @@ Read-only. Asks the testhub for a recommendation.
 `scope` is what the client *wants* — `"build"` or `"test"`. A
 client that wants the full `install_and_test` loop calls dispatch
 with `scope: "build"`, gets a SHA, claims/builds/submits, then
-loops on `scope: "test"` for each test case.
+loops on `scope: "test"` **passing that SHA as `commit_sha`** for
+each test case, until it gets a 204.
 
-**Response (work available):**
+`commit_sha` is only accepted with `scope: "test"` (422 for
+build). With it, the dispatcher picks the next test on that commit.
+Without it, the dispatcher only considers commits this computer has
+already built: a commit where it has a submission whose `compiled`
+isn't `false`.
 
-```json
-{
-  "commit_sha": "abc123...",
-  "branch": "main",
-  "scope": "build",
-  "test_case": null,
-  "flags": {
-    "use_fpe": false,
-    "use_full_inlists": true,
-    "use_converge": false
-  },
-  "dispatched_at": "2026-05-27T12:34:56Z",
-  "target_url": "https://testhub.mesastar.org/commits/abc123..."
-}
-```
+`can_*` default to `false` when absent.
 
-Or for `scope: "test"`:
+**Response (work available), 200:**
 
 ```json
 {
   "commit_sha": "abc123...",
+  "short_sha": "abc123d",
   "branch": "main",
   "scope": "test",
-  "test_case": "twin_studies/binary_basic",
+  "test_case_module": "binary",
+  "test_case_name": "wd_planetary_companion",
   "flags": { "use_fpe": true, "use_full_inlists": false, "use_converge": false },
-  "dispatched_at": "2026-05-27T12:34:56Z",
-  "target_url": "https://testhub.mesastar.org/commits/abc123..."
+  "score": 23.4,
+  "reasons": ["on main", "untested by any computer", "[ci fpe] not yet satisfied"],
+  "dispatched_at": "2026-10-02T12:34:56Z",
+  "target_url": "https://testhub.mesastar.org/main/commits/abc123d"
 }
 ```
+
+For `scope: "build"`, `test_case_module` / `test_case_name` are
+`null`. `score` and `reasons` are for debugging and are not part of
+the contract. They're there so `mesa_test request_work` (or a
+curious human) can see *why* a commit was picked, which matters
+while the coefficients get tuned.
 
 **Response (nothing to do):** `204 No Content`. Lets the client
 stay idle without burning a checkout on imaginary work.
+
+**Errors:** 404 for an unknown `commit_sha`; 422 for a bad scope or
+`commit_sha` with `scope: "build"`.
 
 The dispatcher does not write to the database. `dispatched_at` is
 returned for the client to echo back when it creates a claim.
 
 ### `POST /api/v1/claims`
 
-Registers intent. Writes a `claims` row.
+Registers intent. Writes a `claims` row. (Shipped in Phase B.)
 
 **Request:**
 
 ```json
 {
-  "computer": "tycho",
-  "api_key": "...",
-  "commit_sha": "abc123...",
-  "scope": "build",
-  "test_case": null,
-  "use_fpe": false,
-  "use_full_inlists": true,
-  "use_converge": false,
-  "dispatched_at": "2026-05-27T12:34:56Z"
+  "submitter": { "email": "...", "password": "...", "computer": "tycho" },
+  "claim": {
+    "commit_sha": "abc123...",
+    "scope": "test",
+    "test_case_module": "binary",
+    "test_case_name": "wd_planetary_companion",
+    "use_fpe": false,
+    "use_full_inlists": true,
+    "use_converge": false,
+    "dispatched_at": "2026-05-27T12:34:56Z"
+  }
 }
 ```
 
-For `scope: "test"`, `test_case` is the test case name. The server
-looks up the matching TCC.
+`test_case_module` + `test_case_name` are required for
+`scope: "test"` and identify the TCC on the claimed commit (404 if
+it doesn't exist — this endpoint never creates TCCs).
 
 `dispatched_at` is optional. Echoed from a prior dispatch response;
 omitted for head-node-on-behalf-of-compute-node claims that
 bypassed dispatch entirely.
 
-**Response:**
+**Response (201):**
 
 ```json
 {
@@ -333,16 +377,29 @@ submission can attach it.
 
 ### Updates to `POST /submissions/create`
 
-Existing endpoint. New optional fields in the payload:
+Existing endpoint. New optional top-level block (shipped in Phase
+B):
 
-- `claim_id` — the integer returned from claim creation.
-- `started_at` — ISO 8601 timestamp from the client.
-- `use_fpe`, `use_full_inlists`, `use_converge` — flags this
-  submission was run with.
+```json
+"claim": { "id": 8421, "started_at": "...",
+           "use_fpe": false, "use_full_inlists": true, "use_converge": false }
+```
 
-A submission with a `claim_id` updates the matching claim to
+A submission with a claim `id` updates the matching claim to
 `fulfilled` (or `expired → fulfilled` for late submissions). All
-existing submission paths continue to work without claim_id.
+existing submission paths continue to work without it.
+
+### Legacy `GET /submissions/request_commit.json`
+
+An older "what should I test?" endpoint is still mounted.
+`SubmissionsController#request_commit` calls `Commit.test_candidate`,
+which returns the newest commit, checking main first, that this
+computer hasn't submitted on, with `allow_optional` / `allow_fpe` /
+`allow_skip` filters and a doubling `max_age` window. It knows
+nothing about claims, coverage by other computers, or whether a
+request has already been met. `mesa_test` 1.2.0 doesn't call it.
+Leave it mounted until a claims-aware `mesa_test` is released, then
+remove it along with `Commit.test_candidate`.
 
 ## Lifecycle
 
@@ -460,49 +517,105 @@ from the blocklist, because the late-arrived submission satisfies
 
 ## Recommendation algorithm
 
-### Priority ladder (V1)
+### Configurations
 
-For a `POST /dispatch` request with the requested scope and
-capabilities:
+The matrix (`CommitState#matrix_columns`) already splits a
+computer's runs into comparison pools by how they were run:
+default vs. full inlists (`run_optional`), and FPE checks on
+(`fpe_checks`). Toolchain (SDK vs. not) is the computer's own
+property, not something the dispatcher can ask for. The dispatcher
+uses the same two run-time switches plus converge. A CI request is
+met for a test once *any* computer has a result for it with that
+switch on, whatever the outcome. A failing full-inlists run still
+answers "did anyone try this with full inlists?" (this resolves
+open question 4).
 
-1. **Filter out**:
-   - `commits.ci_skip = true`
-   - commits older than 30 days (configurable cap; prevents stale
-     backlog from dominating)
-   - commits where this computer has any expired-without-submission
-     claim (the blocklist)
-   - commits not on any "active" branch (V1 definition: branch has
-     a commit in the last 90 days. Configurable later.)
+| Request | Met for a test when a run of it has… |
+|---|---|
+| `[ci optional]` | `test_instances.run_optional = true` |
+| `[ci fpe]` | `test_instances.fpe_checks = true` |
+| `[ci converge]` | its submission's `use_converge = true` (no instance-level signal) |
 
-2. **Score remaining commits** by weighted sum:
+At the commit level, `commits.<x>_satisfied_at` is set the first
+time a **single computer** has covered **every** TCC on the commit
+in that configuration. A full-inlists run of one test doesn't
+answer "run this commit with optional inlists." A Submission
+`after_create_commit` callback refreshes it via
+`Commit#refresh_ci_satisfaction!`, which is a no-op when the commit
+has no `wants_*` flags. Columns are only ever set, never cleared.
+A rake task, `claims:backfill_satisfaction`, fills them in for
+commits flagged before Phase C.
 
-   ```
-   score =
-     branch_weight    (main = 10, others = 5)
-   + recency_weight   (newest = 10, decays linearly over 30 days)
-   + coverage_weight  (each existing test_instance subtracts 1;
-                       each pending claim subtracts 1; floor at 0)
-   + fpe_boost        (+5 if commit.wants_fpe and not satisfied
-                       and computer.can_fpe)
-   + inlists_boost    (+5 if wants_full_inlists and not satisfied
-                       and computer.can_full_inlists)
-   + converge_boost   (+5 if wants_converge and not satisfied
-                       and computer.can_converge)
-   ```
+### Candidate commits (both scopes)
 
-3. **Return the top scorer**, with `flags` set to:
-   - `use_full_inlists: true` if commit.wants_full_inlists and
-     not yet satisfied and the computer is capable; otherwise
-     `false` (the default — most submissions run partial inlists).
-   - Same pattern for `use_fpe` and `use_converge`.
+- `commit_time` within the last 30 days.
+- On an **active branch**: `main`, or an unmerged branch whose head
+  commit is less than 90 days old.
+- `ci_skip = false`.
+- Not blocklisted for this computer (an expired claim on the commit
+  that never got a submission; see
+  [Dispatcher blocklist](#dispatcher-blocklist)).
 
-4. **For `scope: "test"`**: also pick a specific TCC from the
-   chosen commit. Prefer TCCs with the fewest test_instances and
-   fewest pending claims. Ties broken by test case name (stable
-   order).
+### Build scope
 
-Coefficients above are placeholders. They will need tuning once
-real dispatch traffic exists. Don't over-engineer V1.
+Also exclude commits where this computer already has a submission
+or a pending build claim. Re-recommending a commit it already
+tested is never useful.
+
+Score each remaining commit:
+
+```
+score =
+  branch           (10 if on main, else 5)
++ recency          (10 × (1 − age_days / 30), floor 0)
+− coverage         (5 × distinct other computers that have submitted
+                    on the commit or hold a pending build claim on it)
++ ci boosts        (+5 for each wants_x that is unsatisfied and that
+                    this computer can do: fpe, full_inlists, converge)
+```
+
+Ties go to the newer `commit_time`, then the SHA. The top scorer is
+returned with `use_x = wants_x && !x_satisfied && can_x`.
+
+### Test scope
+
+Pick the commit: the given `commit_sha`, or else the best-scoring
+candidate commit this computer has built (same score, minus the
+"already submitted" exclusion). If the chosen commit has no eligible
+TCC, move on to the next commit. A pinned `commit_sha` that has none
+returns 204.
+
+On that commit, for each TCC, work out the configurations it still
+needs. `full` is needed when the commit `wants_full_inlists`, the
+computer `can_full_inlists`, and no run of this TCC has
+`run_optional` and no pending claim on it has `use_full_inlists`.
+`fpe` and `converge` work the same way. A TCC is **eligible** if:
+
+- this computer has no pending test claim on it and isn't
+  blocklisted on it, **and**
+- this computer hasn't run it yet, **or** it still needs one of the
+  configurations above.
+
+Rank eligible TCCs by:
+
+1. most needed configurations first,
+2. then fewest computers covering it (`computer_count` plus
+   distinct computers with pending claims),
+3. then module and name, so the order is stable.
+
+Return the top one, with its needed configurations as `flags`.
+
+Coefficients are placeholders. Tune them once real dispatch traffic
+exists. Don't over-engineer V1.
+
+### Real-world load (Oct 2026 snapshot)
+
+About 210 commits in a 60-day window, 38 active non-main branches.
+Most commits have one computer (`LLNL_Dane` covers ~80%), and every
+active client sends an `empty` build submission followed by
+one-result-per-test submissions. That matches the build → test
+dispatch loop above. At that size, scoring in Ruby over a few
+batched queries is fine; no SQL-side scoring needed.
 
 ### Race conditions
 
@@ -540,7 +653,11 @@ debugging.
 - `mesa_test install_and_test [SHA|best]` — runs install then
   loops over tests serially. Each test goes through its own
   claim cycle. (Reuse of `mesa_test test` internally avoids the
-  client-side "intent for all tests" concept entirely.)
+  client-side "intent for all tests" concept entirely.) With
+  `best`, the loop asks `scope: "test"` dispatch, pinned to the
+  installed SHA via `commit_sha`, for the next test until it gets a
+  204; that's how CI-requested configurations reach the right
+  tests.
 
 ### New config: `claim_strategy`
 
@@ -561,9 +678,10 @@ Persisted in the per-computer YAML. Values:
 
 ### Submission payload additions
 
-All submissions (build and test) gain three new optional fields:
+All submissions (build and test) gain an optional `claim:` block
+(see [Updates to `POST /submissions/create`](#updates-to-post-submissionscreate)):
 
-- `claim_id` — the integer from the claim response.
+- `id` — the integer from the claim response.
 - `started_at` — when the actual work began. ISO 8601.
 - `use_fpe`, `use_full_inlists`, `use_converge` — the actual
   flags the work ran with.
@@ -571,20 +689,15 @@ All submissions (build and test) gain three new optional fields:
 Backwards compatibility: old `mesa_test` versions that don't send
 these continue to work. The testhub treats their submissions as
 "unclaimed" — they don't satisfy any claim, but they still create
-the test_instance records they always did.
+the test_instance records they always did, and those records'
+`run_optional` / `fpe_checks` still count toward CI-request
+satisfaction.
 
 ### Capabilities reporting
 
-Each computer reports its capabilities in dispatch and claim
-requests:
-
-```json
-{
-  "can_fpe": true,
-  "can_full_inlists": true,
-  "can_converge": false
-}
-```
+Each computer reports its capabilities inside the `dispatch:` block
+of every dispatch request (`can_fpe`, `can_full_inlists`,
+`can_converge`). Absent means `false`.
 
 For now, these are configured per-computer in the local YAML. The
 testhub may eventually want to persist them server-side, but V1
@@ -598,57 +711,27 @@ behavior until the next phase wires it in). Land each phase as its
 own PR off this feature branch — or, if scope grows, off
 phase-specific branches off `master`.
 
-### Phase A: Schema & CI flag parsing
+### Phase A: Schema & CI flag parsing — ✅ merged (MESAHub/MESATestHub#97)
 
-**Branch:** `feature-claims-schema`
-**Estimate:** 0.5 days
-**Goal:** Get the schema in and the easy data ingestion working.
-No API endpoints yet.
+Migration for `claims` plus the `commits` / `submissions` columns;
+`Claim` model; `CommitMessageFlags.parse` (first line only), called
+from both commit-ingest paths. The `Commit#ci_*?` predicates now
+read the stored columns.
 
-- Migration creating `claims`, the `Commit` boolean columns, the
-  `Submission` columns. Indexes per spec above.
-- `Claim` model with the basic associations, status/scope enums,
-  and validation that `commit_id == test_case_commit.commit_id`
-  for test scope.
-- Commit message parser. New module
-  `CommitMessageFlags.parse(message)` scans only the **first
-  line** of the message and returns the four booleans. Called
-  from the commit ingest path (`BranchSyncJob`-adjacent —
-  check the actual ingest method during implementation).
-- Specs: `Claim` validation matrix; `CommitMessageFlags` parser
-  cases (all four flags, none, multiple, weird whitespace).
+### Phase B: Claim creation endpoint + sweeper — ✅ merged (MESAHub/MESATestHub#99)
 
-**Done means:** schema migrated, new commits get their `ci_*` /
-`wants_*` columns populated automatically, no behavior change for
-users. The dispatcher and claim endpoints don't exist yet.
-
-### Phase B: Claim creation endpoint + sweeper
-
-**Branch:** `feature-claim-endpoint`
-**Estimate:** 1 day
-**Goal:** Claims can be created and expire correctly.
-
-- `POST /api/v1/claims` controller and routing. Authentication via
-  the existing `Computer`/`api_key` mechanism (mirror
-  `SubmissionsController`).
-- `ClaimSweeper` (recurring job or rake task) that flips
-  `pending` claims past `expires_at` to `expired`. Cadence:
-  every 5 minutes is fine; this is cheap.
-- Fixed TTLs for V1: 15 min build, 12 hours test. Constants on the
-  `Claim` model, no per-computer or per-test logic yet.
-- Submission integration: extend submissions API to accept
-  `claim_id` and `started_at`. Update the matching claim's
-  `fulfilled_at` and `status` on submission create. Handle both
-  pending → fulfilled and expired → fulfilled transitions.
-- Specs: claim create endpoint (happy, bad scope, missing TCC,
-  unauthenticated); sweeper transitions pending → expired;
-  submission with `claim_id` fulfills a pending claim; submission
-  with `claim_id` fulfills an expired claim.
-
-**Done means:** clients can create claims and they're tracked
-correctly through their full lifecycle. Dispatch endpoint doesn't
-exist yet — `mesa_test` couldn't actually use this without one,
-but the data model is correct.
+- `POST /api/v1/claims` (`Api::V1::ClaimsController`), with
+  `submitter:` auth as in the submissions API.
+- `Claim.sweep_expired!`, run every 5 minutes by `ClaimSweeperJob`
+  (Solid Queue recurring task `claim_sweep`); `rake claims:sweep`
+  for manual runs.
+- Fixed TTLs: `Claim::TTL_FOR_SCOPE` (15 min build, 12 h test).
+- Submissions accept `claim: { id, started_at, use_* }`;
+  `Submission#fulfill_claim` (`after_create_commit`) moves the claim
+  from pending or expired to fulfilled.
+- Also shipped: claims became the "pending" signal. `CommitState`
+  splits `:pending` from `:not_run` on `has_pending_claims?`, and
+  `TestCaseCommit#pending?` requires an open claim.
 
 ### Phase C: Dispatcher endpoint
 
@@ -656,21 +739,25 @@ but the data model is correct.
 **Estimate:** 1–2 days
 **Goal:** A working dispatcher with the V1 algorithm.
 
-- `POST /api/v1/dispatch` controller. Read-only.
-- `WorkDispatcher` service object. Inputs: computer,
-  capabilities, requested scope. Output: a recommendation
-  (commit/scope/test_case/flags) or `nil` (→ 204).
-- V1 algorithm exactly as specified in the
-  [Recommendation algorithm](#recommendation-algorithm) section.
-  No bells, no smart TTLs, no reliability scoring.
-- Satisfaction tracking: Submission callback updates the
-  `wants_*_satisfied_at` columns on Commit when a submission
-  arrives with the relevant `use_*` flag.
-- Specs: dispatcher returns sensible candidates for common
-  scenarios (new commit on main, commit with partial coverage,
-  blocklisted commit, ci_skip commit, no candidates → 204,
-  capability mismatch on FPE, etc.). Aim for ~10 dispatcher
-  scenario specs; this is the core decision logic.
+- `POST /api/v1/dispatch` (`Api::V1::DispatchController`).
+  Read-only. Auth is shared with the claims controller through a
+  small `ApiSubmitterAuth` concern.
+- `WorkDispatcher` service. Inputs: computer, scope, optional pinned
+  commit, capabilities. Output: a `WorkDispatcher::Recommendation`
+  (commit, TCC, flags, score, reasons) or `nil` (→ 204).
+- Algorithm as specified in
+  [Recommendation algorithm](#recommendation-algorithm).
+- Satisfaction tracking: `Commit#refresh_ci_satisfaction!` from a
+  Submission `after_create_commit` callback, plus the
+  `claims:backfill_satisfaction` rake task.
+- Specs: about 10 dispatcher scenarios — a new commit on main beats
+  an old feature commit; commits already covered by other computers
+  score lower; skips commits this computer submitted on; blocklisted
+  commit; `ci_skip`; inactive or merged branch; nothing to do → nil;
+  FPE boost only for capable computers; test scope picks
+  uncovered TCCs and skips claimed ones; pinned `commit_sha`. Plus
+  request specs for auth, 204, 404, 422, and model specs for
+  satisfaction.
 
 **Done means:** the full V1 contract is implementable by
 `mesa_test`. Internally, a client could call
@@ -752,12 +839,10 @@ Outline from prior planning conversation:
 These don't block the plan but need decisions when the relevant
 code gets written. Listed here so they don't get lost.
 
-1. **`use_fpe` etc. on Submission vs. TestInstance.** The submission
-   tracks the run-wide flags; TestInstance may already track
-   per-test flags (`run_optional`, `fpe_checks` appear in the
-   morning mailer cohort key). Confirm during Phase A and dedupe.
-   May need only TestInstance-level columns and derive submission
-   defaults from them.
+1. ~~**`use_fpe` etc. on Submission vs. TestInstance.**~~
+   **Resolved (Phase C):** decided by `test_instances.run_optional`
+   / `fpe_checks`, which every client already sends; `Submission#use_*`
+   only matters for converge. See [Configurations](#configurations).
 2. **Late-fulfillment status distinction.** Currently planned: just
    `fulfilled`, no distinction between "fulfilled on time" and
    "fulfilled late." Derivable from `fulfilled_at - expires_at`.
@@ -767,15 +852,17 @@ code gets written. Listed here so they don't get lost.
    placeholder. May want a `branches.dispatch_weight` column if
    different branches need different priorities (e.g., release
    branches > feature branches > experimental).
-4. **CI flag satisfaction granularity.** `[ci optional]` is
-   satisfied once one computer runs with `use_full_inlists`.
-   Should it require a *passing* run, or does any run count?
-   Strawman: any non-error submission counts (a failure with full
-   inlists still answers the question of "did anyone try this with
-   full inlists?"). Revisit if it produces surprising behavior.
+4. ~~**CI flag satisfaction granularity.**~~ **Resolved (Phase C):**
+   any run counts, pass or fail; at the commit level one computer
+   has to cover every test in that configuration. See
+   [Configurations](#configurations).
 5. **Dispatch token / replay protection.** Currently planned: no
    signing, just trust the `dispatched_at` echo. If abuse becomes
    a concern (it won't at this scale), add HMAC signing.
+6. **Should dispatch favor branch heads?** V1 treats every commit
+   on an active branch alike apart from recency. If clients keep
+   getting sent to mid-branch commits that nobody will look at,
+   add a head bonus.
 
 ## Related docs
 
