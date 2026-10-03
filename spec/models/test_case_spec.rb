@@ -215,6 +215,15 @@ RSpec.describe TestCase, type: :model do
   #   end
   # end
 
+  # TestCase used to declare `has_many :test_case_versions, dependent:
+  # :destroy` long after the model and table were dropped, so destroy
+  # raised trying to walk the dead association.
+  describe '#destroy' do
+    it 'destroys a test case with no dependents' do
+      expect { @test.destroy! }.to change(TestCase, :count).by(-1)
+    end
+  end
+
   # The "specifying custom data" examples that used to live here referenced
   # `datum_N_name=` columns that have since been removed from the TestCase
   # model. They have not been runnable for years. Remove rather than leave
