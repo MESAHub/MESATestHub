@@ -50,6 +50,26 @@ RSpec.describe WorkDispatcher do
       expect(dispatch.commit).to eq(uncovered)
     end
 
+    it 'still sends a second computer to a main commit before an untested older feature commit' do
+      once_covered = commit_on(main, age: 1.hour)
+      untested     = commit_on(feature, age: 6.days)
+      create(:submission, commit: once_covered, computer: other)
+
+      rec = dispatch
+      expect(rec.commit).to eq(once_covered)
+      expect(rec.score).to be_within(0.1).of(15)
+      expect(untested).to be_present
+    end
+
+    it 'charges 5 for the first other computer and 2 for each after' do
+      commit = commit_on(main, age: 1.minute)
+      dispatcher = described_class.new(computer: computer, scope: 'build')
+      expect([0, 1, 2, 3].map { |n| dispatcher.send(:coverage_penalty, n) }).to eq([0, 5, 7, 9])
+
+      3.times { create(:submission, commit: commit, computer: create(:computer)) }
+      expect(dispatch.score).to be_within(0.1).of(20 - 9)
+    end
+
     it 'counts another computer\'s pending build claim as coverage' do
       claimed   = commit_on(main, age: 1.hour)
       unclaimed = commit_on(main, age: 2.hours)
@@ -138,6 +158,13 @@ RSpec.describe WorkDispatcher do
 
       create(:submission, commit: commit, computer: computer, empty: true, entire: false)
       expect(dispatch(scope: 'test').commit).to eq(commit)
+    end
+
+    it 'ignores builds older than a week unless the commit is pinned' do
+      create(:submission, commit: commit, computer: computer, empty: true, entire: false,
+                          created_at: 8.days.ago)
+      expect(dispatch(scope: 'test')).to be_nil
+      expect(dispatch(scope: 'test', commit: commit).commit).to eq(commit)
     end
 
     it 'does not count a failed build as built' do

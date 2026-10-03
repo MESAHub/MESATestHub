@@ -1,9 +1,9 @@
 # Dispatcher & claims
 
 **Status:** Phases A and B merged (MESAHub/MESATestHub#97, #99, May
-2026). Phase C (dispatcher endpoint) implemented on
-`feature-dispatcher-endpoint` (Oct 2026), awaiting review; D
-(`mesa_test` client) follows. Claim sweeping runs as the `claim_sweep` Solid Queue
+2026). Phase C (dispatcher endpoint) merged Oct 2026. Phase D (`mesa_test`
+client) is next, shipping alongside per-computer API keys (roadmap
+feature backlog). Claim sweeping runs as the `claim_sweep` Solid Queue
 recurring task (`ClaimSweeperJob`, every 5 min — see
 `config/recurring.yml`).
 
@@ -571,8 +571,9 @@ Score each remaining commit:
 score =
   branch           (10 if on main, else 5)
 + recency          (10 × (1 − age_days / 30), floor 0)
-− coverage         (5 × distinct other computers that have submitted
-                    on the commit or hold a pending build claim on it)
+− coverage         (5 for the first distinct other computer that has
+                    submitted on the commit or holds a pending build
+                    claim on it, 2 for each one after)
 + ci boosts        (+5 for each wants_x that is unsatisfied and that
                     this computer can do: fpe, full_inlists, converge)
 ```
@@ -580,11 +581,19 @@ score =
 Ties go to the newer `commit_time`, then the SHA. The top scorer is
 returned with `use_x = wants_x && !x_satisfied && can_x`.
 
+The coverage penalty shrinks after the first computer on purpose
+(decided Oct 2026). We want at least two computers on every main
+commit, since checksum comparison needs a second opinion. A
+once-covered fresh main commit (10 + 10 − 5 = 15) beats an untested
+6-day-old feature commit (5 + 8 = 13). A second computer costs only 2
+more, so main commits keep attracting extra platforms while they're
+recent.
+
 ### Test scope
 
 Pick the commit: the given `commit_sha`, or else the best-scoring
-candidate commit this computer has built (same score, minus the
-"already submitted" exclusion). If the chosen commit has no eligible
+candidate commit this computer has built in the last 7 days (same
+score, minus the "already submitted" exclusion). If the chosen commit has no eligible
 TCC, move on to the next commit. A pinned `commit_sha` that has none
 returns 204.
 
@@ -621,12 +630,11 @@ dispatch loop above. At that size, scoring in Ruby over a few
 batched queries is fine; no SQL-side scoring needed. Measured on that
 snapshot: build dispatch takes 15–50 ms, test dispatch 15–175 ms.
 
-**Observation for tuning:** unpinned test dispatch can go back to an
-old commit where the computer built but skipped a few tests (delorean
-got a 25-day-old main commit). A pinned `commit_sha`, which is what
-`install_and_test best` will send, avoids this. If unpinned test
-dispatch turns out to matter, limit it to commits built in the last
-few days.
+Unpinned test dispatch used to go back to old commits where the
+computer had built but skipped a few tests (delorean got a 25-day-old
+main commit). It now only looks at builds from the last 7 days
+(`WorkDispatcher::RECENT_BUILD_WINDOW`). A pinned `commit_sha`, which
+is what `install_and_test best` sends, isn't affected.
 
 ### Race conditions
 

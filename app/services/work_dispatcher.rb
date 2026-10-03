@@ -14,7 +14,7 @@
 #     a pending build claim for; score the rest by branch, recency,
 #     coverage by other computers, and unmet CI requests it can serve.
 #   * Test: on the pinned commit (or the best-scoring commit this
-#     computer has built), pick the test that most needs a run —
+#     computer built in the last week), pick the test that most needs a run —
 #     unmet CI configurations first, then fewest computers.
 #
 #   WorkDispatcher.new(computer:, scope: 'build',
@@ -25,11 +25,20 @@
 class WorkDispatcher
   CANDIDATE_WINDOW     = 30.days
   ACTIVE_BRANCH_WINDOW = 90.days
+  # Unpinned test dispatch only revisits builds this recent, so a
+  # computer isn't sent back to finish weeks-old commits it skipped
+  # tests on.
+  RECENT_BUILD_WINDOW  = 7.days
 
   MAIN_WEIGHT      = 10
   BRANCH_WEIGHT    = 5
   RECENCY_WEIGHT   = 10
-  COVERAGE_PENALTY = 5
+  # Coverage penalty: the first other computer on a commit costs more
+  # than each one after it, so a commit with one computer still beats
+  # a stale untested one — we want at least two platforms on every
+  # main commit (checksum comparison needs a second opinion).
+  FIRST_COVERAGE_PENALTY = 5
+  MORE_COVERAGE_PENALTY  = 2
   CI_BOOST         = 5
 
   # Run-time configurations a commit can request, keyed the way the
@@ -111,12 +120,13 @@ class WorkDispatcher
     nil
   end
 
-  # Commits (from `ids`) this computer has built: it has a submission
-  # whose `compiled` isn't explicitly false. Singleton per-test
-  # submissions leave `compiled` nil, and running a test implies a
-  # build.
+  # Commits (from `ids`) this computer has built recently: it has a
+  # submission from the last RECENT_BUILD_WINDOW whose `compiled`
+  # isn't explicitly false. Singleton per-test submissions leave
+  # `compiled` nil, and running a test implies a build.
   def built_commit_ids(ids)
     Submission.where(computer: @computer, commit_id: ids)
+              .where(created_at: (@now - RECENT_BUILD_WINDOW)..)
               .where('compiled IS NULL OR compiled = TRUE')
               .distinct.pluck(:commit_id)
   end
@@ -227,7 +237,7 @@ class WorkDispatcher
       reasons << "#{age_days.floor} day(s) old"
 
       coverage = coverers[commit.id].size
-      score -= COVERAGE_PENALTY * coverage
+      score -= coverage_penalty(coverage)
       reasons << coverage_reason(coverage, 'this commit')
 
       CONFIGS.each do |config, spec|
@@ -238,6 +248,11 @@ class WorkDispatcher
 
       Scored.new(commit, score, reasons)
     end.sort_by { |s| [-s.score, -s.commit.commit_time.to_f, s.commit.sha] }
+  end
+
+  def coverage_penalty(count)
+    return 0 if count.zero?
+    FIRST_COVERAGE_PENALTY + MORE_COVERAGE_PENALTY * (count - 1)
   end
 
   # The commit asks for `config` and this computer can do it.
