@@ -1,9 +1,9 @@
 # Dispatcher & claims
 
 **Status:** Phases A and B merged (MESAHub/MESATestHub#97, #99, May
-2026). Phase C (dispatcher endpoint) in progress on
-`feature-dispatcher-endpoint` (Oct 2026); D (`mesa_test` client)
-follows. Claim sweeping runs as the `claim_sweep` Solid Queue
+2026). Phase C (dispatcher endpoint) implemented on
+`feature-dispatcher-endpoint` (Oct 2026), awaiting review; D
+(`mesa_test` client) follows. Claim sweeping runs as the `claim_sweep` Solid Queue
 recurring task (`ClaimSweeperJob`, every 5 min — see
 `config/recurring.yml`).
 
@@ -501,14 +501,15 @@ config (see below), not a server policy. All strategies submit
 ### Dispatcher blocklist
 
 A computer that lets a claim expire **without ever submitting** is
-the only signal that strongly suggests real trouble. Those
-(computer, commit) pairs are blocklisted from re-dispatch:
+the only signal that strongly suggests real trouble. Such claims are
+blocklisted from re-dispatch to that computer. An abandoned **build**
+claim blocks the whole commit. An abandoned **test** claim blocks only
+that test, because one hung test shouldn't take the rest of the
+commit's tests off the table.
 
 ```ruby
-# In the dispatcher's candidate filter:
-Claim.where(computer: c, commit: cmt, status: :expired)
-     .where.missing(:submission)
-     .exists?   # if true, skip this candidate
+# WorkDispatcher#blocklisted_claims
+Claim.expired.where(computer: c).where.missing(:submission)
 ```
 
 `expired → fulfilled` transitions automatically remove the pair
@@ -544,7 +545,9 @@ answer "run this commit with optional inlists." A Submission
 `Commit#refresh_ci_satisfaction!`, which is a no-op when the commit
 has no `wants_*` flags. Columns are only ever set, never cleared.
 A rake task, `claims:backfill_satisfaction`, fills them in for
-commits flagged before Phase C.
+commits flagged before Phase C. It stamps the time it runs, not the
+time the coverage actually happened. Against the Sept 2026 snapshot
+it checks 939 flagged commits in about 2 s.
 
 ### Candidate commits (both scopes)
 
@@ -552,8 +555,8 @@ commits flagged before Phase C.
 - On an **active branch**: `main`, or an unmerged branch whose head
   commit is less than 90 days old.
 - `ci_skip = false`.
-- Not blocklisted for this computer (an expired claim on the commit
-  that never got a submission; see
+- Not blocklisted for this computer (an expired build claim on the
+  commit that never got a submission; see
   [Dispatcher blocklist](#dispatcher-blocklist)).
 
 ### Build scope
@@ -591,8 +594,8 @@ computer `can_full_inlists`, and no run of this TCC has
 `run_optional` and no pending claim on it has `use_full_inlists`.
 `fpe` and `converge` work the same way. A TCC is **eligible** if:
 
-- this computer has no pending test claim on it and isn't
-  blocklisted on it, **and**
+- this computer has no pending test claim on it and no abandoned
+  test claim on it, **and**
 - this computer hasn't run it yet, **or** it still needs one of the
   configurations above.
 
@@ -615,7 +618,15 @@ Most commits have one computer (`LLNL_Dane` covers ~80%), and every
 active client sends an `empty` build submission followed by
 one-result-per-test submissions. That matches the build → test
 dispatch loop above. At that size, scoring in Ruby over a few
-batched queries is fine; no SQL-side scoring needed.
+batched queries is fine; no SQL-side scoring needed. Measured on that
+snapshot: build dispatch takes 15–50 ms, test dispatch 15–175 ms.
+
+**Observation for tuning:** unpinned test dispatch can go back to an
+old commit where the computer built but skipped a few tests (delorean
+got a 25-day-old main commit). A pinned `commit_sha`, which is what
+`install_and_test best` will send, avoids this. If unpinned test
+dispatch turns out to matter, limit it to commits built in the last
+few days.
 
 ### Race conditions
 

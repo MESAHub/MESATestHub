@@ -55,7 +55,9 @@ Before doing non-trivial work, read the appropriate doc:
 - **[`docs/dispatcher-and-claims.md`](docs/dispatcher-and-claims.md)**
   — dispatcher API + `claims` model. Phases A (schema + CI flag
   parsing) and B (claims endpoint, sweeper, claims as the
-  "pending" signal) are merged; **Phase C (dispatcher endpoint) is
+  "pending" signal) are merged. Phase C (`POST /api/v1/dispatch`,
+  `WorkDispatcher` service, CI-request satisfaction tracking) is on
+  `feature-dispatcher-endpoint`; **Phase D (`mesa_test` client) is
   next**.
 When changes invalidate the plan, update the relevant doc in the same commit
 that makes the change.

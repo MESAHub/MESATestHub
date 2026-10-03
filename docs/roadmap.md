@@ -223,7 +223,8 @@ don't get lost.
   [`docs/dispatcher-and-claims.md`](dispatcher-and-claims.md).
   **Status:** Phases A (schema + CI flag parsing) and B (claims
   endpoint, sweeper, claims as the "pending" signal) merged in
-  May 2026. Phase C (dispatcher endpoint) is next.
+  May 2026. Phase C (dispatcher endpoint, `POST /api/v1/dispatch`)
+  implemented on `feature-dispatcher-endpoint`, Oct 2026.
 
 - **Adopt Solid Cache for `Rails.cache`.** Replace the
   `:memory_store` (`config/application.rb`) with Rails 8's
