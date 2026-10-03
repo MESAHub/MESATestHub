@@ -113,15 +113,7 @@ class SubmissionsController < ApplicationController
   end 
   
   def request_commit
-    submission_fail_authenticate and return nil unless submission_authenticated?
-
-    # make sure submission is from valid computer
-    @computer = @user.computers.includes(:user).find_by(
-      name: submitter_params[:computer])
-    if @computer.nil?
-      submission_fail_computer(@user, submitter_params[:computer])
-      return nil
-    end
+    return unless authenticate_submitter_and_computer
 
     branch = nil
     if request_commit_params[:branch]
@@ -210,16 +202,7 @@ class SubmissionsController < ApplicationController
   end
 
   def authenticate_submission
-    # first make sure we're authenticated to even do a submission
-    submission_fail_authenticate and return nil unless submission_authenticated?
-
-    # make sure submission is from valid computer
-    @computer = @user.computers.includes(:user).find_by(
-      name: submitter_params[:computer])
-    if @computer.nil?
-      submission_fail_computer(@user, submitter_params[:computer])
-      return nil
-    end
+    return nil unless authenticate_submitter_and_computer
 
     # commit should already exist in database if git webhooks are working 
     # properly. No need to auto-populate
@@ -233,6 +216,34 @@ class SubmissionsController < ApplicationController
     submission_fail_commit(commit_params[:sha]) and return nil unless @commit
 
     # we got this far, so return true to indicate everything is fine
+    true
+  end
+
+  # Sets @user and @computer, or renders a failure and returns false.
+  # A per-computer API key (Authorization: Bearer) identifies the
+  # computer by itself; without one, fall back to the legacy
+  # email + password + computer name in the `submitter:` block.
+  def authenticate_submitter_and_computer
+    case api_key_computer
+    when false then return render_invalid_api_key
+    when Computer
+      named = submitter_params[:computer]
+      return render_api_key_computer_mismatch(named) if api_key_computer_mismatch?(named)
+      @computer = api_key_computer
+      @user = @computer.user
+      return true
+    end
+
+    # first make sure we're authenticated to even do a submission
+    submission_fail_authenticate and return false unless submission_authenticated?
+
+    # make sure submission is from valid computer
+    @computer = @user.computers.includes(:user).find_by(
+      name: submitter_params[:computer])
+    if @computer.nil?
+      submission_fail_computer(@user, submitter_params[:computer])
+      return false
+    end
     true
   end
 
@@ -276,9 +287,11 @@ class SubmissionsController < ApplicationController
     render json: errors.to_json, status: :unprocessable_content
   end
 
+  # Optional: a request authenticated by API key may omit the
+  # `submitter:` block (or send just `platform_version`).
   def submitter_params
-    params.require(:submitter).permit(:email, :password, :computer,
-                                      :platform_version)
+    params.fetch(:submitter, {}).permit(:email, :password, :computer,
+                                        :platform_version)
   end
 
   def commit_params

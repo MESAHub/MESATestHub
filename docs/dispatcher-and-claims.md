@@ -258,13 +258,15 @@ is unambiguous for both claims and dispatch.
 
 ## API surface
 
-All three endpoints authenticate the same way as the legacy
-submissions API: a `submitter:` hash with `email`, `password`, and
-`computer`. The password is bcrypt-checked against the user, and
-the computer has to belong to that user. Auth failures return 422
-with `{ "error": ... }`, the same shape the submissions endpoint
-uses. `mesa_test` already stores these credentials, so it needs no
-new config.
+All three endpoints accept a per-computer API key in
+`Authorization: Bearer …` ([`api-keys.md`](api-keys.md)). With a key,
+the `submitter:` block is optional. They also still accept the legacy
+`submitter:` hash with `email`, `password`, and `computer`: the
+password is bcrypt-checked against the user, and the computer has to
+belong to that user. Password failures return 422 with
+`{ "error": ... }`, the same shape the submissions endpoint uses. An
+unknown key returns 401. Because claims are per test, `/api/v1/` is
+exempt from the generic per-IP throttles, like `/submissions`.
 
 ### `POST /api/v1/dispatch`
 

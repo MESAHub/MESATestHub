@@ -26,10 +26,22 @@ class Rack::Attack
     req.session[:user_id].present?
   end
 
+  # Same treatment for clients holding a valid per-computer API key
+  # (docs/api-keys.md): they're identified, so per-IP throttles only
+  # get in the way — e.g. `mesa_test search` from a cluster's shared
+  # NAT. One indexed lookup on the key's digest; an unknown key isn't
+  # safelisted and is refused by the controller.
+  safelist('allow valid API keys') do |req|
+    key = req.get_header('HTTP_AUTHORIZATION').to_s[/\ABearer\s+(\S+)\s*\z/i, 1]
+    key.present? && Computer.find_by_api_key(key).present?
+  end
+
   # The test-client submission API authenticates via posted
   # credentials (submitter[:email] + submitter[:password], bcrypt-
   # verified in SubmissionsController), NOT a browser session — so the
-  # session safelist above can never see it. A computer running the
+  # session safelist above can never see it. Clients still on
+  # passwords hit the same wall on /api/v1/ (claims are per test, just
+  # like submissions), so those paths count too. A computer running the
   # MESA suite submits one POST per test case (hundreds in a burst),
   # which blew past the generic 100-per-window IP throttles even though
   # every request carries valid credentials. Treat these paths
@@ -38,7 +50,7 @@ class Rack::Attack
   # control is the credential + computer-ownership check in the
   # controller, not an IP throttle.
   SUBMISSION_PATH = lambda do |req|
-    req.path.start_with?('/submissions')
+    req.path.start_with?('/submissions', '/api/v1/')
   end
 
   # Block requests from specific IPs that are known bad actors

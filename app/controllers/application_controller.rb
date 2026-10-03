@@ -1,4 +1,6 @@
 class ApplicationController < ActionController::Base
+  include ApiKeyAuthentication
+
   protect_from_forgery with: :exception
   before_action :authorize_user
   # before_action :set_all_test_cases

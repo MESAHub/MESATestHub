@@ -42,6 +42,53 @@ class Computer < ApplicationRecord
   }
 
   PLATFORMS = %w[macOS linux].freeze
+
+  # ---------------------------------------------------------- API keys
+  #
+  # One key per computer (docs/api-keys.md). mesa_test sends it as
+  # `Authorization: Bearer <key>`; the key alone identifies the
+  # computer, and through it the user. Only a SHA-256 digest is
+  # stored — the key is 32 random bytes, so a fast hash is safe and
+  # lookup is a single indexed equality match, no per-request bcrypt.
+  API_KEY_PREFIX = 'mth_'.freeze
+  # Don't write `api_key_last_used_at` on every one of a run's
+  # hundreds of submissions.
+  API_KEY_TOUCH_INTERVAL = 5.minutes
+
+  def self.api_key_digest(key)
+    Digest::SHA256.hexdigest(key.to_s)
+  end
+
+  # The computer a key belongs to, or nil.
+  def self.find_by_api_key(key)
+    return nil unless key.to_s.start_with?(API_KEY_PREFIX)
+    find_by(api_key_digest: api_key_digest(key))
+  end
+
+  # Replace any existing key with a fresh one and return the plaintext.
+  # This is the only time the plaintext exists server-side.
+  def generate_api_key!
+    key = API_KEY_PREFIX + SecureRandom.urlsafe_base64(32)
+    update_columns(api_key_digest: self.class.api_key_digest(key),
+                   api_key_prefix: key[0, API_KEY_PREFIX.length + 6],
+                   api_key_created_at: Time.current,
+                   api_key_last_used_at: nil)
+    key
+  end
+
+  def revoke_api_key!
+    update_columns(api_key_digest: nil, api_key_prefix: nil,
+                   api_key_created_at: nil, api_key_last_used_at: nil)
+  end
+
+  def api_key?
+    api_key_digest.present?
+  end
+
+  def touch_api_key_last_used!(now = Time.current)
+    return if api_key_last_used_at && api_key_last_used_at > now - API_KEY_TOUCH_INTERVAL
+    update_columns(api_key_last_used_at: now)
+  end
   validates_inclusion_of :platform, in: PLATFORMS
 
   def user_name

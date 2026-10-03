@@ -1,5 +1,5 @@
 class ComputersController < ApplicationController
-  layout "modern", only: %i[index index_all show new create edit update]
+  layout "modern", only: %i[index index_all show new create edit update create_api_key]
 
   # Hard ceiling on bulk submission deletion. The `destroy_all` path
   # instantiates each Submission and runs its `after_commit
@@ -10,11 +10,14 @@ class ComputersController < ApplicationController
   BULK_DESTROY_LIMIT = 500
 
   before_action :set_user, only: %i[show new create index edit update destroy
-                                    destroy_submissions]
+                                    destroy_submissions create_api_key
+                                    destroy_api_key]
   before_action :set_computer, only: %i[show edit update destroy
-                                        destroy_submissions]
+                                        destroy_submissions create_api_key
+                                        destroy_api_key]
   before_action :authorize_self_or_admin, only: %i[new create edit update
-                                                   destroy destroy_submissions]
+                                                   destroy destroy_submissions
+                                                   create_api_key destroy_api_key]
   before_action :authorize_admin, only: %i[index_all]
 
   skip_before_action :authorize_user, only: [:check_computer]
@@ -204,9 +207,33 @@ class ComputersController < ApplicationController
     end
   end
 
+  # POST /users/:user_id/computers/:id/api_key
+  #
+  # Generates (or replaces) the computer's API key and shows it once.
+  # Rendered directly rather than redirected so the plaintext never
+  # rides in the flash/session cookie; the button opts out of Turbo
+  # so a 200 render after a POST is fine.
+  def create_api_key
+    @api_key = @computer.generate_api_key!
+  end
+
+  # DELETE /users/:user_id/computers/:id/api_key
+  def destroy_api_key
+    @computer.revoke_api_key!
+    redirect_to user_computer_path(@user, @computer),
+                notice: "Revoked #{@computer.name}'s API key. Clients using it " \
+                        'will be refused until they get a new one.'
+  end
+
   # POST /check_computer.json
   # pretty dumb for html, but it should work, I guess
+  #
+  # mesa_test's setup wizard calls this to validate credentials. With
+  # an API key (Authorization: Bearer) the key alone is checked;
+  # otherwise email + password + computer name, as always.
   def check_computer
+    return check_computer_api_key if request.format.json? && !api_key_computer.nil?
+
     user = User.find_by(email: check_computer_params[:email])
     if user && user.authenticate(check_computer_params[:password])
       if user.computers.find_by(name: check_computer_params[:computer_name])
@@ -258,6 +285,20 @@ class ComputersController < ApplicationController
   end
 
   private
+
+  def check_computer_api_key
+    named = check_computer_params[:computer_name]
+    if api_key_computer == false
+      render json: { valid: false, message: 'API key is not valid.' }
+    elsif api_key_computer_mismatch?(named)
+      render json: { valid: false,
+                     message: "API key is valid, but it belongs to #{api_key_computer.name}, " \
+                              "not #{named}." }
+    else
+      render json: { valid: true, computer: api_key_computer.name,
+                     message: "API key accepted for #{api_key_computer.name}" }
+    end
+  end
 
   # Use callbacks to share common setup or constraints between actions.
   def set_computer
