@@ -676,6 +676,39 @@ class Commit < ApplicationRecord
     pending_claims.loaded? ? pending_claims.any? : pending_claims.exists?
   end
 
+  # How each CI-requested configuration shows up in a run, and the
+  # column recording when the request was met. Instance flags come
+  # straight from MESA's test output; converge has no instance-level
+  # signal, so it relies on the claims-aware client's `use_converge`.
+  CI_SATISFACTION = {
+    full_inlists_satisfied_at: [:wants_full_inlists, { test_instances: { run_optional: true } }],
+    fpe_satisfied_at:          [:wants_fpe,          { test_instances: { fpe_checks: true } }],
+    converge_satisfied_at:     [:wants_converge,     { submissions: { use_converge: true } }]
+  }.freeze
+
+  # Stamp `<config>_satisfied_at` once a single computer has a result,
+  # run that way, for every test case on this commit — pass or fail;
+  # a failing full-inlists run still answers the request. Called from
+  # Submission's after_create_commit. Only ever sets the columns, never
+  # clears them. No-op for commits that request nothing. The
+  # dispatcher stops boosting a commit once its request is met (see
+  # "Configurations" in docs/dispatcher-and-claims.md).
+  def refresh_ci_satisfaction!(at: Time.current)
+    pending = CI_SATISFACTION.select { |col, (wants, _)| self[wants] && self[col].nil? }
+    return if pending.empty?
+
+    total = test_case_commits.count
+    return if total.zero?
+
+    updates = pending.each_with_object({}) do |(col, (_, condition)), out|
+      covered = TestInstance.where(commit_id: id).left_joins(:submission).where(condition)
+                            .group(:computer_id).distinct.count(:test_case_commit_id)
+                            .values.max || 0
+      out[col] = at if covered >= total
+    end
+    update_columns(updates) if updates.any?
+  end
+
 
   # make this stuff searchable directly on the database without having
   # to summon all the test case commits. This should be called whenever

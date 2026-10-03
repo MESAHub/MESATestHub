@@ -9,7 +9,7 @@
 # callback on Submission when a submission arrives carrying the
 # claim's id; the same callback handles the `expired → fulfilled`
 # transition for legitimately-late submissions. Pending claims past
-# `expires_at` get swept to `expired` by `rake claims:sweep`.
+# `expires_at` get swept to `expired` by `ClaimSweeperJob`.
 #
 # The CHECK constraint `claims_scope_fk_coherence` enforces the
 # scope/TCC pairing at the database level; the model validation is
@@ -58,7 +58,7 @@ class Claim < ApplicationRecord
   # `expires_at` has passed. Bulk UPDATE backed by
   # `index_claims_on_expires_at_pending` (the partial index on
   # `expires_at` scoped to `status = 'pending'`). Driven by
-  # `rake claims:sweep` from Railway cron; safe to call any time,
+  # `ClaimSweeperJob` (Solid Queue, every 5 min); safe to call any time,
   # including in-process from a spec.
   #
   # Returns the number of rows transitioned. Does NOT touch

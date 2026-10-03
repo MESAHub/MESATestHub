@@ -23,6 +23,10 @@ class Submission < ApplicationRecord
   # are both legal; `Claim#fulfill!` handles them uniformly.
   after_create_commit :fulfill_claim, if: -> { claim_id.present? }
 
+  # Phase C: a new run may complete a `[ci optional]` / `[ci fpe]` /
+  # `[ci converge]` request on its commit (Commit#refresh_ci_satisfaction!).
+  after_create_commit :refresh_ci_satisfaction
+
   paginates_per 25
 
   # Inclusive of both endpoints. Either bound is optional — pass nil
@@ -112,6 +116,10 @@ class Submission < ApplicationRecord
   # safe-nav needed.
   def fulfill_claim
     claim.fulfill!
+  end
+
+  def refresh_ci_satisfaction
+    commit.refresh_ci_satisfaction!
   end
 
   # On destroy, capture the IDs of the TCCs this submission's

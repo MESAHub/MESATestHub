@@ -24,15 +24,15 @@ Rails.application.routes.draw do
   get 'submissions/request_commit.json', to: 'submissions#request_commit'
   resources :submissions, only: [:create, :show], defaults: { formats: :json }
 
-  # Phase B of the dispatcher + claims feature
-  # (docs/dispatcher-and-claims.md). The dispatcher endpoint that
-  # *recommends* what to claim lands in Phase C and gets mounted
-  # alongside this one. New surface lives under /api/v1/ rather
+  # Dispatcher + claims (docs/dispatcher-and-claims.md): `dispatch`
+  # recommends what to work on next (read-only); `claims` registers
+  # the intent to do it. New surface lives under /api/v1/ rather
   # than the legacy flat namespace; existing endpoints stay where
   # they are to preserve the mesa_test contract.
   namespace :api do
     namespace :v1 do
       resources :claims, only: [:create], defaults: { format: :json }
+      post 'dispatch', to: 'dispatch#create', defaults: { format: :json }
     end
   end
 

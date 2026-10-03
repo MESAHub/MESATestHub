@@ -223,7 +223,58 @@ don't get lost.
   [`docs/dispatcher-and-claims.md`](dispatcher-and-claims.md).
   **Status:** Phases A (schema + CI flag parsing) and B (claims
   endpoint, sweeper, claims as the "pending" signal) merged in
-  May 2026. Phase C (dispatcher endpoint) is next.
+  May 2026. Phase C (dispatcher endpoint, `POST /api/v1/dispatch`)
+  merged Oct 2026. Phase D (`mesa_test` client) is next.
+
+- **Per-computer API keys** (decided Oct 2026; ship alongside
+  dispatcher Phase D). Replace the email + password that `mesa_test`
+  sends with every submission, claim, and dispatch.
+  - **Why:**
+    - That password sits in plain text in `~/.mesa_test.yml`, often
+      on shared clusters, and it's the same password that logs into
+      the website, admin rights included.
+    - It's verified with bcrypt on every request, and a computer sends
+      hundreds of one-test submissions per run.
+    - There's no way to revoke a single machine.
+  - **Shape:**
+    - One token per `Computer`, so the token identifies the machine
+      and the `computer` field goes away.
+    - Store a SHA-256 digest plus a short lookup prefix and
+      `last_used_at`. Tokens are high-entropy, so no bcrypt.
+    - Sent as `Authorization: Bearer …`.
+    - Generate and revoke on the computer's page; show the token once.
+    - rack-attack keys the submission throttles on the token instead
+      of the IP address.
+  - **Migration:**
+    - Accept both tokens and passwords for a deprecation window, then
+      drop password auth from the API.
+    - The dispatch and claims endpoints have no clients yet, so they
+      can accept tokens from day one.
+    - Release it in the same `mesa_test` version as the claims client,
+      so users re-configure once.
+    - The same token later authorizes log uploads (next item).
+
+- **Build and test logs in object storage** (after API keys).
+  Today `mesa_test` uploads failure logs to a separate logs server
+  (`mesa-logs.flatironinstitute.org`) with its own, manually issued
+  `logs_token`.
+  - **Plan:** move logs into Railway's S3-compatible buckets (verify
+    the S3 compatibility first).
+    - The client asks the testhub for a presigned upload URL,
+      authenticating with its computer token, and uploads straight to
+      the bucket, so big logs never pass through Puma.
+    - The testhub records the object key on the submission or test
+      instance.
+    - Logs get linked from the matrix popover and the test-on-commit
+      page.
+    - A bucket lifecycle rule expires old logs (e.g. failure logs
+      after 90 days).
+  - **Open questions:**
+    - How large the logs typically are, and so what storage will cost.
+    - Whether anything besides `mesa_test` uses the Flatiron server.
+    - Whether to go through Active Storage or plain S3 calls. If
+      Active Storage, the CLAUDE.md note that its CVEs are unreachable
+      stops being true, and its security updates start to matter.
 
 - **Adopt Solid Cache for `Rails.cache`.** Replace the
   `:memory_store` (`config/application.rb`) with Rails 8's
