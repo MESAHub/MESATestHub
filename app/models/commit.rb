@@ -676,14 +676,23 @@ class Commit < ApplicationRecord
     pending_claims.loaded? ? pending_claims.any? : pending_claims.exists?
   end
 
-  # How each CI-requested configuration shows up in a run, and the
-  # column recording when the request was met. Instance flags come
-  # straight from MESA's test output; converge has no instance-level
-  # signal, so it relies on the claims-aware client's `use_converge`.
+  # How each CI-requested configuration shows up in a run (SQL over
+  # test_instances), and the column recording when the request was
+  # met. All three come straight from MESA's own testhub.yml, which
+  # each_test_run writes for every test: `run_optional` (unset
+  # MESA_SKIP_OPTIONAL), `fpe_checks` (MESA_FPE_CHECKS_ON), and
+  # `resolution_factor` (MESA_TEST_SUITE_RESOLUTION_FACTOR, which is
+  # what `[ci converge]` sets — historically 0.5–0.9).
+  CI_RUN_CONDITIONS = {
+    full_inlists: 'test_instances.run_optional = TRUE',
+    fpe:          'test_instances.fpe_checks = TRUE',
+    converge:     'COALESCE(test_instances.resolution_factor, 1) <> 1'
+  }.freeze
+
   CI_SATISFACTION = {
-    full_inlists_satisfied_at: [:wants_full_inlists, { test_instances: { run_optional: true } }],
-    fpe_satisfied_at:          [:wants_fpe,          { test_instances: { fpe_checks: true } }],
-    converge_satisfied_at:     [:wants_converge,     { submissions: { use_converge: true } }]
+    full_inlists_satisfied_at: [:wants_full_inlists, CI_RUN_CONDITIONS[:full_inlists]],
+    fpe_satisfied_at:          [:wants_fpe,          CI_RUN_CONDITIONS[:fpe]],
+    converge_satisfied_at:     [:wants_converge,     CI_RUN_CONDITIONS[:converge]]
   }.freeze
 
   # Stamp `<config>_satisfied_at` once a single computer has a result,
@@ -701,7 +710,7 @@ class Commit < ApplicationRecord
     return if total.zero?
 
     updates = pending.each_with_object({}) do |(col, (_, condition)), out|
-      covered = TestInstance.where(commit_id: id).left_joins(:submission).where(condition)
+      covered = TestInstance.where(commit_id: id).where(condition)
                             .group(:computer_id).distinct.count(:test_case_commit_id)
                             .values.max || 0
       out[col] = at if covered >= total

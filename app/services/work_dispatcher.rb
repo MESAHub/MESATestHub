@@ -109,7 +109,7 @@ class WorkDispatcher
       pick = best_test_on(candidate.commit)
       next unless pick
 
-      tcc, needed, coverage = pick
+      tcc, needed, coverage, = pick
       reasons = candidate.reasons.dup
       reasons += needed.map { |config| "#{CONFIGS[config][:tag]} not yet run for this test" }
       reasons << coverage_reason(coverage, 'this test')
@@ -132,16 +132,15 @@ class WorkDispatcher
   end
 
   # The most-needed eligible test on `commit` for this computer, as
-  # [tcc, needed_configs, other_computer_count], or nil when there is
-  # nothing left for it to run there.
+  # [tcc, configs_to_run_now, other_computer_count, configs_outstanding],
+  # or nil when there is nothing left for it to run there.
   def best_test_on(commit)
     tccs = commit.test_case_commits.includes(:test_case).to_a
     return nil if tccs.empty?
 
     runs = TestInstance.where(commit_id: commit.id)
-                       .left_joins(:submission)
-                       .pluck(:test_case_commit_id, :computer_id, :run_optional,
-                              :fpe_checks, 'submissions.use_converge')
+                       .pluck(:test_case_commit_id, :computer_id,
+                              *CONFIGS.keys.map { |c| Arel.sql(Commit::CI_RUN_CONDITIONS[c]) })
                        .group_by(&:first)
     claims = Claim.pending.where(commit_id: commit.id, scope: 'test')
                   .pluck(:test_case_commit_id, :computer_id, :use_full_inlists,
@@ -166,11 +165,11 @@ class WorkDispatcher
 
       coverage = ((tcc_runs.map { |row| row[1] } | tcc_claims.map { |row| row[1] }) -
                   [@computer.id]).size
-      [tcc, needed, coverage]
+      [tcc, one_run_of(needed), coverage, needed.size]
     end
 
-    ranked.min_by do |tcc, needed, coverage|
-      [-needed.size, coverage, tcc.test_case.module.to_s, tcc.test_case.name.to_s]
+    ranked.min_by do |tcc, _asked, coverage, outstanding|
+      [-outstanding, coverage, tcc.test_case.module.to_s, tcc.test_case.name.to_s]
     end
   end
 
@@ -253,6 +252,16 @@ class WorkDispatcher
   def coverage_penalty(count)
     return 0 if count.zero?
     FIRST_COVERAGE_PENALTY + MORE_COVERAGE_PENALTY * (count - 1)
+  end
+
+  # What to ask for in a single test run, given the configurations a test
+  # still needs: FPE (a property of the whole build, so it costs nothing
+  # extra) plus at most one run-time mode. A full-inlists run at a
+  # converge resolution factor answers neither request cleanly — and is
+  # excluded from checksum comparison — so a test needing both gets two
+  # runs, on successive dispatches.
+  def one_run_of(needed)
+    needed.select { |c| c == :fpe } + needed.reject { |c| c == :fpe }.first(1)
   end
 
   # The commit asks for `config` and this computer can do it.

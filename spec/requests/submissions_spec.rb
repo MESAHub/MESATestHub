@@ -204,7 +204,9 @@ RSpec.describe 'Submissions API', type: :request do
       expect(claim.fulfilled_at).to be_within(2.seconds).of(Time.current)
     end
 
-    it 'is a no-op when the submission carries no claim block (legacy client)' do
+    it "fulfills this computer's open build claim without a claim block" do
+      # Clients needn't track claim ids: a submission answers any claim
+      # this computer holds on this commit (Submission#fulfill_claims).
       pre_claim = create(:claim, computer: computer, commit: commit)
 
       post '/submissions/create.json', params: {
@@ -213,7 +215,7 @@ RSpec.describe 'Submissions API', type: :request do
       }, as: :json
 
       expect(response).to have_http_status(:created)
-      expect(pre_claim.reload.status).to eq('pending')
+      expect(pre_claim.reload.status).to eq('fulfilled')
       expect(Submission.last.claim_id).to be_nil
     end
 

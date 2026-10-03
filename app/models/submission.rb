@@ -15,13 +15,15 @@ class Submission < ApplicationRecord
   before_destroy :remember_affected_tcc_ids, prepend: true
   after_commit :update_commit
 
-  # Phase B of docs/dispatcher-and-claims.md. When a submission
-  # arrives carrying a claim_id (mesa_test ≥ vNEXT), flip the
-  # matching claim to `fulfilled`. Fires only on the create commit
-  # so a subsequent update / destroy doesn't trigger a stale write.
-  # The `pending → fulfilled` and `expired → fulfilled` transitions
-  # are both legal; `Claim#fulfill!` handles them uniformly.
-  after_create_commit :fulfill_claim, if: -> { claim_id.present? }
+  # Claims fulfilled by this submission (docs/dispatcher-and-claims.md,
+  # "Fulfillment"): the one named by `claim_id`, if any, plus every
+  # pending or expired claim this computer holds on this commit that
+  # the submission answers — build claims by any submission (reporting
+  # a build, or test results, which imply one), test claims by an
+  # instance of their test. Matching means clients needn't track claim
+  # ids at all. Fires only on the create commit so a later update /
+  # destroy doesn't trigger a stale write.
+  after_create_commit :fulfill_claims
 
   # Phase C: a new run may complete a `[ci optional]` / `[ci fpe]` /
   # `[ci converge]` request on its commit (Commit#refresh_ci_satisfaction!).
@@ -110,12 +112,18 @@ class Submission < ApplicationRecord
 
   private
 
-  # Flip the referenced claim to `fulfilled`. Both the
-  # `if: -> { claim_id.present? }` guard on the callback and the
-  # FK to `claims.id` guarantee the association resolves — no
-  # safe-nav needed.
-  def fulfill_claim
-    claim.fulfill!
+  def fulfill_claims
+    now = Time.current
+    open = Claim.where(computer_id: computer_id, commit_id: commit_id,
+                       status: %w[pending expired])
+    tcc_ids = test_instances.distinct.pluck(:test_case_commit_id)
+    matched = open.where(scope: 'build')
+                  .or(open.where(scope: 'test', test_case_commit_id: tcc_ids))
+                  .pluck(:id)
+    ids = (matched + [claim_id]).compact.uniq
+    return if ids.empty?
+
+    Claim.where(id: ids).update_all(status: 'fulfilled', fulfilled_at: now, updated_at: now)
   end
 
   def refresh_ci_satisfaction

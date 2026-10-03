@@ -9,9 +9,8 @@ RSpec.describe 'Commit CI-request satisfaction' do
   let(:beta)  { create(:computer) }
 
   # One per-test submission, as current clients send them.
-  def run!(tcc, on:, use_converge: false, **attrs)
-    sub = Submission.new(commit: commit, computer: on, entire: false, empty: false,
-                         use_converge: use_converge)
+  def run!(tcc, on:, **attrs)
+    sub = Submission.new(commit: commit, computer: on, entire: false, empty: false)
     sub.test_instances.build(attributes_for(:test_instance).merge(
       commit: commit, computer: on, test_case: tcc.test_case, **attrs
     ))
@@ -33,9 +32,9 @@ RSpec.describe 'Commit CI-request satisfaction' do
     expect(commit.reload.fpe_satisfied_at).to be_nil
   end
 
-  it 'reads converge from the submission, which has no instance-level flag' do
-    run!(tccs[0], on: alpha, use_converge: true)
-    run!(tccs[1], on: alpha, use_converge: true)
+  it 'reads converge from a non-default resolution_factor' do
+    run!(tccs[0], on: alpha, resolution_factor: 0.8)
+    run!(tccs[1], on: alpha, resolution_factor: 0.8)
     expect(commit.reload.converge_satisfied_at).to be_present
   end
 
