@@ -91,7 +91,11 @@ class WorkDispatcher
     best = score_commits(ids).first
     return nil unless best
 
-    flags = CONFIGS.keys.index_with { |config| commit_wants?(best.commit, config) }
+    # The build's modes apply to a whole-suite run (e.g. cluster array jobs
+    # running `mesa_test test N`), so the same one-mode-per-run rule as test
+    # dispatch: FPE plus at most one run-time mode.
+    wanted = one_run_of(CONFIGS.keys.select { |config| commit_wants?(best.commit, config) })
+    flags = CONFIGS.keys.index_with { |config| wanted.include?(config) }
     Recommendation.new(commit: best.commit, scope: 'build', test_case_commit: nil,
                        flags: flags, score: best.score.round(2), reasons: best.reasons)
   end
