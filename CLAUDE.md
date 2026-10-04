@@ -445,6 +445,9 @@ helper or partial exists.
   fires it via the `MorningMailerJob` recurring task instead)
 - `claims:sweep` — expire stale pending claims (production runs
   `ClaimSweeperJob` every 5 min via Solid Queue)
+- `dev:client_fixture:{setup,report,teardown}` — throwaway user /
+  computer / commit in the dev DB for driving a local `mesa_test`
+  end to end (development only; see `docs/dispatcher-and-claims.md`)
 - `db:pull_prod` — sync local dev DB from Railway production
 - `update_pulls:update` — GitHub PR data
 - `compute_delays`

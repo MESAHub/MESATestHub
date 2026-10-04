@@ -613,7 +613,13 @@ score =
 ```
 
 Ties go to the newer `commit_time`, then the SHA. The top scorer is
-returned with `use_x = wants_x && !x_satisfied && can_x`.
+returned with flags from the configurations where
+`wants_x && !x_satisfied && can_x`, cut down to FPE plus **at most one
+run-time mode** (full inlists before converge). That's the same rule
+as test dispatch. A build's modes apply to whole-suite runs, such as
+cluster array jobs running `mesa_test test N` against the modes
+`mesa_test install best` recorded, so asking for two at once would
+produce combined runs that answer neither request.
 
 The coverage penalty shrinks after the first computer on purpose
 (decided Oct 2026). We want at least two computers on every main
@@ -836,6 +842,27 @@ plus a small testhub PR (`feature-claims-client-support`).
 - The build TTL goes from 15 minutes to 1 hour.
 
 **Client side:** see [`mesa_test` client changes](#mesa_test-client-changes).
+
+Later client decisions (Oct 2026):
+- `install` records the build's run modes in `$MESA_DIR/testhub.yml`
+  (a `mesa_test_run_modes:` block after MESA's compiler keys). `test`
+  and `submit` read it, so array jobs need no extra flags.
+- Precedence: an explicit flag on `test`, then the recorded mode, then
+  the shell's environment. FPE always follows the build.
+- The flags are `--skip-optional`, `--fpe`, `--converge`, each with a
+  `--no-` form. With `best` they state willingness (capabilities), and
+  unset falls back to the config's `capabilities`.
+- When dispatch has nothing, the client exits with status 3.
+
+**Faking the client against a dev server:** `bin/rails
+dev:client_fixture:setup SHA=… TESTS=mod/name,… WANTS=optional,…`
+creates a throwaway user, computer (with API key), and commit on main
+in the development database. `report` prints its claims, runs, and
+CI-request state as JSON, and `teardown` removes it all
+([`lib/tasks/client_fixture.rake`](../lib/tasks/client_fixture.rake);
+refuses to run outside development). mesa_test's `dev/e2e` harness
+drives these against a fake MESA tree, with `MESATESTHUB_URL` pointing
+the client at the dev server.
 Two simplifications from the original sketch:
 - Because fulfillment is by matching, the client keeps no claim-id
   state on disk, and `claim_strategy` isn't needed for V1.

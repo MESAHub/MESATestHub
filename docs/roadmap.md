@@ -256,6 +256,21 @@ don't get lost.
       so users re-configure once.
     - The same token later authorizes log uploads (next item).
 
+- **A richer JSON API for querying the hub** (noted Oct 2026).
+  Today's machine-readable surface is narrow: test-instance
+  search/count plus the client endpoints.
+  - **The idea:** a token-authenticated read API for commits, branch
+    histories, test-case histories over time, per-commit matrices, and
+    checksum/failure trends. Scripts and agentic AI tools could then
+    answer questions directly, without scraping pages.
+  - **Auth:** per-computer API keys already exist. This probably wants
+    *user*-level read tokens too, since an analysis agent isn't a test
+    computer.
+  - **Where it lives:** mostly in the testhub itself (versioned under
+    `/api/v1/`, documented). `mesa_test` should only grow wrappers where
+    a CLI genuinely helps. Keep the client narrow, so API growth doesn't
+    force users to update.
+
 - **Build and test logs in object storage** (after API keys).
   Today `mesa_test` uploads failure logs to a separate logs server
   (`mesa-logs.flatironinstitute.org`) with its own, manually issued

@@ -131,6 +131,13 @@ RSpec.describe WorkDispatcher do
       expect(rec.reasons).to include('[ci fpe] not yet satisfied')
     end
 
+    it 'asks a build for FPE plus at most one run-time mode' do
+      commit_on(main, age: 1.hour, wants_full_inlists: true, wants_fpe: true, wants_converge: true)
+
+      rec = dispatch(full_inlists: true, fpe: true, converge: true)
+      expect(rec.flags).to eq(full_inlists: true, fpe: true, converge: false)
+    end
+
     it 'stops boosting a request once it is satisfied' do
       plain = commit_on(main, age: 1.hour)
       commit_on(main, age: 2.days, wants_full_inlists: true,
