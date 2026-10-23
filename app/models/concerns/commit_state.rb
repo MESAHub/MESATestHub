@@ -545,8 +545,8 @@ module CommitState
   # The aggregation is per-(test_case, computer) over test_instance
   # rows. If no instance exists for a (test_case, computer) pair but
   # the computer DID submit:
-  #   * compiled → :pending or :not_run (see _unrun_cell_status: claims
-  #     decide when the computer uses them; otherwise recent activity)
+  #   * compiled → :pending if the computer holds an open claim on the
+  #     test, else :not_run (see _unrun_cell_status)
   #   * !compiled → :no_build
   # If no submissions exist, the matrix has no row for that computer.
   # The commit-detail controller calls per_computer_summary,
@@ -728,36 +728,22 @@ module CommitState
     matrix
   end
 
-  # A built computer with no result for a test: is the result on its way
-  # (:pending) or not coming (:not_run)?
-  #
-  #   1. It holds an open claim on the test → :pending.
-  #   2. It has claimed anything on this commit → :not_run. It speaks the
-  #      claims protocol, so an unclaimed test isn't in flight. (Before
-  #      claims, a build report alone made every test look pending.)
-  #   3. It has never claimed here (an older mesa_test) → fall back to the
-  #      old inference, but only while its last submission is recent;
-  #      after UNCLAIMED_PENDING_WINDOW the missing results aren't coming.
-  def _unrun_cell_status(tcc, computer_id, submissions, claims)
-    return :pending if claims[:open_tests].include?([computer_id, tcc.id])
-    return :not_run if claims[:claiming_computers].include?(computer_id)
-
-    last_seen = submissions.map(&:created_at).compact.max
-    last_seen && last_seen > UNCLAIMED_PENDING_WINDOW.ago ? :pending : :not_run
+  # A built computer with no result for a test is :pending only while it
+  # holds an open claim on that test -- a promise the result is coming.
+  # Anything else is :not_run, whichever client it uses. (Before claims,
+  # a build report alone made every unreported test look pending, with
+  # nothing behind it.)
+  def _unrun_cell_status(tcc, computer_id, claims)
+    claims[:open_tests].include?([computer_id, tcc.id]) ? :pending : :not_run
   end
 
-  # Claims on this commit, indexed for _unrun_cell_status: which computers
-  # have claimed anything here (any status), and which (computer, TCC)
-  # pairs hold an open test claim. One query per commit.
+  # (computer_id, TCC id) pairs holding an open test claim on this commit,
+  # for _unrun_cell_status. One query per commit.
   def _claim_index
-    @_claim_index ||= begin
-      rows = Claim.where(commit_id: id).pluck(:computer_id, :test_case_commit_id, :scope, :status)
-      {
-        claiming_computers: rows.map(&:first).to_set,
-        open_tests: rows.select { |_c, tcc_id, scope, status| scope == 'test' && status == 'pending' && tcc_id }
-                        .map { |c, tcc_id, _s, _st| [c, tcc_id] }.to_set
-      }
-    end
+    @_claim_index ||= {
+      open_tests: Claim.pending.where(commit_id: id, scope: 'test')
+                       .pluck(:computer_id, :test_case_commit_id).to_set
+    }
   end
 
   # Cached for the lifetime of the Commit instance. Same eager-loaded
@@ -845,11 +831,6 @@ module CommitState
   # to `instances`); split matrix columns pass it so a failure in the
   # FPE column can still be judged against the same computer's
   # FPE-off run in another column.
-  # How long a computer that doesn't use claims (an older mesa_test) is
-  # assumed to still be working on a commit after its last submission:
-  # the same 12 hours a test claim lasts.
-  UNCLAIMED_PENDING_WINDOW = Claim::TTL_FOR_SCOPE.fetch('test')
-
   def _cell_for(tcc:, computer_id:, instances:, submissions:, fpe_context: nil, claims: nil)
     base_flags = { fpe: false, checksum: false, inlists_full: false, fpe_failure: false, fpe_likely: false }
 
@@ -857,7 +838,7 @@ module CommitState
       status =
         if submissions.empty? then :no_build
         elsif submissions.any? { |s| s.compiled == true }
-          _unrun_cell_status(tcc, computer_id, submissions, claims || _claim_index)
+          _unrun_cell_status(tcc, computer_id, claims || _claim_index)
         else :no_build
         end
       return { status: status, flags: base_flags }

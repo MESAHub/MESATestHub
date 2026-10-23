@@ -16,10 +16,11 @@ module MorningMailerHelper
                  style: 'background:#ede5ff; color:#5b21b6;' },
     mixed:     { label: 'Tests: Mixed',     klass: 'mesa-badge-mixed',
                  style: 'background:#fef6cf; color:#6b4900;' },
-    # `:untested` is `Commit#status = -1` — the rollup hasn't
-    # finalized (CI run in progress, or no rollup row yet). Renders
-    # in neutral gray so it doesn't masquerade as Passing.
-    untested:  { label: 'Tests: Pending',   klass: 'mesa-badge-skipped',
+    # `:untested` is `Commit#status = -1` — no test results yet.
+    # "Untested", not "Pending": pending promises results are coming,
+    # which only a claim can say. Neutral gray so it doesn't
+    # masquerade as Passing.
+    untested:  { label: 'Tests: Untested',  klass: 'mesa-badge-skipped',
                  style: 'background:#eceef2; color:#57606a;' }
   }.freeze
 

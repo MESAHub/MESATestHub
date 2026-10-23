@@ -430,8 +430,8 @@ RSpec.describe 'commit state aggregation' do
       expect(matrix[test_case_a.id][rusty.id][:status]).to eq(:pass)
     end
 
-    # A built computer with no result for a test: pending only if the
-    # result is plausibly on its way (CommitState#_unrun_cell_status).
+    # A built computer with no result for a test is pending only while it
+    # holds an open claim on that test (CommitState#_unrun_cell_status).
     describe 'built computer, no result for a test' do
       before do
         instance(test_case: test_case_a, computer: rusty) # rusty built + ran a
@@ -447,30 +447,29 @@ RSpec.describe 'commit state aggregation' do
         expect(cell_b).to eq(:pending)
       end
 
-      it "is :not_run when the computer uses claims but didn't claim that test" do
-        # Corvus, Oct 2026: claimed the build and two tests, submitted the
-        # build -- and every other test showed pending.
-        create(:claim, :fulfilled, computer: rusty, commit: commit)
+      it 'is :not_run without a claim, even right after a build report' do
+        # Corvus, Oct 2026: built main, claimed and ran two tests -- and
+        # every other test showed pending.
         expect(cell_b).to eq(:not_run)
       end
 
-      it 'is :not_run once its claim on that test has expired' do
+      it 'is :not_run when the claim was on a different test' do
+        create(:claim, :test_scope, computer: rusty, commit: commit, test_case_commit: tcc_for(test_case_c))
+        expect(cell_b).to eq(:not_run)
+      end
+
+      it "is :not_run when someone else's claim covers the test" do
+        create(:claim, :test_scope, computer: popeye, commit: commit, test_case_commit: tcc_for(test_case_b))
+        expect(cell_b).to eq(:not_run)
+      end
+
+      it 'is :not_run once its claim has expired' do
         create(:claim, :test_scope, :expired, computer: rusty, commit: commit,
                                               test_case_commit: tcc_for(test_case_b))
         expect(cell_b).to eq(:not_run)
       end
 
-      it 'stays :pending for a recently active computer that never claims (older mesa_test)' do
-        expect(cell_b).to eq(:pending)
-      end
-
-      it 'is :not_run for a non-claiming computer silent for longer than a test claim lasts' do
-        Submission.where(computer: rusty, commit: commit).update_all(created_at: 13.hours.ago)
-        expect(cell_b).to eq(:not_run)
-      end
-
       it "doesn't count :not_run cells as pending tests" do
-        create(:claim, :fulfilled, computer: rusty, commit: commit)
         state = commit.reload.commit_state
         expect(state.dig(:tests, :pending_tests)).to eq(0)
       end

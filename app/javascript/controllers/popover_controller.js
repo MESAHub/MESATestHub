@@ -218,8 +218,7 @@ export default class extends Controller {
       info.status === "fail" && flags.fpe_failure ? "text-fpe-soft-text" :
       info.status === "fail" ? "text-danger-soft-text" :
       info.status === "pending" ? "text-info-soft-text" :
-      info.status === "not_run" ? "text-fg-muted" :
-      info.status === "no_build" ? "text-buildfail-soft-text" :
+      info.status === "not_run" || info.status === "no_build" ? "text-fg-muted" :
       flags.checksum ? "text-checksum-soft-text" :
       "text-success-soft-text"
     const headline =
@@ -227,8 +226,7 @@ export default class extends Controller {
       info.status === "fail" && flags.fpe_failure ? "FAIL · FPE" :
       info.status === "fail" ? "FAIL" :
       info.status === "pending" ? "PENDING" :
-      info.status === "not_run" ? "NOT RUN" :
-      info.status === "no_build" ? "BUILD FAILED" :
+      info.status === "not_run" || info.status === "no_build" ? "UNTESTED" :
       "PASS"
 
     // Flag chips listed individually rather than a vague
@@ -262,9 +260,9 @@ export default class extends Controller {
     } else if (info.status === "pending") {
       sectionRows.push(`<div class="text-[12px] text-info-soft-text">Submitted; no instance reported yet.</div>`)
     } else if (info.status === "not_run") {
-      sectionRows.push(`<div class="text-[12px] text-fg-muted">Built on this computer, but this test hasn’t been run or claimed.</div>`)
+      sectionRows.push(`<div class="text-[12px] text-fg-muted">This computer hasn’t run or claimed this test.</div>`)
     } else if (info.status === "no_build") {
-      sectionRows.push(`<div class="text-[12px] text-buildfail-soft-text">Compilation failed on this computer — test wasn’t run.</div>`)
+      sectionRows.push(`<div class="text-[12px] text-fg-muted">This computer’s build failed, so it couldn’t run this test.</div>`)
     }
 
     if (latest.summary_text) {
