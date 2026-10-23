@@ -218,6 +218,7 @@ export default class extends Controller {
       info.status === "fail" && flags.fpe_failure ? "text-fpe-soft-text" :
       info.status === "fail" ? "text-danger-soft-text" :
       info.status === "pending" ? "text-info-soft-text" :
+      info.status === "not_run" ? "text-fg-muted" :
       info.status === "no_build" ? "text-buildfail-soft-text" :
       flags.checksum ? "text-checksum-soft-text" :
       "text-success-soft-text"
@@ -226,6 +227,7 @@ export default class extends Controller {
       info.status === "fail" && flags.fpe_failure ? "FAIL · FPE" :
       info.status === "fail" ? "FAIL" :
       info.status === "pending" ? "PENDING" :
+      info.status === "not_run" ? "NOT RUN" :
       info.status === "no_build" ? "BUILD FAILED" :
       "PASS"
 
@@ -259,6 +261,8 @@ export default class extends Controller {
       }
     } else if (info.status === "pending") {
       sectionRows.push(`<div class="text-[12px] text-info-soft-text">Submitted; no instance reported yet.</div>`)
+    } else if (info.status === "not_run") {
+      sectionRows.push(`<div class="text-[12px] text-fg-muted">Built on this computer, but this test hasn’t been run or claimed.</div>`)
     } else if (info.status === "no_build") {
       sectionRows.push(`<div class="text-[12px] text-buildfail-soft-text">Compilation failed on this computer — test wasn’t run.</div>`)
     }

@@ -453,6 +453,9 @@ module CommitsHelper
     when :not_in_pool
       { kind: :solid, bg: "transparent", border: "var(--color-border-subtle)",
         label: "not run this way on this computer" }
+    when :not_run
+      { kind: :solid, bg: "transparent", border: "var(--color-border-subtle)",
+        label: "built here, but this test hasn't been run or claimed" }
     when :no_build
       { kind: :striped,
         bg: "var(--color-bg-subtle)",
@@ -540,7 +543,10 @@ module CommitsHelper
     end
     return "#{counts[:pending]} pending" if counts[:pending].positive?
     return "#{counts[:checksum]} ≠" if counts[:checksum].positive?
-    "#{counts[:pass]} ok"
+    # A computer that built and ran only some tests (and isn't working on
+    # the rest) shouldn't read as having covered the commit.
+    not_run = counts[:not_run].to_i
+    not_run.positive? ? "#{counts[:pass]} ok · #{not_run} not run" : "#{counts[:pass]} ok"
   end
 
   # Categories a single per_test_summary row belongs to. A row can

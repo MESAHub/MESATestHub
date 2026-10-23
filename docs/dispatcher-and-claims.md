@@ -434,6 +434,20 @@ remove it along with `Commit.test_candidate`.
   legal and expected transition (think: build that took 70 min on
   a 1-hour TTL because of queue waiting).
 
+### Pending in the UI
+
+Claims, not build reports, now drive "pending" at the cell level too
+(`CommitState#_unrun_cell_status`). For a built computer with no result
+for a test:
+
+- An open claim on the test → pending.
+- Claims elsewhere on the commit but not this test → **not run**.
+- No claims at all (an older client) → pending for 12 hours after its
+  last submission, then not run.
+
+This was found in the first production run of the claims client: one
+build plus two claimed tests showed every test pending.
+
 ### Fulfillment
 
 `Submission#fulfill_claims` (`after_create_commit`) fulfills:

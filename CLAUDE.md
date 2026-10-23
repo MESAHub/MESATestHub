@@ -347,6 +347,20 @@ helper or partial exists.
   same commit with them off (flag `fpe_likely`; the digest mirrors it
   in SQL). A lone FPE-on failure with no such rerun stays an ordinary
   failure.
+- **A built computer's missing result is pending only if it's coming.**
+  `CommitState#_unrun_cell_status` decides when a computer has reported
+  a build but has no result for a test:
+  1. It holds an open claim on that test → `:pending`.
+  2. It has claimed anything on this commit → `:not_run`. It uses
+     claims, so an unclaimed test isn't in flight.
+  3. It has never claimed here (older `mesa_test`) → `:pending` only
+     within `UNCLAIMED_PENDING_WINDOW` (12 h, the test-claim lifetime)
+     of its last submission, then `:not_run`.
+
+  Before this rule, a build report alone made every unrun test pending.
+  That's how Corvus's build plus two claimed tests showed ~100 pending
+  tests in Oct 2026. `:not_run` cells render as an outlined empty cell,
+  and the computer summary reads "N ok · M not run".
 - **The commit matrix draws columns, not computers.**
   `CommitState#matrix_columns` gives a computer one column per
   comparison pool it has runs in (LLNL_Dane default + full, delorean
