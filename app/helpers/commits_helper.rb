@@ -563,7 +563,9 @@ module CommitsHelper
   #   fpe       — rows with a failure caused by a trapped
   #               floating-point exception
   #   passing   — `:pass` (clean pass, no flags)
-  #   untested  — `:not_run` (no built-computer ever reported)
+  #   untested  — `:not_run`: no results anywhere and no open claims
+  #   pending   — inclusive: any test still claimed by some computer,
+  #               whatever the others reported (see below)
   def test_row_categories(row)
     cats = case row[:overall]
            when :fail    then ["failing"]
@@ -587,7 +589,8 @@ module CommitsHelper
     # failure plus several unreported computers belongs under
     # "Pending" as well as "Failing", so the chip surfaces
     # everything still in flight regardless of its dominant state.
-    cats << "pending" if counts[:pending].to_i.positive? && row[:overall] != :pending
+    in_flight = counts[:pending].to_i.positive? || row[:claimed]
+    cats << "pending" if in_flight && row[:overall] != :pending
     cats.uniq
   end
 

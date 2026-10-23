@@ -165,17 +165,13 @@ module CommitState
         # pending neighbors.
         passing_tests += 1
         checksum_passing_tests += 1 if row.any? { |_id, cell| cell[:flags][:checksum] }
-      elsif pendings.positive?
-        # Cell-level pending: at least one built computer hasn't
-        # reported a result yet. Counts as test-level pending
-        # regardless of whether there's an explicit claim — the
-        # build submission is the signal.
-        pending_tests += 1
-      elsif no_data && pending_tcc_test_ids.include?(test_id)
-        # No cells (no built-computer is even attempting yet) AND
-        # someone has claimed the test → genuine in-flight pending.
-        pending_tests += 1
       end
+      # Pending is inclusive, like the Pending chip: a test still claimed
+      # by some computer counts even when others have already passed or
+      # failed it. The claim may come from a computer that hasn't
+      # submitted anything here yet (no matrix column), so check the
+      # test's claims, not just its cells.
+      pending_tests += 1 if pendings.positive? || pending_tcc_test_ids.include?(test_id)
       # no_data without a claim → not counted; the test is :not_run,
       # not :pending. Pre-claims this branch silently bucketed every
       # untouched test into pending_tests, which inflated the hero
@@ -435,6 +431,7 @@ module CommitState
     matrix = test_computer_matrix
     built_ids, _ = _build_membership
     tccs_by_test = test_case_commits.includes(:test_case).index_by(&:test_case_id)
+    claimed_test_ids = _pending_claim_test_case_ids
 
     rows = matrix.map do |test_id, row_cells|
       built_cells = row_cells.select { |cid, _| built_ids.include?(cid) }
@@ -469,6 +466,11 @@ module CommitState
         else
           :not_run
         end
+      # Untested means no results *and* no claims: a test claimed by a
+      # computer with no submissions here yet (so no pending cell) is
+      # pending, not untested.
+      claimed = claimed_test_ids.include?(test_id)
+      overall = :pending if overall == :not_run && claimed
 
       tcc = tccs_by_test[test_id]
       {
@@ -476,7 +478,8 @@ module CommitState
         test_case_commit: tcc,
         overall: overall,
         cells_by_computer: row_cells,
-        counts: counts
+        counts: counts,
+        claimed: claimed
       }
     end
 

@@ -365,6 +365,13 @@ helper or partial exists.
     strip, show when the claim was made, when it expires, and the run's
     environment (`Claim#environment_label`: SDK, compiler, threads, …),
     as reported with the claim.
+  - **Test categories (chips and hero tiles):**
+    - *Passing:* every submitted result passed, even if other computers
+      are untested or pending.
+    - *Pending:* inclusive. Any test still claimed by some computer,
+      whatever others reported, including a claim from a computer with
+      no submissions here yet and so no matrix column.
+    - *Untested:* no results anywhere and no open claims.
   - The computer summary reads "N ok · M untested". The morning digest
     says "Tests: Untested", not "Pending", for commits with no results.
 - **The commit matrix draws columns, not computers.**

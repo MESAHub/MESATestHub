@@ -483,6 +483,43 @@ RSpec.describe 'commit state aggregation' do
       end
     end
 
+    # The Tests tab chips and the hero tiles (Oct 2026): passing = every
+    # submitted result passed; pending = inclusive, any open claim;
+    # untested = no results and no claims.
+    describe 'test categories' do
+      def categories_for(test_case)
+        row = commit.reload.per_test_summary.find { |r| r[:test_case] == test_case }
+        ApplicationController.helpers.test_row_categories(row)
+      end
+
+      it 'counts a test passed elsewhere but still claimed as both passing and pending' do
+        instance(test_case: test_case_a, computer: popeye)
+        submit(computer: rusty)
+        create(:claim, :test_scope, computer: rusty, commit: commit, test_case_commit: tcc_for(test_case_a))
+
+        tests = commit.reload.commit_state[:tests]
+        expect([tests[:passing_tests], tests[:pending_tests]]).to eq([1, 1])
+        expect(categories_for(test_case_a)).to contain_exactly('passing', 'pending')
+      end
+
+      it "treats a test claimed by a computer that hasn't submitted here yet as pending, not untested" do
+        instance(test_case: test_case_a, computer: popeye)
+        tcc_for(test_case_b)
+        create(:claim, :test_scope, computer: rusty, commit: commit, test_case_commit: tcc_for(test_case_b))
+
+        expect(categories_for(test_case_b)).to eq(['pending'])
+        expect(commit.reload.commit_state[:tests][:pending_tests]).to eq(1)
+      end
+
+      it 'leaves an unclaimed test with no results untested' do
+        instance(test_case: test_case_a, computer: popeye)
+        tcc_for(test_case_b)
+
+        expect(categories_for(test_case_b)).to eq(['untested'])
+        expect(commit.reload.commit_state[:tests][:pending_tests]).to eq(0)
+      end
+    end
+
     it 'marks cells on a computer that failed to compile as :no_build' do
       submit(computer: frontera, compiled: false)
       instance(test_case: test_case_a, computer: rusty) # so the tcc exists
