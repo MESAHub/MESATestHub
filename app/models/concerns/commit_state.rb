@@ -165,17 +165,13 @@ module CommitState
         # pending neighbors.
         passing_tests += 1
         checksum_passing_tests += 1 if row.any? { |_id, cell| cell[:flags][:checksum] }
-      elsif pendings.positive?
-        # Cell-level pending: at least one built computer hasn't
-        # reported a result yet. Counts as test-level pending
-        # regardless of whether there's an explicit claim — the
-        # build submission is the signal.
-        pending_tests += 1
-      elsif no_data && pending_tcc_test_ids.include?(test_id)
-        # No cells (no built-computer is even attempting yet) AND
-        # someone has claimed the test → genuine in-flight pending.
-        pending_tests += 1
       end
+      # Pending is inclusive, like the Pending chip: a test still claimed
+      # by some computer counts even when others have already passed or
+      # failed it. The claim may come from a computer that hasn't
+      # submitted anything here yet (no matrix column), so check the
+      # test's claims, not just its cells.
+      pending_tests += 1 if pendings.positive? || pending_tcc_test_ids.include?(test_id)
       # no_data without a claim → not counted; the test is :not_run,
       # not :pending. Pre-claims this branch silently bucketed every
       # untouched test into pending_tests, which inflated the hero
@@ -435,6 +431,7 @@ module CommitState
     matrix = test_computer_matrix
     built_ids, _ = _build_membership
     tccs_by_test = test_case_commits.includes(:test_case).index_by(&:test_case_id)
+    claimed_test_ids = _pending_claim_test_case_ids
 
     rows = matrix.map do |test_id, row_cells|
       built_cells = row_cells.select { |cid, _| built_ids.include?(cid) }
@@ -469,6 +466,11 @@ module CommitState
         else
           :not_run
         end
+      # Untested means no results *and* no claims: a test claimed by a
+      # computer with no submissions here yet (so no pending cell) is
+      # pending, not untested.
+      claimed = claimed_test_ids.include?(test_id)
+      overall = :pending if overall == :not_run && claimed
 
       tcc = tccs_by_test[test_id]
       {
@@ -476,7 +478,8 @@ module CommitState
         test_case_commit: tcc,
         overall: overall,
         cells_by_computer: row_cells,
-        counts: counts
+        counts: counts,
+        claimed: claimed
       }
     end
 
@@ -622,6 +625,10 @@ module CommitState
         }
         entry[:column_label] = COMPUTER_POOL_LABELS[col[:pool]] if col[:split]
         entry[:latest] = _popover_latest(latest) if latest
+        if cell[:status] == :pending
+          claim = _claim_index[:open_tests][[col[:computer_id], tcc.id]]
+          entry[:claim] = _popover_claim(claim) if claim
+        end
         unless _cell_clean?(cell)
           entry[:agreement] = _instance_agreement(instances, comparison)
           matches = cell[:flags][:checksum] && latest && comparison.match_counts(latest)
@@ -734,16 +741,29 @@ module CommitState
   # a build report alone made every unreported test look pending, with
   # nothing behind it.)
   def _unrun_cell_status(tcc, computer_id, claims)
-    claims[:open_tests].include?([computer_id, tcc.id]) ? :pending : :not_run
+    claims[:open_tests].key?([computer_id, tcc.id]) ? :pending : :not_run
   end
 
-  # (computer_id, TCC id) pairs holding an open test claim on this commit,
-  # for _unrun_cell_status. One query per commit.
+  # Open test claims on this commit keyed by [computer_id, TCC id] (the
+  # newest if a computer re-claimed), for _unrun_cell_status and the
+  # pending cells' popovers. One query per commit.
   def _claim_index
     @_claim_index ||= {
-      open_tests: Claim.pending.where(commit_id: id, scope: 'test')
-                       .pluck(:computer_id, :test_case_commit_id).to_set
+      open_tests: Claim.pending.where(commit_id: id, scope: 'test').includes(:computer)
+                       .order(:created_at)
+                       .index_by { |c| [c.computer_id, c.test_case_commit_id] }
     }
+  end
+
+  # What a pending cell's popover says about the claim behind it.
+  def _popover_claim(claim)
+    helpers = ApplicationController.helpers
+    {
+      claimed_at: claim.created_at.iso8601,
+      claimed_ago: helpers.time_ago_in_words(claim.created_at),
+      expires_in: claim.expires_at.future? ? helpers.time_ago_in_words(claim.expires_at) : nil,
+      environment: claim.environment_label
+    }.compact
   end
 
   # Cached for the lifetime of the Commit instance. Same eager-loaded

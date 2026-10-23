@@ -469,9 +469,54 @@ RSpec.describe 'commit state aggregation' do
         expect(cell_b).to eq(:not_run)
       end
 
+      it "puts the claim's time and environment in the pending cell's popover" do
+        create(:claim, :test_scope, computer: rusty, commit: commit, test_case_commit: tcc_for(test_case_b),
+                                    created_at: 2.hours.ago, omp_num_threads: 2)
+        entry = commit.reload.cell_popover_data["#{test_case_b.id}-#{rusty.id}"]
+        expect(entry[:status]).to eq(:pending)
+        expect(entry[:claim]).to include(claimed_ago: 'about 2 hours', environment: '2 threads')
+      end
+
       it "doesn't count :not_run cells as pending tests" do
         state = commit.reload.commit_state
         expect(state.dig(:tests, :pending_tests)).to eq(0)
+      end
+    end
+
+    # The Tests tab chips and the hero tiles (Oct 2026): passing = every
+    # submitted result passed; pending = inclusive, any open claim;
+    # untested = no results and no claims.
+    describe 'test categories' do
+      def categories_for(test_case)
+        row = commit.reload.per_test_summary.find { |r| r[:test_case] == test_case }
+        ApplicationController.helpers.test_row_categories(row)
+      end
+
+      it 'counts a test passed elsewhere but still claimed as both passing and pending' do
+        instance(test_case: test_case_a, computer: popeye)
+        submit(computer: rusty)
+        create(:claim, :test_scope, computer: rusty, commit: commit, test_case_commit: tcc_for(test_case_a))
+
+        tests = commit.reload.commit_state[:tests]
+        expect([tests[:passing_tests], tests[:pending_tests]]).to eq([1, 1])
+        expect(categories_for(test_case_a)).to contain_exactly('passing', 'pending')
+      end
+
+      it "treats a test claimed by a computer that hasn't submitted here yet as pending, not untested" do
+        instance(test_case: test_case_a, computer: popeye)
+        tcc_for(test_case_b)
+        create(:claim, :test_scope, computer: rusty, commit: commit, test_case_commit: tcc_for(test_case_b))
+
+        expect(categories_for(test_case_b)).to eq(['pending'])
+        expect(commit.reload.commit_state[:tests][:pending_tests]).to eq(1)
+      end
+
+      it 'leaves an unclaimed test with no results untested' do
+        instance(test_case: test_case_a, computer: popeye)
+        tcc_for(test_case_b)
+
+        expect(categories_for(test_case_b)).to eq(['untested'])
+        expect(commit.reload.commit_state[:tests][:pending_tests]).to eq(0)
       end
     end
 

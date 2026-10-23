@@ -38,7 +38,8 @@ module Api
           use_full_inlists: bool_param(:use_full_inlists),
           use_converge: bool_param(:use_converge),
           dispatched_at: parse_iso_datetime(claim_params[:dispatched_at]),
-          expires_at: Claim.default_expires_at(scope: @scope)
+          expires_at: Claim.default_expires_at(scope: @scope),
+          **environment_attrs
         )
 
         if claim.save
@@ -71,7 +72,7 @@ module Api
             use_fpe: bool_param(:use_fpe), use_full_inlists: bool_param(:use_full_inlists),
             use_converge: bool_param(:use_converge),
             dispatched_at: parse_iso_datetime(claim_params[:dispatched_at]),
-            expires_at: expires_at, created_at: now, updated_at: now }
+            expires_at: expires_at, created_at: now, updated_at: now, **environment_attrs }
         end
         ids = rows.empty? ? [] : Claim.insert_all(rows, returning: :id).rows.flatten
         render json: { claim_ids: ids, expires_at: expires_at.iso8601 }, status: :created
@@ -131,8 +132,16 @@ module Api
           :commit_sha, :scope,
           :test_case_module, :test_case_name,
           :use_fpe, :use_full_inlists, :use_converge,
-          :dispatched_at, :all_test_cases
+          :dispatched_at, :all_test_cases, *Claim::ENVIRONMENT_COLUMNS
         )
+      end
+
+      # The run's environment, if the client sent it (any subset).
+      def environment_attrs
+        attrs = claim_params.to_h.symbolize_keys.slice(*Claim::ENVIRONMENT_COLUMNS)
+                            .transform_values { |v| v.to_s.strip.presence }
+        attrs[:omp_num_threads] = attrs[:omp_num_threads]&.to_i
+        attrs.compact
       end
 
       # Absent means false, not unknown — claims' `use_*` columns

@@ -371,6 +371,16 @@ bypassed dispatch entirely.
 }
 ```
 
+**Run environment (optional, Oct 2026):** a claim may also carry
+`sdk_version`, `compiler`, `compiler_version`, `math_backend`,
+`omp_num_threads`, and `platform_version`. These are what the claimed run
+says it's running on. The claim stores whatever subset is sent; a build
+claim is made before compiling, so it can't know the compiler yet.
+Pending cells show it, so a claim that sits for hours can be explained
+at a glance: the matrix popover and the test-on-commit page's
+"In progress" strip both show when the claim was made, when it expires,
+and `Claim#environment_label`.
+
 **Claiming a whole suite:** `scope: "test", all_test_cases: true`
 (with no test name) creates one claim per test on the commit in a
 single request. It skips tests this computer already holds a pending

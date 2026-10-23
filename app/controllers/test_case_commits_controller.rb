@@ -54,6 +54,10 @@ class TestCaseCommitsController < ApplicationController
                                   .to_a
     @instance_rows = @test_case_commit.instances_for_display
 
+    # Open claims on this test: computers that said they're running it
+    # and haven't reported yet (shown above the results).
+    @open_claims = @test_case_commit.pending_claims.includes(:computer).order(:created_at).to_a
+
     @unique_checksums = @test_case_commit.unique_checksums
     # Per-inlist tables (nil for single-inlist tests).
     @inlist_breakdown = @test_case_commit.inlist_breakdown

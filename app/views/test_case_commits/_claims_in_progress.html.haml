@@ -1,0 +1,27 @@
+-# Open claims on this test: computers that said they're running it and
+-# haven't reported yet. Each row says when the claim was made, when it
+-# expires if no result arrives, and what the run says it's running on,
+-# so a claim that has sat for hours can be explained at a glance.
+.rounded-lg.border.border-border.bg-bg-elev.mb-4{ style: "box-shadow: var(--shadow-card-sm);" }
+  .flex.items-baseline.gap-2.px-4.py-2.border-b.border-border-subtle
+    %span.mesa-label In progress
+    %span.text-fg-muted{ class: "text-[12px]" }
+      = pluralize(@open_claims.size, "computer")
+      has claimed this test
+  %ul
+    - @open_claims.each do |claim|
+      - is_focus = @focus_computer_name && claim.computer&.name == @focus_computer_name
+      %li.flex.flex-wrap.items-baseline.gap-x-3.gap-y-1.px-4.py-2.border-b.border-border-subtle{ class: "last:border-b-0 #{is_focus ? 'bg-brand-soft' : ''}" }
+        %span{ class: "inline-block h-2 w-2 rounded-full bg-info" }
+        %span.font-mono.text-fg{ class: "text-[13px]" }= claim.computer&.name
+        %span.text-info-soft-text{ class: "text-[12px]",
+                                   title: claim.created_at.iso8601 }
+          claimed
+          = time_ago_in_words(claim.created_at)
+          ago
+        - if claim.expires_at.future?
+          %span.text-fg-subtle{ class: "text-[12px]", title: claim.expires_at.iso8601 }
+            expires in
+            = time_ago_in_words(claim.expires_at)
+        - if (env = claim.environment_label)
+          %span.font-mono.text-fg-muted{ class: "text-[11px]" }= env

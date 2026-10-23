@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_10_03_120000) do
+ActiveRecord::Schema[8.0].define(version: 2026_10_23_200000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -46,6 +46,12 @@ ActiveRecord::Schema[8.0].define(version: 2026_10_03_120000) do
     t.datetime "fulfilled_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "sdk_version"
+    t.string "compiler"
+    t.string "compiler_version"
+    t.string "math_backend"
+    t.integer "omp_num_threads"
+    t.string "platform_version"
     t.index ["commit_id", "status"], name: "index_claims_on_commit_id_and_status"
     t.index ["commit_id"], name: "index_claims_on_commit_id"
     t.index ["computer_id", "status"], name: "index_claims_on_computer_id_and_status"

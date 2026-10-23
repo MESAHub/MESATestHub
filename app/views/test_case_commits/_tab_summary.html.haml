@@ -3,4 +3,6 @@
 -# `_tab_summary` partial alongside `_tab_logs`. The actual
 -# content (toolbar + icon legend + table) lives in
 -# `_instances_panel`.
+- if @open_claims.any?
+  = render "claims_in_progress"
 = render "instances_panel"

@@ -44,6 +44,10 @@ class Claim < ApplicationRecord
   validate :scope_and_tcc_coherent
   validate :tcc_commit_matches_claim_commit
 
+  # What the claimed run says it's running on; all optional.
+  ENVIRONMENT_COLUMNS = %i[sdk_version compiler compiler_version math_backend
+                           omp_num_threads platform_version].freeze
+
   scope :pending,   -> { where(status: 'pending') }
   scope :fulfilled, -> { where(status: 'fulfilled') }
   scope :expired,   -> { where(status: 'expired') }
@@ -77,6 +81,18 @@ class Claim < ApplicationRecord
   # docs/dispatcher-and-claims.md). Uses update_columns so a stale
   # `updated_at` race against the sweeper can't reject the write,
   # and so AR validations on `status` never see the transient state.
+  # One line for the UI, e.g. "SDK 26.3.2 · gfortran 15.2.0 · CRMATH ·
+  # 12 threads · macOS 26.3.1". nil when the client sent nothing.
+  def environment_label
+    parts = []
+    parts << "SDK #{sdk_version}" if sdk_version.present?
+    parts << [compiler, compiler_version].compact_blank.join(' ') if compiler.present?
+    parts << math_backend if math_backend.present?
+    parts << "#{omp_num_threads} thread#{'s' unless omp_num_threads == 1}" if omp_num_threads
+    parts << [computer&.platform, platform_version].compact_blank.join(' ') if platform_version.present?
+    parts.empty? ? nil : parts.join(' · ')
+  end
+
   def fulfill!(at: Time.current)
     update_columns(status: 'fulfilled',
                    fulfilled_at: at,
