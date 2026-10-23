@@ -388,7 +388,9 @@ helper or partial exists.
   (100/5min) and `api/ip` (100/10min) throttles and return 429s.
   `rack_attack.rb` now matches any `/submissions`-prefixed path with
   `SUBMISSION_PATH` (which also covers `/api/v1/` — claims burst
-  the same way), excludes it from both generic throttles, and
+  the same way — and `/check_computer`, which `mesa_test` calls
+  before every `test`/`submit`; a 429 there made the client exit
+  before submitting, so results vanished silently), excludes it from both generic throttles, and
   gives it a generous `submissions/ip` backstop (`SUBMISSION_LIMIT =
   1000` / 5min) that exists only to bound a pathological flood — the
   real access control is the credential + computer-ownership check in

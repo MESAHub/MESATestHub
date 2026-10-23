@@ -119,6 +119,20 @@ RSpec.describe 'rack-attack client IP resolution behind Railway proxy',
 
       expect(statuses).not_to include(429)
     end
+
+    it 'exempts check_computer, which every test/submit run calls first' do
+      # A 429 here used to make mesa_test exit before submitting anything,
+      # so a busy cluster silently dropped results.
+      statuses = Array.new(120) do
+        post '/check_computer.json',
+             params: { email: 'nobody@example.com', password: 'wrong',
+                       computer_name: 'nope' },
+             headers: { 'REMOTE_ADDR' => railway_proxy, 'X-Forwarded-For' => client_ip }
+        response.status
+      end
+
+      expect(statuses).not_to include(429)
+    end
   end
 
   # A valid per-computer API key identifies the client, like a browser
