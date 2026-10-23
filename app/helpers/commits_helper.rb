@@ -446,18 +446,20 @@ module CommitsHelper
   #   corner_bg:   background for the corner badge.
   #   label:       short text used as the cell's `title` tooltip.
   def matrix_cell_attrs(cell)
-    return { kind: :solid, bg: "var(--color-bg-muted)", label: "no data" } unless cell
+    return { kind: :solid, bg: "var(--color-bg-muted)", label: "untested" } unless cell
 
     flags = cell[:flags] || {}
     case cell[:status]
     when :not_in_pool
       { kind: :solid, bg: "transparent", border: "var(--color-border-subtle)",
         label: "not run this way on this computer" }
-    when :no_build
-      { kind: :striped,
-        bg: "var(--color-bg-subtle)",
-        stripe: "var(--color-bg-muted)",
-        label: "build failed — test not run" }
+    # A cell is one of untested / pending / pass / FPE fail / fail.
+    # Whether the computer's build failed is a fact about the
+    # computer (its column summary and the build banners), not about
+    # the test, so both reasons for "no result" look the same here.
+    when :not_run, :no_build
+      { kind: :solid, bg: "var(--color-bg-muted)",
+        label: cell[:status] == :no_build ? "untested (this computer's build failed)" : "untested" }
     when :pending
       { kind: :striped,
         bg: "var(--color-info-soft)",
@@ -540,7 +542,10 @@ module CommitsHelper
     end
     return "#{counts[:pending]} pending" if counts[:pending].positive?
     return "#{counts[:checksum]} ≠" if counts[:checksum].positive?
-    "#{counts[:pass]} ok"
+    # A computer that built and ran only some tests (and isn't working on
+    # the rest) shouldn't read as having covered the commit.
+    not_run = counts[:not_run].to_i
+    not_run.positive? ? "#{counts[:pass]} ok · #{not_run} untested" : "#{counts[:pass]} ok"
   end
 
   # Categories a single per_test_summary row belongs to. A row can

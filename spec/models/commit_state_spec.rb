@@ -430,6 +430,51 @@ RSpec.describe 'commit state aggregation' do
       expect(matrix[test_case_a.id][rusty.id][:status]).to eq(:pass)
     end
 
+    # A built computer with no result for a test is pending only while it
+    # holds an open claim on that test (CommitState#_unrun_cell_status).
+    describe 'built computer, no result for a test' do
+      before do
+        instance(test_case: test_case_a, computer: rusty) # rusty built + ran a
+        tcc_for(test_case_b)                              # b exists, unrun
+      end
+
+      def cell_b
+        commit.reload.test_computer_matrix[test_case_b.id][rusty.id][:status]
+      end
+
+      it 'is :pending while the computer holds an open claim on that test' do
+        create(:claim, :test_scope, computer: rusty, commit: commit, test_case_commit: tcc_for(test_case_b))
+        expect(cell_b).to eq(:pending)
+      end
+
+      it 'is :not_run without a claim, even right after a build report' do
+        # Corvus, Oct 2026: built main, claimed and ran two tests -- and
+        # every other test showed pending.
+        expect(cell_b).to eq(:not_run)
+      end
+
+      it 'is :not_run when the claim was on a different test' do
+        create(:claim, :test_scope, computer: rusty, commit: commit, test_case_commit: tcc_for(test_case_c))
+        expect(cell_b).to eq(:not_run)
+      end
+
+      it "is :not_run when someone else's claim covers the test" do
+        create(:claim, :test_scope, computer: popeye, commit: commit, test_case_commit: tcc_for(test_case_b))
+        expect(cell_b).to eq(:not_run)
+      end
+
+      it 'is :not_run once its claim has expired' do
+        create(:claim, :test_scope, :expired, computer: rusty, commit: commit,
+                                              test_case_commit: tcc_for(test_case_b))
+        expect(cell_b).to eq(:not_run)
+      end
+
+      it "doesn't count :not_run cells as pending tests" do
+        state = commit.reload.commit_state
+        expect(state.dig(:tests, :pending_tests)).to eq(0)
+      end
+    end
+
     it 'marks cells on a computer that failed to compile as :no_build' do
       submit(computer: frontera, compiled: false)
       instance(test_case: test_case_a, computer: rusty) # so the tcc exists

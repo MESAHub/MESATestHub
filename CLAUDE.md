@@ -347,6 +347,22 @@ helper or partial exists.
   same commit with them off (flag `fpe_likely`; the digest mirrors it
   in SQL). A lone FPE-on failure with no such rerun stays an ordinary
   failure.
+- **A matrix cell is one of five states: untested, pending, pass, FPE
+  fail, fail.** Pending is a promise, and only a claim makes one.
+  `CommitState#_unrun_cell_status` marks a built computer's missing
+  result `:pending` only while that computer holds an open claim on the
+  test. Otherwise it's `:not_run`, whichever client the computer uses.
+  - **Build failures look the same as untested at cell level.** A failed
+    build (`:no_build`) renders identically: the build failure is a fact
+    about the computer (column summary, build banners), not the test.
+  - **Checksum ≠ and full-inlists are overlays, not states.** They're
+    comparisons between runs, drawn on passing cells.
+  - **Why:** before this, a build report alone made every unreported
+    test pending. Corvus's build plus two claimed tests showed ~100
+    pending tests in Oct 2026. Older clients that never claim now show
+    untested until each result lands.
+  - The computer summary reads "N ok · M untested". The morning digest
+    says "Tests: Untested", not "Pending", for commits with no results.
 - **The commit matrix draws columns, not computers.**
   `CommitState#matrix_columns` gives a computer one column per
   comparison pool it has runs in (LLNL_Dane default + full, delorean

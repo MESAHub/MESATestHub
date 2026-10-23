@@ -277,7 +277,7 @@ module CommitState
     subs_by_computer = all_subs.group_by(&:computer_id)
 
     rows = (built_ids + failed_ids).uniq.map do |computer_id|
-      counts = { pass: 0, fail: 0, pending: 0, skip: 0,
+      counts = { pass: 0, fail: 0, pending: 0, skip: 0, not_run: 0,
                  fpe: 0, checksum: 0, inlists_full: 0, fpe_failure: 0, fpe_likely: 0 }
 
       matrix.each_value do |row|
@@ -545,7 +545,8 @@ module CommitState
   # The aggregation is per-(test_case, computer) over test_instance
   # rows. If no instance exists for a (test_case, computer) pair but
   # the computer DID submit:
-  #   * compiled → :pending (test scheduled, just not back yet)
+  #   * compiled → :pending if the computer holds an open claim on the
+  #     test, else :not_run (see _unrun_cell_status)
   #   * !compiled → :no_build
   # If no submissions exist, the matrix has no row for that computer.
   # The commit-detail controller calls per_computer_summary,
@@ -703,6 +704,7 @@ module CommitState
     tccs = _tccs_for_matrix
     submissions_by_computer = submissions.group_by(&:computer_id)
     computer_ids = submissions_by_computer.keys
+    claims = _claim_index
 
     test_ids = tccs.map(&:test_case_id)
 
@@ -717,12 +719,31 @@ module CommitState
           tcc: tcc,
           computer_id: cid,
           instances: instances_by_computer[cid] || [],
-          submissions: submissions_by_computer[cid] || []
+          submissions: submissions_by_computer[cid] || [],
+          claims: claims
         )
       end
     end
 
     matrix
+  end
+
+  # A built computer with no result for a test is :pending only while it
+  # holds an open claim on that test -- a promise the result is coming.
+  # Anything else is :not_run, whichever client it uses. (Before claims,
+  # a build report alone made every unreported test look pending, with
+  # nothing behind it.)
+  def _unrun_cell_status(tcc, computer_id, claims)
+    claims[:open_tests].include?([computer_id, tcc.id]) ? :pending : :not_run
+  end
+
+  # (computer_id, TCC id) pairs holding an open test claim on this commit,
+  # for _unrun_cell_status. One query per commit.
+  def _claim_index
+    @_claim_index ||= {
+      open_tests: Claim.pending.where(commit_id: id, scope: 'test')
+                       .pluck(:computer_id, :test_case_commit_id).to_set
+    }
   end
 
   # Cached for the lifetime of the Commit instance. Same eager-loaded
@@ -810,13 +831,14 @@ module CommitState
   # to `instances`); split matrix columns pass it so a failure in the
   # FPE column can still be judged against the same computer's
   # FPE-off run in another column.
-  def _cell_for(tcc:, computer_id:, instances:, submissions:, fpe_context: nil)
+  def _cell_for(tcc:, computer_id:, instances:, submissions:, fpe_context: nil, claims: nil)
     base_flags = { fpe: false, checksum: false, inlists_full: false, fpe_failure: false, fpe_likely: false }
 
     if instances.empty?
       status =
         if submissions.empty? then :no_build
-        elsif submissions.any? { |s| s.compiled == true } then :pending
+        elsif submissions.any? { |s| s.compiled == true }
+          _unrun_cell_status(tcc, computer_id, claims || _claim_index)
         else :no_build
         end
       return { status: status, flags: base_flags }

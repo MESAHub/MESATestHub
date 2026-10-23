@@ -434,6 +434,24 @@ remove it along with `Commit.test_candidate`.
   legal and expected transition (think: build that took 70 min on
   a 1-hour TTL because of queue waiting).
 
+### Pending in the UI
+
+Only a claim makes "pending", at the cell level too
+(`CommitState#_unrun_cell_status`). A built computer's missing result
+is pending while that computer holds an open claim on the test, and
+**untested** otherwise. That holds for every client: an older
+`mesa_test` that never claims shows untested until each result lands.
+
+A matrix cell is one of five states: **untested**, **pending**,
+**pass**, **FPE fail**, **fail**.
+- A failed build reads as untested at cell level. The build failure is
+  shown on the computer, not on each test.
+- Checksum ≠ and full-inlists are comparison overlays on passing cells,
+  not states of their own.
+
+This was found in the first production run of the claims client
+(Oct 2026): one build plus two claimed tests showed every test pending.
+
 ### Fulfillment
 
 `Submission#fulfill_claims` (`after_create_commit`) fulfills:
