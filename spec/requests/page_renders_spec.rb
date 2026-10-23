@@ -174,6 +174,17 @@ RSpec.describe 'Page renders', type: :request do
       expect(response).to have_http_status(:ok)
     end
 
+    it 'lists open claims on the test, with when and on what setup' do
+      computer = create(:computer, name: 'corvus', platform: 'macOS', user: user)
+      create(:claim, :test_scope, computer: computer, commit: commit, test_case_commit: test_case_commit,
+                                  created_at: 20.minutes.ago, sdk_version: '26.3.2', omp_num_threads: 12)
+
+      get "/main/commits/#{commit.short_sha}/test_cases/#{test_case.module}/#{test_case.name}"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('In progress', 'corvus', '20 minutes', 'SDK 26.3.2 · 12 threads')
+    end
+
     it 'redirects to a containing branch when the URL branch does not contain the commit' do
       feature_branch = create(:branch, name: 'feature/x')
       other_commit = create(:commit)

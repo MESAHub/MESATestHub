@@ -622,6 +622,10 @@ module CommitState
         }
         entry[:column_label] = COMPUTER_POOL_LABELS[col[:pool]] if col[:split]
         entry[:latest] = _popover_latest(latest) if latest
+        if cell[:status] == :pending
+          claim = _claim_index[:open_tests][[col[:computer_id], tcc.id]]
+          entry[:claim] = _popover_claim(claim) if claim
+        end
         unless _cell_clean?(cell)
           entry[:agreement] = _instance_agreement(instances, comparison)
           matches = cell[:flags][:checksum] && latest && comparison.match_counts(latest)
@@ -734,16 +738,29 @@ module CommitState
   # a build report alone made every unreported test look pending, with
   # nothing behind it.)
   def _unrun_cell_status(tcc, computer_id, claims)
-    claims[:open_tests].include?([computer_id, tcc.id]) ? :pending : :not_run
+    claims[:open_tests].key?([computer_id, tcc.id]) ? :pending : :not_run
   end
 
-  # (computer_id, TCC id) pairs holding an open test claim on this commit,
-  # for _unrun_cell_status. One query per commit.
+  # Open test claims on this commit keyed by [computer_id, TCC id] (the
+  # newest if a computer re-claimed), for _unrun_cell_status and the
+  # pending cells' popovers. One query per commit.
   def _claim_index
     @_claim_index ||= {
-      open_tests: Claim.pending.where(commit_id: id, scope: 'test')
-                       .pluck(:computer_id, :test_case_commit_id).to_set
+      open_tests: Claim.pending.where(commit_id: id, scope: 'test').includes(:computer)
+                       .order(:created_at)
+                       .index_by { |c| [c.computer_id, c.test_case_commit_id] }
     }
+  end
+
+  # What a pending cell's popover says about the claim behind it.
+  def _popover_claim(claim)
+    helpers = ApplicationController.helpers
+    {
+      claimed_at: claim.created_at.iso8601,
+      claimed_ago: helpers.time_ago_in_words(claim.created_at),
+      expires_in: claim.expires_at.future? ? helpers.time_ago_in_words(claim.expires_at) : nil,
+      environment: claim.environment_label
+    }.compact
   end
 
   # Cached for the lifetime of the Commit instance. Same eager-loaded

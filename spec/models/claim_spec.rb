@@ -135,6 +135,22 @@ RSpec.describe Claim, type: :model do
     end
   end
 
+  describe '#environment_label' do
+    it 'summarizes whatever the client reported' do
+      computer = create(:computer, platform: 'macOS')
+      claim = build(:claim, computer: computer, sdk_version: '26.3.2', compiler: 'gfortran',
+                            compiler_version: '15.2.0', math_backend: 'CRMATH',
+                            omp_num_threads: 12, platform_version: '26.3.1')
+      expect(claim.environment_label)
+        .to eq('SDK 26.3.2 · gfortran 15.2.0 · CRMATH · 12 threads · macOS 26.3.1')
+    end
+
+    it 'is nil when nothing was reported, and singular for one thread' do
+      expect(build(:claim).environment_label).to be_nil
+      expect(build(:claim, omp_num_threads: 1).environment_label).to eq('1 thread')
+    end
+  end
+
   describe '.default_expires_at' do
     it 'returns ~1 hour from now for build scope' do
       expect(Claim.default_expires_at(scope: 'build'))

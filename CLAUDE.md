@@ -361,6 +361,10 @@ helper or partial exists.
     test pending. Corvus's build plus two claimed tests showed ~100
     pending tests in Oct 2026. Older clients that never claim now show
     untested until each result lands.
+  - A pending cell's popover, and the test-on-commit page's "In progress"
+    strip, show when the claim was made, when it expires, and the run's
+    environment (`Claim#environment_label`: SDK, compiler, threads, …),
+    as reported with the claim.
   - The computer summary reads "N ok · M untested". The morning digest
     says "Tests: Untested", not "Pending", for commits with no results.
 - **The commit matrix draws columns, not computers.**

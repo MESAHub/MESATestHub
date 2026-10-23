@@ -469,6 +469,14 @@ RSpec.describe 'commit state aggregation' do
         expect(cell_b).to eq(:not_run)
       end
 
+      it "puts the claim's time and environment in the pending cell's popover" do
+        create(:claim, :test_scope, computer: rusty, commit: commit, test_case_commit: tcc_for(test_case_b),
+                                    created_at: 2.hours.ago, omp_num_threads: 2)
+        entry = commit.reload.cell_popover_data["#{test_case_b.id}-#{rusty.id}"]
+        expect(entry[:status]).to eq(:pending)
+        expect(entry[:claim]).to include(claimed_ago: 'about 2 hours', environment: '2 threads')
+      end
+
       it "doesn't count :not_run cells as pending tests" do
         state = commit.reload.commit_state
         expect(state.dig(:tests, :pending_tests)).to eq(0)

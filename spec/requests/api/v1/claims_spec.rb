@@ -54,6 +54,37 @@ RSpec.describe 'POST /api/v1/claims', type: :request do
     end
   end
 
+  describe 'run environment' do
+    let(:environment) do
+      { sdk_version: '26.3.2', compiler: 'gfortran', compiler_version: '15.2.0',
+        math_backend: 'CRMATH', omp_num_threads: 12, platform_version: '26.3.1' }
+    end
+
+    it 'records what the claimed run is running on' do
+      post '/api/v1/claims',
+           params: { submitter: valid_submitter,
+                     claim: { commit_sha: commit.sha, scope: 'build', **environment } },
+           as: :json
+
+      expect(response).to have_http_status(:created)
+      claim = Claim.find(JSON.parse(response.body)['claim_id'])
+      expect(claim.slice(*environment.keys).symbolize_keys).to eq(environment)
+    end
+
+    it 'records it on every claim of a whole-suite request, and accepts a partial set' do
+      create_list(:test_case_commit, 2, commit: commit)
+      post '/api/v1/claims',
+           params: { submitter: valid_submitter,
+                     claim: { commit_sha: commit.sha, scope: 'test', all_test_cases: true,
+                              omp_num_threads: '4' } },
+           as: :json
+
+      claims = Claim.where(id: JSON.parse(response.body)['claim_ids'])
+      expect(claims.map(&:omp_num_threads)).to eq([4, 4])
+      expect(claims.map(&:sdk_version).uniq).to eq([nil])
+    end
+  end
+
   describe 'all test cases at once' do
     let!(:tccs) { create_list(:test_case_commit, 3, commit: commit) }
 

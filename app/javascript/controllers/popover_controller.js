@@ -258,7 +258,22 @@ export default class extends Controller {
         sectionRows.push(`<div class="text-[12px] font-medium ${tone}">Passing Mode: ${this._esc(latest.success_type)}</div>`)
       }
     } else if (info.status === "pending") {
-      sectionRows.push(`<div class="text-[12px] text-info-soft-text">Submitted; no instance reported yet.</div>`)
+      const claim = info.claim
+      if (claim) {
+        // the viewer's own clock, not the server's
+        const at = claim.claimed_at
+          ? new Date(claim.claimed_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+          : ""
+        sectionRows.push(`<div class="text-[12px] text-info-soft-text">Claimed ${this._esc(claim.claimed_ago)} ago <span class="text-fg-subtle tabular-nums">(${this._esc(at)})</span></div>`)
+        if (claim.expires_in) {
+          sectionRows.push(`<div class="text-[11px] text-fg-muted">Claim expires in ${this._esc(claim.expires_in)} if no result arrives.</div>`)
+        }
+        if (claim.environment) {
+          sectionRows.push(`<div class="text-[11px] text-fg-muted font-mono">${this._esc(claim.environment)}</div>`)
+        }
+      } else {
+        sectionRows.push(`<div class="text-[12px] text-info-soft-text">Claimed; no result reported yet.</div>`)
+      }
     } else if (info.status === "not_run") {
       sectionRows.push(`<div class="text-[12px] text-fg-muted">This computer hasn’t run or claimed this test.</div>`)
     } else if (info.status === "no_build") {
