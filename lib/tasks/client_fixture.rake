@@ -88,7 +88,8 @@ namespace :dev do
       claims = Claim.where(commit: commit).includes(test_case_commit: :test_case).map do |c|
         { scope: c.scope, status: c.status,
           test: c.test_case_commit&.test_case&.then { |t| "#{t.module}/#{t.name}" },
-          use_full_inlists: c.use_full_inlists, use_fpe: c.use_fpe, use_converge: c.use_converge }
+          use_full_inlists: c.use_full_inlists, use_fpe: c.use_fpe, use_converge: c.use_converge,
+          environment: c.environment_label }
       end
       runs = TestInstance.where(commit: commit).includes(:test_case).order(:id).map do |i|
         { test: "#{i.test_case.module}/#{i.test_case.name}", run_optional: i.run_optional,
