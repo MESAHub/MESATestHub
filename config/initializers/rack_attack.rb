@@ -41,16 +41,20 @@ class Rack::Attack
   # verified in SubmissionsController), NOT a browser session — so the
   # session safelist above can never see it. Clients still on
   # passwords hit the same wall on /api/v1/ (claims are per test, just
-  # like submissions), so those paths count too. A computer running the
-  # MESA suite submits one POST per test case (hundreds in a burst),
-  # which blew past the generic 100-per-window IP throttles even though
+  # like submissions), so those paths count too. So does
+  # /check_computer: every `mesa_test test` / `mesa_test submit` calls
+  # it before doing anything else, and when a cluster burned through
+  # req/ip + api/ip there, the client exited before ever submitting.
+  # A computer running the MESA suite submits one POST per test case
+  # (hundreds in a burst), which blew past the generic 100-per-window
+  # IP throttles even though
   # every request carries valid credentials. Treat these paths
   # specially: exempt them from the general req/ip + api/ip throttles
   # below and give them their own generous backstop. The real access
   # control is the credential + computer-ownership check in the
   # controller, not an IP throttle.
   SUBMISSION_PATH = lambda do |req|
-    req.path.start_with?('/submissions', '/api/v1/')
+    req.path.start_with?('/submissions', '/api/v1/', '/check_computer')
   end
 
   # Block requests from specific IPs that are known bad actors
