@@ -58,12 +58,18 @@ namespace :dev do
       wants = ENV.fetch('WANTS', '').split(',').map(&:strip).reject(&:empty?)
       unknown = wants - ClientFixture::WANTS.keys
       abort "Unknown WANTS: #{unknown.join(', ')}" if unknown.any?
-      commit = Commit.create!(
-        sha: sha, short_sha: sha[0, 7], author: 'Client Fixture',
-        author_email: ClientFixture::EMAIL, message: 'client fixture commit',
-        commit_time: Time.current, github_url: "https://example.test/#{sha}",
-        **wants.to_h { |w| [ClientFixture::WANTS[w], true] }
+      # insert!, not create!: Commit's after_create callback asks GitHub for
+      # the commit's test manifest, which for a fake SHA only burns API rate
+      # limit (60/hour unauthenticated) -- the test cases come from TESTS.
+      now = Time.current
+      Commit.insert!(
+        { sha: sha, short_sha: sha[0, 7], author: 'Client Fixture',
+          author_email: ClientFixture::EMAIL, message: 'client fixture commit',
+          commit_time: now, github_url: "https://example.test/#{sha}",
+          status: -1, created_at: now, updated_at: now,
+          **wants.to_h { |w| [ClientFixture::WANTS[w], true] } }
       )
+      commit = Commit.find_by!(sha: sha)
       BranchMembership.create!(branch: Branch.main || Branch.create!(name: 'main'), commit: commit)
       ENV.fetch('TESTS').split(',').each do |spec|
         mod, name = spec.strip.split('/', 2)
