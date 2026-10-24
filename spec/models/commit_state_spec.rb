@@ -544,6 +544,26 @@ RSpec.describe 'commit state aggregation' do
       expect(state[:flags].values.sum).to eq(0)
     end
 
+    # Oct 2026: after untested tests stopped counting as pending, one
+    # passing test made a whole commit "all passing" (index pill, hero,
+    # subway map). All passing needs every test to have passed.
+    it 'is :partial, not :all_pass, when only some tests have passing results' do
+      instance(test_case: test_case_a, computer: rusty)
+      tcc_for(test_case_b)
+
+      state = commit.reload.commit_state
+      expect(state[:tests][:status]).to eq(:partial)
+      expect(state[:tests].values_at(:reported_tests, :total_tests)).to eq([1, 2])
+      expect(commit.reload.tests_status).to eq(:partial)
+    end
+
+    it 'is :all_pass once every test has a passing result' do
+      instance(test_case: test_case_a, computer: rusty)
+      instance(test_case: test_case_b, computer: popeye)
+
+      expect(commit.reload.commit_state[:tests][:status]).to eq(:all_pass)
+    end
+
     it 'e91a5c2 — partial build + mixed test fail' do
       builds = {
         rusty => true, popeye => true, derecho => false,

@@ -148,7 +148,9 @@ module CommitsHelper
   # status, outer ring = which kinds of test results the commit has
   # (see #status_ring_data). The unreported gap is blue while someone
   # is working on the commit, gray otherwise.
-  def commit_status_ring(state, size: 22)
+  # `center:` places the ring (as a nested <svg>) centered on that
+  # point inside a larger SVG, e.g. a subway-map station.
+  def commit_status_ring(state, size: 22, center: nil)
     data = status_ring_data(state)
     segments = data[:segments]
     # Stroke scales with the ring so a larger ring reads bolder, not
@@ -182,9 +184,10 @@ module CommitsHelper
     end
     shapes << tag.circle(cx: c, cy: c, r: size * 0.18,
                          fill: STATUS_RING_BUILD_COLORS[state[:build][:status]] || "var(--color-skipped)")
+    placement = center ? { x: center[0] - size / 2.0, y: center[1] - size / 2.0 } : {}
     content_tag(:svg, safe_join(shapes), width: size, height: size, viewBox: "0 0 #{size} #{size}",
                                           class: "shrink-0", role: "img",
-                                          "aria-label": status_ring_label(state))
+                                          "aria-label": status_ring_label(state), **placement)
   end
 
   # Tooltip / screen-reader text for the ring, worst-first.
@@ -241,7 +244,7 @@ module CommitsHelper
   end
 
   # Renders the test-status pill: All passing / N failing / N mixed /
-  # Pending / Untested.
+  # Pending / N/M passing (partial) / Untested.
   #
   # Mapping note: `:pending` (TCCs exist, no submissions) and
   # `:not_run` (no test data at all) both render as gray "Untested"
@@ -278,6 +281,14 @@ module CommitsHelper
     when :pending_partial
       content_tag(:span, class: "#{base} bg-info-soft text-info-soft-text") do
         safe_join([mesa_icon(:clock, size: 11), "Pending"], " ")
+      end
+    when :partial
+      # Some passed, nothing failed, the rest untested: say how far it
+      # got rather than calling it passing.
+      t = state[:tests]
+      content_tag(:span, class: "#{base} bg-bg-muted text-fg-muted",
+                         title: "Every reported test passed, but #{t[:total_tests].to_i - t[:reported_tests].to_i} haven't been run") do
+        safe_join([mesa_icon(:check, size: 11), "#{t[:reported_tests]}/#{t[:total_tests]} passing"], " ")
       end
     else
       content_tag(:span, class: "#{base} bg-success-soft text-success-soft-text") do
