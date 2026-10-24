@@ -246,18 +246,15 @@ module CommitsHelper
   # Renders the test-status pill: All passing / N failing / N mixed /
   # Pending / N/M passing (partial) / Untested.
   #
-  # Mapping note: `:pending` (TCCs exist, no submissions) and
-  # `:not_run` (no test data at all) both render as gray "Untested"
-  # since the codebase doesn't model a "promised but not yet
-  # submitted" distinction. Blue is reserved for `:pending_partial`
-  # — some test cases have passing submissions, others haven't
-  # reported — which is genuinely actionable. The word stays
-  # "Pending" because we don't actually know whether the run is in
-  # flight, queued, or lost; "Pending" is the honest framing.
+  # `:pending` and `:pending_partial` both mean open claims -- results
+  # promised and in flight -- so both render as blue "Pending".
+  # `:not_run` (no results, no claims) is gray "Untested". (Before
+  # claims, `:pending` couldn't be told apart from untouched and also
+  # rendered as "Untested".)
   def test_status_pill(state, size: :md)
     base = pill_classes(size)
     case state[:tests][:status]
-    when :not_run, :pending
+    when :not_run
       content_tag(:span, class: "#{base} bg-bg-muted text-fg-muted") do
         safe_join([mesa_icon(:eye_off, size: 11), "Untested"], " ")
       end
@@ -278,7 +275,7 @@ module CommitsHelper
                          title: "Passing, but checksums disagree") do
         safe_join([mesa_icon(:neq, size: 11), "#{state[:tests][:checksum_tests]} ≠"], " ")
       end
-    when :pending_partial
+    when :pending, :pending_partial
       content_tag(:span, class: "#{base} bg-info-soft text-info-soft-text") do
         safe_join([mesa_icon(:clock, size: 11), "Pending"], " ")
       end
@@ -556,6 +553,7 @@ module CommitsHelper
   def summary_for_computer(row)
     counts = row[:counts]
     return "no build" if row[:state] == :build_fail
+    return "building" if row[:in_progress] && row[:counts][:pending].zero?
     if counts[:fail].positive?
       fpe = counts[:fpe_failure].to_i
       return "#{fpe} FPE" if fpe == counts[:fail]

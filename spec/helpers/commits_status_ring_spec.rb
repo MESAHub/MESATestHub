@@ -28,6 +28,14 @@ RSpec.describe CommitsHelper, type: :helper do
   end
 
   describe '#test_status_pill' do
+    it 'says Pending (not Untested) while claimed tests are in flight' do
+      s = state(total_tests: 107)
+      s[:tests][:status] = :pending
+      expect(helper.test_status_pill(s)).to include('Pending')
+      s[:tests][:status] = :not_run
+      expect(helper.test_status_pill(s)).to include('Untested')
+    end
+
     it 'says how far a partial run got instead of "All passing"' do
       s = state(clean_passing_tests: 1, reported_tests: 1, total_tests: 107)
       s[:tests][:status] = :partial

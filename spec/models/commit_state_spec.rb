@@ -533,6 +533,39 @@ RSpec.describe 'commit state aggregation' do
       expect(cells["#{rusty.id}-converge_0.8"][:status]).to eq(:not_in_pool)
     end
 
+    # A whole-suite run claims every test up front and submits once at the
+    # end (Corvus, Oct 2026: "107 pending" with no column for Corvus).
+    describe 'a computer with open claims but no submissions yet' do
+      before do
+        instance(test_case: test_case_a, computer: popeye)
+        tcc_for(test_case_b)
+        create(:claim, computer: rusty, commit: commit) # build claim
+        create(:claim, :test_scope, computer: rusty, commit: commit, test_case_commit: tcc_for(test_case_a))
+      end
+
+      it 'gets a matrix column: pending where it claimed, untested elsewhere' do
+        c = commit.reload
+        expect(c.matrix_columns.map { |col| col[:computer_id] }).to include(rusty.id)
+        expect(c.test_computer_matrix[test_case_a.id][rusty.id][:status]).to eq(:pending)
+        expect(c.test_computer_matrix[test_case_b.id][rusty.id][:status]).to eq(:not_run)
+        expect(c.cell_popover_data["#{test_case_a.id}-#{rusty.id}"][:computer_name]).to eq('rusty')
+      end
+
+      it 'is listed as in progress, neither built nor failed' do
+        c = commit.reload
+        row = c.per_computer_summary.find { |r| r[:computer_id] == rusty.id }
+        expect(row).to include(in_progress: true, built: false, state: :pending)
+        expect(row[:counts][:pending]).to eq(1)
+        expect(c.commit_state[:build].values_at(:built_computer_ids, :failed_build_computer_ids))
+          .to eq([[popeye.id], []])
+      end
+
+      it 'drops back out once its claims are gone, if it never submitted' do
+        Claim.where(computer: rusty).update_all(status: 'expired')
+        expect(commit.reload.matrix_columns.map { |col| col[:computer_id] }).not_to include(rusty.id)
+      end
+    end
+
     it 'marks cells on a computer that failed to compile as :no_build' do
       submit(computer: frontera, compiled: false)
       instance(test_case: test_case_a, computer: rusty) # so the tcc exists

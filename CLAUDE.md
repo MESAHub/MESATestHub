@@ -381,6 +381,13 @@ helper or partial exists.
   - The hero subway map's stations use the index's
     `commit_status_ring` (arcs per result kind, dashed gap for
     unreported tests), not a single color.
+  - **A computer with open claims but no submissions yet** (a whole-suite
+    run claims every test up front and submits once at the end) still
+    gets a matrix column (pending where claimed, untested elsewhere) and
+    a Computers card reading "Testing in progress" or "Build in
+    progress". It's neither built nor failed
+    (`CommitState#_in_progress_computers`). Tests status `:pending`
+    renders as a blue "Pending" pill, not "Untested".
   - The computer summary reads "N ok · M untested". The morning digest
     says "Tests: Untested", not "Pending", for commits with no results.
 - **The commit matrix draws columns, not computers.**

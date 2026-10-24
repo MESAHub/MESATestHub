@@ -280,7 +280,10 @@ module CommitState
     computers_by_id = all_subs.map(&:computer).uniq.index_by(&:id)
     subs_by_computer = all_subs.group_by(&:computer_id)
 
-    rows = (built_ids + failed_ids).uniq.map do |computer_id|
+    computers_by_id.merge!(_in_progress_computers)
+    in_progress_ids = _in_progress_computers.keys
+
+    rows = ((built_ids + failed_ids).uniq | in_progress_ids).map do |computer_id|
       counts = { pass: 0, fail: 0, pending: 0, skip: 0, not_run: 0,
                  fpe: 0, checksum: 0, inlists_full: 0, fpe_failure: 0, fpe_likely: 0 }
 
@@ -292,8 +295,10 @@ module CommitState
       end
 
       built = built_ids.include?(computer_id)
+      in_progress = in_progress_ids.include?(computer_id)
       state =
-        if !built then :build_fail
+        if in_progress then :pending
+        elsif !built then :build_fail
         elsif counts[:fail].positive? then :fail
         elsif counts[:pending].positive? then :pending
         elsif counts[:checksum].positive? then :checksum
@@ -304,6 +309,7 @@ module CommitState
         computer: computers_by_id[computer_id],
         computer_id: computer_id,
         built: built,
+        in_progress: in_progress,
         state: state,
         counts: counts,
         submissions: subs_by_computer[computer_id] || []
@@ -383,7 +389,7 @@ module CommitState
     @_matrix_columns ||= begin
       pools = computer_pools
       by_computer = _instances_by_computer
-      submissions.map(&:computer_id).uniq.flat_map do |cid|
+      (submissions.map(&:computer_id).uniq | _in_progress_computers.keys).flat_map do |cid|
         present = (by_computer[cid] || []).map { |i| _instance_pool(i) }.uniq
         if present.size > 1
           present.sort_by { |p| CommitState.pool_sort_key(p) }.map do |pool|
@@ -633,6 +639,7 @@ module CommitState
     col_matrix = column_matrix
     tccs = _tccs_for_matrix.index_by(&:test_case_id)
     computers_by_id = submissions.includes(:computer).map(&:computer).uniq.index_by(&:id)
+                                 .merge(_in_progress_computers)
 
     data = {}
     col_matrix.each do |test_id, row|
@@ -745,7 +752,7 @@ module CommitState
   def _build_test_computer_matrix
     tccs = _tccs_for_matrix
     submissions_by_computer = submissions.group_by(&:computer_id)
-    computer_ids = submissions_by_computer.keys
+    computer_ids = submissions_by_computer.keys | _in_progress_computers.keys
     claims = _claim_index
 
     test_ids = tccs.map(&:test_case_id)
@@ -799,6 +806,17 @@ module CommitState
       expires_in: claim.expires_at.future? ? helpers.time_ago_in_words(claim.expires_at) : nil,
       environment: claim.environment_label
     }.compact
+  end
+
+  # Computers holding open claims on this commit that haven't submitted
+  # anything here yet, e.g. a whole-suite run that claims every test up
+  # front and submits once at the end. Without this they'd be invisible
+  # to the matrix and the Computers tab until that final submission,
+  # though their claims already count as pending. { id => Computer }.
+  def _in_progress_computers
+    @_in_progress_computers ||= Claim.pending.where(commit_id: id)
+                                     .where.not(computer_id: submissions.select(:computer_id))
+                                     .includes(computer: :user).map(&:computer).uniq.index_by(&:id)
   end
 
   # Cached for the lifetime of the Commit instance. Same eager-loaded
@@ -891,7 +909,9 @@ module CommitState
 
     if instances.empty?
       status =
-        if submissions.empty? then :no_build
+        # No submissions yet but open claims (_in_progress_computers):
+        # pending where it claimed the test, untested elsewhere.
+        if submissions.empty? then _unrun_cell_status(tcc, computer_id, claims || _claim_index)
         elsif submissions.any? { |s| s.compiled == true }
           _unrun_cell_status(tcc, computer_id, claims || _claim_index)
         else :no_build
