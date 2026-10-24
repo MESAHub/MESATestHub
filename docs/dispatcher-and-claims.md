@@ -400,6 +400,16 @@ bypassed dispatch entirely.
 `rake commits:reparse_ci_flags` re-reads every commit's directives and
 recomputes converge satisfaction where the request changed.
 
+**Checksums and the matrix:**
+- Convergence runs are compared with each other, but only at the same
+  factor. The factor is part of `ChecksumComparison`'s group key, along
+  with inlist count and toolchain class. They used to be excluded
+  outright.
+- In the matrix, each factor is its own pool, so a computer's 0.5 runs
+  get a "×0.5" column instead of blending into its default-run cell.
+- Stored `checksum_count`s only refresh on submission, so run
+  `rake checksums:recompute` once after deploying.
+
 **Run environment (optional, Oct 2026):** a claim may also carry
 `sdk_version`, `compiler`, `compiler_version`, `math_backend`,
 `omp_num_threads`, and `platform_version`. These are what the claimed run

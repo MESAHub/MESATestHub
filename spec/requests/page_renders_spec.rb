@@ -51,6 +51,21 @@ RSpec.describe 'Page renders', type: :request do
       expect(response).to have_http_status(:ok)
     end
 
+    it 'renders a separate matrix column for a convergence run' do
+      computer = create(:computer, name: 'rusty', user: user)
+      [1.0, 0.5].each do |factor|
+        sub = create(:submission, commit: commit, computer: computer, entire: false)
+        create(:test_instance, commit: commit, computer: computer, test_case: test_case,
+                               test_case_commit: test_case_commit, submission: sub,
+                               resolution_factor: factor)
+      end
+
+      get "/main/commits/#{commit.short_sha}"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('×0.5', 'Convergence run · resolution factor 0.5')
+    end
+
     it 'defers the Diff panel to a lazy Turbo Frame instead of rendering it inline' do
       # The last-clean-commit walk is the most expensive part of the
       # page, so the Diff tab is a lazy frame that only fetches when

@@ -520,6 +520,19 @@ RSpec.describe 'commit state aggregation' do
       end
     end
 
+    it "gives a computer's convergence runs their own matrix column per factor" do
+      instance(test_case: test_case_a, computer: rusty)
+      instance(test_case: test_case_a, computer: rusty, resolution_factor: 0.5)
+      instance(test_case: test_case_b, computer: rusty, resolution_factor: 0.8)
+
+      columns = commit.reload.matrix_columns.select { |c| c[:computer_id] == rusty.id }
+      expect(columns.map { |c| c[:pool] }).to eq([:sdk_default, :"converge_0.8", :"converge_0.5"])
+      cells = commit.column_matrix[test_case_a.id]
+      expect(cells["#{rusty.id}-sdk_default"]).to include(status: :pass, runs: 1)
+      expect(cells["#{rusty.id}-converge_0.5"]).to include(status: :pass, runs: 1)
+      expect(cells["#{rusty.id}-converge_0.8"][:status]).to eq(:not_in_pool)
+    end
+
     it 'marks cells on a computer that failed to compile as :no_build' do
       submit(computer: frontera, compiled: false)
       instance(test_case: test_case_a, computer: rusty) # so the tcc exists

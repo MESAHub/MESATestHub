@@ -187,7 +187,7 @@
               %span.font-mono.text-fg-subtle.justify-self-center.overflow-hidden{
                 class: "text-[10px]",
                 style: "writing-mode: vertical-rl; transform: rotate(180deg); height: 90px; line-height: 22px;",
-                title: col[:split] ? "#{c.name} — its #{CommitState::COMPUTER_POOL_LABELS[col[:pool]]} runs (it also has a column in another group)" : c.name }
+                title: col[:split] ? "#{c.name} — its #{CommitState.pool_label(col[:pool])} runs (it also has a column in another group)" : c.name }
                 = display_name
     -# Matrix body — overflow-x: auto so the body scrolls
     -# horizontally within the panel on narrow viewports instead

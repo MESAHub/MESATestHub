@@ -9,13 +9,14 @@
 #   * same toolchain class — MESA SDK vs. anything else. SDK versions
 #     are expected to agree with each other; a hand-tuned ifort build
 #     isn't expected to agree with the SDK.
+#   * same resolution factor — convergence runs (`[ci converge 0.5]`,
+#     MESA_TEST_SUITE_RESOLUTION_FACTOR) change the answer by design,
+#     so a 0.5 run is compared only with other 0.5 runs.
 #
 # Excluded outright:
 #
 #   * FPE-checking runs — whether trapping builds should reproduce
 #     normal builds bit-for-bit is unsettled, so they don't vote.
-#   * non-standard resolution (resolution_factor != 1) — changes the
-#     answer by design.
 #   * the all-zeros placeholder MESA's test suite writes for tests
 #     marked `.ignore_checksum`.
 #
@@ -35,14 +36,20 @@ class ChecksumComparison
     checksum = instance.checksum
     return nil if checksum.blank? || checksum == PLACEHOLDER_CHECKSUM
     return nil if instance.fpe_checks
-    factor = instance.resolution_factor
-    return nil unless factor.nil? || (factor - 1.0).abs < 1e-6
 
     # Pre-migration rows that never got an inlist_count fall back to
     # the coarser run_optional split rather than pooling with
     # everything else.
     inlists = instance.inlist_count || (instance.run_optional ? :full : :default)
-    [inlists, instance.sdk_version.present?]
+    [inlists, instance.sdk_version.present?, factor_key(instance.resolution_factor)]
+  end
+
+  # Resolution factors as comparison-group keys: nil and 1 are the same
+  # (default) group; others are rounded so float noise from YAML and
+  # the column doesn't split a group.
+  def self.factor_key(factor)
+    return 1.0 if factor.nil? || (factor - 1.0).abs < 1e-6
+    factor.round(3)
   end
 
   def initialize(instances)

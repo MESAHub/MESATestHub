@@ -399,6 +399,17 @@ module CommitsHelper
     no_results: ["No results", "—", "No test results on this commit yet"]
   }.freeze
 
+  # MATRIX_POOL_LABELS, plus convergence pools (one per resolution
+  # factor), e.g. ["×0.5", "×0.5", "Convergence run · resolution factor 0.5"].
+  def matrix_pool_labels(pool)
+    if (factor = CommitState.converge_pool_factor(pool))
+      short = "×#{format('%g', factor)}"
+      [short, short, "#{CommitState.pool_label(pool)} (compared only with runs at the same factor)"]
+    else
+      MATRIX_POOL_LABELS.fetch(pool)
+    end
+  end
+
   # Drawn matrix columns (CommitState#matrix_columns) bunched by
   # checksum-comparison pool, preserving the worst-first computer
   # order within each pool. Returns
@@ -407,16 +418,15 @@ module CommitsHelper
   #
   # `label` is the short code when the pool is a single 22px column.
   #
-  # in CommitState::COMPUTER_POOL_ORDER, skipping empty pools.
+  # in CommitState.pool_sort_key order, skipping empty pools.
   def matrix_column_groups(per_computer, columns)
     by_computer = columns.group_by { |col| col[:computer_id] }
     ordered = per_computer.map { |r| r[:computer] }.compact.flat_map do |c|
       (by_computer[c.id] || []).map { |col| col.merge(computer: c) }
     end
     by_pool = ordered.group_by { |col| col[:pool] }
-    CommitState::COMPUTER_POOL_ORDER.filter_map do |pool|
-      next unless by_pool[pool]
-      label, short, title = MATRIX_POOL_LABELS.fetch(pool)
+    by_pool.keys.sort_by { |pool| CommitState.pool_sort_key(pool) }.map do |pool|
+      label, short, title = matrix_pool_labels(pool)
       cols = by_pool[pool]
       { pool: pool, label: cols.size > 1 ? label : short, title: title,
         columns: cols, computers: cols.map { |col| col[:computer] } }

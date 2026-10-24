@@ -318,9 +318,10 @@ helper or partial exists.
   only compares passing instances with a real checksum that ran the
   same number of inlists (`test_instances.inlist_count`, set at
   ingest — never trust `run_optional` for this) on the same toolchain
-  class (MESA SDK vs. not; SDK *versions* pool together). FPE-checking
-  runs, non-1.0 `resolution_factor`, and the all-zeros
-  `.ignore_checksum` placeholder are excluded. The plurality checksum
+  class (MESA SDK vs. not; SDK *versions* pool together) at the same
+  `resolution_factor`: convergence runs are compared only with runs at
+  the same factor (`ChecksumComparison.factor_key`; nil ≡ 1). FPE-checking
+  runs and the all-zeros `.ignore_checksum` placeholder are excluded. The plurality checksum
   by distinct computer is the consensus; only instances off it get
   the cell-level `checksum` flag (a tie flags everyone).
   `test_case_commits.checksum_count` stores the largest distinct
@@ -385,7 +386,10 @@ helper or partial exists.
 - **The commit matrix draws columns, not computers.**
   `CommitState#matrix_columns` gives a computer one column per
   comparison pool it has runs in (LLNL_Dane default + full, delorean
-  with/without FPE checks), and `#column_matrix` builds each cell from
+  with/without FPE checks, and one pool per convergence factor, e.g.
+  `:"converge_0.5"` drawn as "×0.5"; order and labels come from
+  `CommitState.pool_sort_key` / `.pool_label`), and `#column_matrix`
+  builds each cell from
   only that pool's runs (`:not_in_pool` when it didn't run a test that
   way; `runs` counts repeat submissions for the badge). Popover keys
   are `"<test_id>-<column key>"` (column key = computer id when
