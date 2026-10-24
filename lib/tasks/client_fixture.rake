@@ -4,7 +4,8 @@
 #
 #   bin/rails dev:client_fixture:setup SHA=<40-char sha> \
 #     TESTS=star/fake_alpha,star/fake_beta,binary/fake_gamma \
-#     WANTS=optional,converge          # optional, fpe, converge, skip
+#     WANTS=optional,converge          # optional, fpe, converge, skip;
+#                                      # converge=0.5 names a factor
 #   bin/rails dev:client_fixture:report
 #   bin/rails dev:client_fixture:teardown
 #
@@ -55,7 +56,9 @@ namespace :dev do
       computer = Computer.create!(name: ClientFixture::COMPUTER, user: user, platform: 'linux')
       api_key = computer.generate_api_key!
 
-      wants = ENV.fetch('WANTS', '').split(',').map(&:strip).reject(&:empty?)
+      specs = ENV.fetch('WANTS', '').split(',').map(&:strip).reject(&:empty?)
+      wants = specs.map { |w| w.split('=', 2).first }
+      factor = specs.find { |w| w.start_with?('converge=') }&.split('=', 2)&.last&.to_f
       unknown = wants - ClientFixture::WANTS.keys
       abort "Unknown WANTS: #{unknown.join(', ')}" if unknown.any?
       # insert!, not create!: Commit's after_create callback asks GitHub for
@@ -66,7 +69,7 @@ namespace :dev do
         { sha: sha, short_sha: sha[0, 7], author: 'Client Fixture',
           author_email: ClientFixture::EMAIL, message: 'client fixture commit',
           commit_time: now, github_url: "https://example.test/#{sha}",
-          status: -1, created_at: now, updated_at: now,
+          status: -1, created_at: now, updated_at: now, converge_factor: factor,
           **wants.to_h { |w| [ClientFixture::WANTS[w], true] } }
       )
       commit = Commit.find_by!(sha: sha)
@@ -99,6 +102,7 @@ namespace :dev do
         s.slice(:empty, :entire, :compiled, :use_fpe, :use_full_inlists, :use_converge)
       end
       puts({ claims: claims, runs: runs, submissions: submissions,
+             converge_factor: commit.converge_factor,
              satisfied: { optional: commit.full_inlists_satisfied_at.present?,
                           fpe: commit.fpe_satisfied_at.present?,
                           converge: commit.converge_satisfied_at.present? } }.to_json)

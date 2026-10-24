@@ -690,10 +690,28 @@ class Commit < ApplicationRecord
   }.freeze
 
   CI_SATISFACTION = {
-    full_inlists_satisfied_at: [:wants_full_inlists, CI_RUN_CONDITIONS[:full_inlists]],
-    fpe_satisfied_at:          [:wants_fpe,          CI_RUN_CONDITIONS[:fpe]],
-    converge_satisfied_at:     [:wants_converge,     CI_RUN_CONDITIONS[:converge]]
+    full_inlists_satisfied_at: [:wants_full_inlists, :full_inlists],
+    fpe_satisfied_at:          [:wants_fpe,          :fpe],
+    converge_satisfied_at:     [:wants_converge,     :converge]
   }.freeze
+
+  # How close a run's resolution factor must be to a requested
+  # `[ci converge 0.5]` factor to count (it round-trips through YAML and
+  # a float column).
+  CONVERGE_FACTOR_TOLERANCE = 1e-3
+
+  # SQL over test_instances for "a run in this configuration" on *this*
+  # commit. Same as CI_RUN_CONDITIONS, except that a commit naming a
+  # converge factor only counts runs at that factor -- a 0.8 run
+  # doesn't answer `[ci converge 0.5]`.
+  def ci_run_condition(config)
+    return CI_RUN_CONDITIONS.fetch(config) unless config == :converge && converge_factor
+
+    ActiveRecord::Base.sanitize_sql_array(
+      ['ABS(COALESCE(test_instances.resolution_factor, 1) - ?) < ?',
+       converge_factor, CONVERGE_FACTOR_TOLERANCE]
+    )
+  end
 
   # Stamp `<config>_satisfied_at` once a single computer has a result,
   # run that way, for every test case on this commit — pass or fail;
@@ -709,8 +727,8 @@ class Commit < ApplicationRecord
     total = test_case_commits.count
     return if total.zero?
 
-    updates = pending.each_with_object({}) do |(col, (_, condition)), out|
-      covered = TestInstance.where(commit_id: id).where(condition)
+    updates = pending.each_with_object({}) do |(col, (_, config)), out|
+      covered = TestInstance.where(commit_id: id).where(ci_run_condition(config))
                             .group(:computer_id).distinct.count(:test_case_commit_id)
                             .values.max || 0
       out[col] = at if covered >= total

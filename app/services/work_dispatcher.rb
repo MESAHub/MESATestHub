@@ -115,7 +115,7 @@ class WorkDispatcher
 
       tcc, needed, coverage, = pick
       reasons = candidate.reasons.dup
-      reasons += needed.map { |config| "#{CONFIGS[config][:tag]} not yet run for this test" }
+      reasons += needed.map { |config| "#{tag_for(candidate.commit, config)} not yet run for this test" }
       reasons << coverage_reason(coverage, 'this test')
       return Recommendation.new(commit: candidate.commit, scope: 'test', test_case_commit: tcc,
                                 flags: CONFIGS.keys.index_with { |c| needed.include?(c) },
@@ -144,7 +144,7 @@ class WorkDispatcher
 
     runs = TestInstance.where(commit_id: commit.id)
                        .pluck(:test_case_commit_id, :computer_id,
-                              *CONFIGS.keys.map { |c| Arel.sql(Commit::CI_RUN_CONDITIONS[c]) })
+                              *CONFIGS.keys.map { |c| Arel.sql(commit.ci_run_condition(c)) })
                        .group_by(&:first)
     claims = Claim.pending.where(commit_id: commit.id, scope: 'test')
                   .pluck(:test_case_commit_id, :computer_id, :use_full_inlists,
@@ -243,10 +243,10 @@ class WorkDispatcher
       score -= coverage_penalty(coverage)
       reasons << coverage_reason(coverage, 'this commit')
 
-      CONFIGS.each do |config, spec|
+      CONFIGS.each_key do |config|
         next unless commit_wants?(commit, config)
         score += CI_BOOST
-        reasons << "#{spec[:tag]} not yet satisfied"
+        reasons << "#{tag_for(commit, config)} not yet satisfied"
       end
 
       Scored.new(commit, score, reasons)
@@ -266,6 +266,15 @@ class WorkDispatcher
   # runs, on successive dispatches.
   def one_run_of(needed)
     needed.select { |c| c == :fpe } + needed.reject { |c| c == :fpe }.first(1)
+  end
+
+  # The commit-message directive behind a request, as the author wrote
+  # it: "[ci converge 0.5]" when a factor was named.
+  def tag_for(commit, config)
+    tag = CONFIGS[config][:tag]
+    return tag unless config == :converge && commit.converge_factor
+
+    "[ci converge #{commit.converge_factor}]"
   end
 
   # The commit asks for `config` and this computer can do it.

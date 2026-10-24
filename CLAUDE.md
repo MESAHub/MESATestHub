@@ -480,6 +480,8 @@ helper or partial exists.
 ### Custom Rake tasks (in `lib/tasks/`)
 - `morning_mailer:daily` — daily mesa-developers digest (production
   fires it via the `MorningMailerJob` recurring task instead)
+- `commits:reparse_ci_flags` — re-read every commit's `[ci ...]`
+  directives after a parser change (e.g. `[ci converge 0.5]`'s factor)
 - `claims:sweep` — expire stale pending claims (production runs
   `ClaimSweeperJob` every 5 min via Solid Queue)
 - `dev:client_fixture:{setup,report,teardown}` — throwaway user /
