@@ -32,6 +32,15 @@ RSpec.describe 'Commit CI-request satisfaction' do
     expect(commit.reload.fpe_satisfied_at).to be_nil
   end
 
+  it 'counts only runs at the named factor for [ci converge 0.5]' do
+    commit.update!(converge_factor: 0.5)
+    tccs.each { |tcc| run!(tcc, on: alpha, resolution_factor: 0.8) }
+    expect(commit.reload.converge_satisfied_at).to be_nil
+
+    tccs.each { |tcc| run!(tcc, on: beta, resolution_factor: 0.5) }
+    expect(commit.reload.converge_satisfied_at).to be_present
+  end
+
   it 'reads converge from a non-default resolution_factor' do
     run!(tccs[0], on: alpha, resolution_factor: 0.8)
     run!(tccs[1], on: alpha, resolution_factor: 0.8)

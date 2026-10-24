@@ -1,14 +1,21 @@
 # Parse CI directive flags out of the first line of a MESA commit
 # message.
 #
-# Returns a hash mirroring the four boolean columns on `commits`:
+# Returns a hash mirroring the CI-directive columns on `commits`:
 #
 #   {
 #     ci_skip:            Boolean,
 #     wants_full_inlists: Boolean,
 #     wants_fpe:          Boolean,
-#     wants_converge:     Boolean
+#     wants_converge:     Boolean,
+#     converge_factor:    Float or nil
 #   }
+#
+# `[ci converge]` may name the resolution factor to run at:
+# `[ci converge 0.5]`. Anything after `converge` that isn't a positive
+# number still counts as a converge request, just without a factor
+# (the client then uses its default) -- better than silently dropping
+# a request over a typo.
 #
 # Only the first line is scanned. Squash and merge commits routinely
 # list every constituent commit's subject in their body, which would
@@ -33,7 +40,7 @@ module CommitMessageFlags
   SKIP_RE           = /\[\s*ci\s+skip\s*\]/.freeze
   FULL_INLISTS_RE   = /\[\s*ci\s+optional(\s+\d+)?\s*\]/.freeze
   FPE_RE            = /\[\s*ci\s+fpe\s*\]/.freeze
-  CONVERGE_RE       = /\[\s*ci\s+converge\s*\]/.freeze
+  CONVERGE_RE       = /\[\s*ci\s+converge(?:\s+([^\]]*?))?\s*\]/.freeze
 
   def self.parse(message)
     # `String#lines.first` returns the leading line *with* its
@@ -44,7 +51,9 @@ module CommitMessageFlags
 
     wants_full_inlists = !!(first_line =~ FULL_INLISTS_RE)
     wants_fpe          = !!(first_line =~ FPE_RE)
-    wants_converge     = !!(first_line =~ CONVERGE_RE)
+    converge_match     = CONVERGE_RE.match(first_line)
+    wants_converge     = !converge_match.nil?
+    converge_factor    = converge_match && parse_factor(converge_match[1])
     ci_skip            = !!(first_line =~ SKIP_RE) &&
                          !(wants_full_inlists || wants_fpe)
 
@@ -52,7 +61,14 @@ module CommitMessageFlags
       ci_skip: ci_skip,
       wants_full_inlists: wants_full_inlists,
       wants_fpe: wants_fpe,
-      wants_converge: wants_converge
+      wants_converge: wants_converge,
+      converge_factor: converge_factor
     }
+  end
+
+  # "0.5" → 0.5; nil for anything that isn't a positive number.
+  def self.parse_factor(text)
+    factor = Float(text.to_s.strip, exception: false)
+    factor if factor&.positive?
   end
 end

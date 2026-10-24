@@ -335,7 +335,7 @@ module CommitState
         if pools.empty?
           out[cid] = { pool: :no_results, mixed: false }
         else
-          out[cid] = { pool: pools.max_by { |pool, n| [n, -COMPUTER_POOL_ORDER.index(pool)] }.first,
+          out[cid] = { pool: pools.max_by { |pool, n| [n, CommitState.pool_sort_key(pool).map(&:-@)] }.first,
                        mixed: pools.size > 1 }
         end
       end
@@ -343,6 +343,33 @@ module CommitState
   end
 
   COMPUTER_POOL_ORDER = %i[sdk_default sdk_full other_default other_full fpe no_results].freeze
+
+  # Convergence runs get one pool per resolution factor (`:"converge_0.5"`),
+  # sorted after the full-inlist pools and before FPE, larger factors
+  # (closer to default) first.
+  def self.converge_pool(factor)
+    :"converge_#{format('%g', factor)}"
+  end
+
+  def self.converge_pool_factor(pool)
+    pool.to_s.delete_prefix('converge_').to_f if pool.to_s.start_with?('converge_')
+  end
+
+  def self.pool_sort_key(pool)
+    if (factor = converge_pool_factor(pool))
+      [COMPUTER_POOL_ORDER.index(:fpe) - 0.5, -factor]
+    else
+      [COMPUTER_POOL_ORDER.index(pool) || COMPUTER_POOL_ORDER.size, 0]
+    end
+  end
+
+  def self.pool_label(pool)
+    if (factor = converge_pool_factor(pool))
+      "Convergence run · resolution factor #{format('%g', factor)}"
+    else
+      COMPUTER_POOL_LABELS[pool]
+    end
+  end
 
   # The matrix's drawn columns. A computer whose runs on this commit
   # all fall in one comparison pool keeps a single column (key = its
@@ -359,7 +386,7 @@ module CommitState
       submissions.map(&:computer_id).uniq.flat_map do |cid|
         present = (by_computer[cid] || []).map { |i| _instance_pool(i) }.uniq
         if present.size > 1
-          present.sort_by { |p| COMPUTER_POOL_ORDER.index(p) }.map do |pool|
+          present.sort_by { |p| CommitState.pool_sort_key(p) }.map do |pool|
             { key: "#{cid}-#{pool}", computer_id: cid, pool: pool, split: true }
           end
         else
@@ -631,7 +658,7 @@ module CommitState
           flags: cell[:flags],
           submission_count: instances.size
         }
-        entry[:column_label] = COMPUTER_POOL_LABELS[col[:pool]] if col[:split]
+        entry[:column_label] = CommitState.pool_label(col[:pool]) if col[:split]
         entry[:latest] = _popover_latest(latest) if latest
         if cell[:status] == :pending
           claim = _claim_index[:open_tests][[col[:computer_id], tcc.id]]
@@ -912,6 +939,8 @@ module CommitState
 
   def _instance_pool(instance)
     return :fpe if instance.fpe_checks
+    factor = ChecksumComparison.factor_key(instance.resolution_factor)
+    return CommitState.converge_pool(factor) unless factor == 1.0
     toolchain = instance.sdk_version.present? ? 'sdk' : 'other'
     :"#{toolchain}_#{instance.run_optional ? 'full' : 'default'}"
   end

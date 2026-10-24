@@ -65,11 +65,27 @@ RSpec.describe ChecksumComparison do
       expect(c).not_to be_mismatch
     end
 
-    it 'ignores non-standard resolution in either direction' do
+    it 'never compares runs at different resolution factors' do
       c = compare(inst(checksum: 'aaa'),
                   inst(computer: computers[1], checksum: 'bbb', resolution_factor: 0.5),
                   inst(computer: computers[2], checksum: 'ccc', resolution_factor: 2.0))
       expect(c).not_to be_mismatch
+    end
+
+    it 'compares convergence runs at the same factor with each other' do
+      agree = compare(inst(checksum: 'aaa', resolution_factor: 0.5),
+                      inst(computer: computers[1], checksum: 'aaa', resolution_factor: 0.5))
+      expect(agree.max_distinct).to eq(1)
+
+      differ = compare(inst(checksum: 'aaa', resolution_factor: 0.5),
+                       inst(computer: computers[1], checksum: 'bbb', resolution_factor: 0.5000001))
+      expect(differ).to be_mismatch
+    end
+
+    it 'treats a missing factor as the default factor of 1' do
+      c = compare(inst(checksum: 'aaa', resolution_factor: nil),
+                  inst(computer: computers[1], checksum: 'bbb', resolution_factor: 1.0))
+      expect(c).to be_mismatch
     end
 
     it 'ignores failing instances' do

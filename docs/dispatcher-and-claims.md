@@ -134,6 +134,9 @@ The MESA convention uses these flags in commit messages:
   checks on.
 - `[ci converge]` — request that at least one computer run with
   the convergence-test environment variable set.
+  `[ci converge 0.5]` names the factor (see
+  [Converge factor](#converge-factor)). The numbered form is the
+  testhub's extension; MESA's docs describe only the bare form for now.
 
 The latter three are *preferences*, not requirements. "At least
 one" is the bar. The dispatcher honors these by:
@@ -371,6 +374,42 @@ bypassed dispatch entirely.
 }
 ```
 
+### Converge factor
+
+**What it does (Oct 2026):**
+- `CommitMessageFlags` reads `[ci converge 0.5]` into
+  `commits.converge_factor`. Before this the numbered form wasn't
+  recognized at all, so it made no request.
+- Bare `[ci converge]` leaves the factor null, and the client default
+  (0.8) applies. A non-numeric or non-positive value keeps the converge
+  request but drops the factor.
+- Dispatch returns a top-level `converge_factor` alongside
+  `use_converge`. Reasons quote the directive as written
+  (`[ci converge 0.5] not yet satisfied`).
+- **Request met:** only runs at the named factor count
+  (`Commit#ci_run_condition`), so a 0.8 run doesn't answer
+  `[ci converge 0.5]`.
+- In `best` mode, `mesa_test` uses the named factor even over the
+  user's `MESA_TEST_SUITE_RESOLUTION_FACTOR` or `--resolution-factor`,
+  and logs a warning when they differ. It records the factor in the
+  build's `testhub.yml`, so array jobs use it too.
+- **Manual workflows are unaffected.** `mesa_test` only touches the
+  variable when told to: an explicit flag, or a mode recorded at
+  install.
+
+`rake commits:reparse_ci_flags` re-reads every commit's directives and
+recomputes converge satisfaction where the request changed.
+
+**Checksums and the matrix:**
+- Convergence runs are compared with each other, but only at the same
+  factor. The factor is part of `ChecksumComparison`'s group key, along
+  with inlist count and toolchain class. They used to be excluded
+  outright.
+- In the matrix, each factor is its own pool, so a computer's 0.5 runs
+  get a "×0.5" column instead of blending into its default-run cell.
+- Stored `checksum_count`s only refresh on submission, so run
+  `rake checksums:recompute` once after deploying.
+
 **Run environment (optional, Oct 2026):** a claim may also carry
 `sdk_version`, `compiler`, `compiler_version`, `math_backend`,
 `omp_num_threads`, and `platform_version`. These are what the claimed run
@@ -584,6 +623,7 @@ open question 4).
 | `[ci optional]` | `test_instances.run_optional = true` |
 | `[ci fpe]` | `test_instances.fpe_checks = true` |
 | `[ci converge]` | `test_instances.resolution_factor ≠ 1` |
+| `[ci converge 0.5]` | `test_instances.resolution_factor` = 0.5 (within 10⁻³) |
 
 These are the env vars MESA's `each_test_run` reads and echoes into
 each test's `testhub.yml`:

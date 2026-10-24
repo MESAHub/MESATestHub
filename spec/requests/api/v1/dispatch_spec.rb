@@ -53,6 +53,21 @@ RSpec.describe 'POST /api/v1/dispatch', type: :request do
     expect(tcc).to be_present
   end
 
+  it "sends a [ci converge 0.5] commit's factor with the converge request" do
+    commit.update!(wants_fpe: false, wants_converge: true, converge_factor: 0.5)
+    dispatch(scope: 'build', can_converge: true)
+
+    json = JSON.parse(response.body)
+    expect(json['flags']['use_converge']).to be true
+    expect(json['converge_factor']).to eq(0.5)
+    expect(json['reasons']).to include('[ci converge 0.5] not yet satisfied')
+  end
+
+  it 'sends no factor when converge is not asked for' do
+    dispatch(scope: 'build')
+    expect(JSON.parse(response.body)['converge_factor']).to be_nil
+  end
+
   it 'returns 204 when there is nothing to do' do
     create(:submission, commit: commit, computer: computer)
     dispatch(scope: 'build')

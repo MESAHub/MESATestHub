@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-# CommitMessageFlags parses the four CI directive flags out of a
+# CommitMessageFlags parses the CI directive flags out of a
 # commit message body. Called from Commit.hash_from_github at
 # ingest, so every column it returns must agree with what the
 # legacy Commit#ci_*? predicates report on the same message — the
@@ -14,7 +14,8 @@ RSpec.describe CommitMessageFlags do
         ci_skip: false,
         wants_full_inlists: false,
         wants_fpe: false,
-        wants_converge: false
+        wants_converge: false,
+        converge_factor: nil
       }
     end
 
@@ -58,6 +59,23 @@ RSpec.describe CommitMessageFlags do
     it 'recognizes [ci converge]' do
       result = described_class.parse("Tune solver [ci converge]")
       expect(result[:wants_converge]).to be true
+    end
+
+    it 'reads a named factor from [ci converge 0.5]' do
+      expect(described_class.parse('Tune solver [ci converge 0.5]'))
+        .to include(wants_converge: true, converge_factor: 0.5)
+      expect(described_class.parse('Tune solver [ci  converge .75 ]')[:converge_factor]).to eq(0.75)
+    end
+
+    it 'has no factor for a bare [ci converge]' do
+      expect(described_class.parse('Tune solver [ci converge]')[:converge_factor]).to be_nil
+    end
+
+    it 'keeps the request but drops a factor that is not a positive number' do
+      %w[abc -1 0].each do |junk|
+        expect(described_class.parse("Tune [ci converge #{junk}]"))
+          .to include(wants_converge: true, converge_factor: nil)
+      end
     end
 
     it 'recognizes multiple directives in the same message' do
@@ -158,7 +176,8 @@ RSpec.describe CommitMessageFlags do
           ci_skip: false,
           wants_full_inlists: false,
           wants_fpe: false,
-          wants_converge: false
+          wants_converge: false,
+          converge_factor: nil
         )
       end
 

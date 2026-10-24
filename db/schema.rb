@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_10_23_200000) do
+ActiveRecord::Schema[8.0].define(version: 2026_10_24_200000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -98,6 +98,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_10_23_200000) do
     t.datetime "full_inlists_satisfied_at"
     t.datetime "fpe_satisfied_at"
     t.datetime "converge_satisfied_at"
+    t.float "converge_factor"
     t.index ["sha"], name: "index_commits_on_sha", unique: true
     t.index ["short_sha"], name: "index_commits_on_short_sha", unique: true
   end

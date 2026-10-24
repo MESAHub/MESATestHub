@@ -71,6 +71,9 @@ module Api
           test_case_module: test_case&.module,
           test_case_name: test_case&.name,
           flags: rec.flag_params,
+          # `[ci converge 0.5]`: the factor to run at. nil when converge
+          # isn't asked for, or no factor was named (client default).
+          converge_factor: rec.flags[:converge] ? commit.converge_factor : nil,
           score: rec.score,
           reasons: rec.reasons,
           dispatched_at: Time.current.iso8601,
