@@ -27,6 +27,16 @@ RSpec.describe CommitsHelper, type: :helper do
     end
   end
 
+  describe '#test_status_pill' do
+    it 'says how far a partial run got instead of "All passing"' do
+      s = state(clean_passing_tests: 1, reported_tests: 1, total_tests: 107)
+      s[:tests][:status] = :partial
+      html = helper.test_status_pill(s)
+      expect(html).to include('1/107 passing')
+      expect(html).not_to include('All passing')
+    end
+  end
+
   describe '#commit_status_ring' do
     it 'draws a closed ring for a single complete status' do
       html = helper.commit_status_ring(state(clean_passing_tests: 5, reported_tests: 5, total_tests: 5))

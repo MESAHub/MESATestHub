@@ -35,7 +35,9 @@ module CommitState
   #   :pending         work is in flight — at least one live claim is open
   #                    on this commit and the test side isn't done yet
   #   :pending_partial pending + some already passed
-  #   :all_pass        every test case ran and passed
+  #   :partial         some passed, nothing failed, the rest untested and
+  #                    unclaimed (an unfinished run nobody's working on)
+  #   :all_pass        every test case has a passing result, none failed
   #   :not_run         no tests ran AND no claims are open (genuinely
   #                    untouched — typically a brand-new commit or one
   #                    whose builds all failed)
@@ -68,6 +70,7 @@ module CommitState
     return :mixed if has_mixed
     return :pending if has_pending && !has_passing
     return :pending_partial if has_pending && has_passing
+    return :partial if has_passing && counts[:untested].positive?
     return :all_pass if has_passing
     :not_run
   end
@@ -194,6 +197,11 @@ module CommitState
       elsif checksum_tests.positive? then :checksum
       elsif has_pending && passing_tests.zero? then :pending
       elsif has_pending then :pending_partial
+      # "All passing" means every test has a passing result. Some passed,
+      # the rest untested and unclaimed, is :partial -- not finished, and
+      # nobody's working on it. (Before claims, untested tests read as
+      # pending, so this case never reached :all_pass.)
+      elsif passing_tests.positive? && passing_tests < cells_by_test.size then :partial
       elsif passing_tests.positive? then :all_pass
       else :not_run
       end

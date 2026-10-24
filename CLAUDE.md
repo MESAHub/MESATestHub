@@ -372,6 +372,14 @@ helper or partial exists.
       whatever others reported, including a claim from a computer with
       no submissions here yet and so no matrix column.
     - *Untested:* no results anywhere and no open claims.
+  - **"All passing" (`:all_pass`) means every test has a passing result**
+    and none failed. Some passed with the rest untested and unclaimed is
+    `:partial`, whose pill reads e.g. "104/107 passing". Before this,
+    one passing test made a commit "all passing" once untested tests
+    stopped counting as pending.
+  - The hero subway map's stations use the index's
+    `commit_status_ring` (arcs per result kind, dashed gap for
+    unreported tests), not a single color.
   - The computer summary reads "N ok · M untested". The morning digest
     says "Tests: Untested", not "Pending", for commits with no results.
 - **The commit matrix draws columns, not computers.**

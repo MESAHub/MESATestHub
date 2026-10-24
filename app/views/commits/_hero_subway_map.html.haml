@@ -24,8 +24,10 @@
 - if count.zero?
   %p.text-fg-subtle{ class: "text-[11px]" } no recent activity
 - else
-  - build_colors = { all_ok: "var(--color-success)", some_fail: "var(--color-warning)", all_fail: "var(--color-buildfail)", unknown: "var(--color-skipped)" }
-  - tests_colors = { all_pass: "var(--color-success)", mixed: "var(--color-warning)", fail: "var(--color-danger)", fpe: "var(--color-fpe)", checksum: "var(--color-checksum)", pending_partial: "var(--color-info)", pending: "var(--color-skipped)", not_run: "var(--color-skipped)" }
+  -# Stations are the commits index's status ring (commit_status_ring):
+  -# build core, one arc per kind of test result, and a dashed gap for
+  -# tests not yet reported -- so an unfinished commit never reads as
+  -# complete.
   - # Natural viewBox dimensions. The wrapper grows up to this
   - # width and the SVG fills it uniformly; on wider columns the
   - # whole content scales up proportionally rather than getting
@@ -34,13 +36,9 @@
   - pad_x = 40
   - panel_h = 72
   - center_y = 30
-  - outer_r = 9
-  - inner_r = 6
-  - core_r  = 4
-  - f_outer_r = 13
-  - f_inner_r = 9
-  - f_core_r  = 6
-  - f_ring_r  = 16
+  - ring_size = 22
+  - f_ring_size = 30
+  - f_ring_r  = 18
   - width = pad_x * 2 + station_spacing * [count - 1, 0].max
   - # Stop the SVG from blowing up on very wide hero columns; ~1.4×
   - # the natural width is comfortably "spread" without text growing
@@ -90,30 +88,24 @@
       - window.each_with_index do |commit, i|
         - state = commit.commit_state
         - x = pad_x + station_spacing * i
-        - ring_color = tests_colors[state[:tests][:status]] || tests_colors[:not_run]
-        - core_color = build_colors[state[:build][:status]] || build_colors[:unknown]
         - focused = (commit.sha == focused_sha)
-        - r_outer = focused ? f_outer_r : outer_r
-        - r_inner = focused ? f_inner_r : inner_r
-        - r_core  = focused ? f_core_r  : core_r
+        - size = focused ? f_ring_size : ring_size
         %g
+          -# Backing disc so the line doesn't show through the ring.
+          %circle{ cx: x, cy: center_y, r: size / 2.0, fill: "var(--color-bg-elev)" }
           - if focused
             %circle{ cx: x, cy: center_y, r: f_ring_r,
                      fill: "none",
                      stroke: "var(--color-brand)",
                      "stroke-width": 1.75 }
-            %circle{ cx: x, cy: center_y, r: r_outer, fill: ring_color }
-            %circle{ cx: x, cy: center_y, r: r_inner, fill: "var(--color-bg-elev)" }
-            %circle{ cx: x, cy: center_y, r: r_core,  fill: core_color }
-            %title= "#{commit.short_sha} · current · build #{state[:build][:status]} · tests #{state[:tests][:status]}"
+            = commit_status_ring(state, size: size, center: [x, center_y])
+            %title= "#{commit.short_sha} · current · #{status_ring_label(state)}"
           - else
             %a{ href: commit_path(branch: @selected_branch.name, sha: commit.short_sha),
                 data: { commit_id: commit.id,
                         action: "mouseenter->subway-map#show mouseleave->subway-map#hide focus->subway-map#show blur->subway-map#hide" } }
-              %circle{ cx: x, cy: center_y, r: r_outer, fill: ring_color }
-              %circle{ cx: x, cy: center_y, r: r_inner, fill: "var(--color-bg-elev)" }
-              %circle{ cx: x, cy: center_y, r: r_core,  fill: core_color }
-              %title= "#{commit.short_sha} · build #{state[:build][:status]} · tests #{state[:tests][:status]}"
+              = commit_status_ring(state, size: size, center: [x, center_y])
+              %title= "#{commit.short_sha} · #{status_ring_label(state)}"
           %text{ x: x, y: panel_h - 6,
                  "text-anchor": "middle",
                  "font-family": "var(--font-mono)",
