@@ -110,9 +110,9 @@
                   never used yet
           - else
             %p.mt-2.text-fg-muted{ class: "text-[13px]" }
-              No API key yet. mesa_test can still submit with your email and
-              password; a key lets this computer submit without storing your
-              password, and can be revoked on its own.
+              No API key yet. mesa_test 2.0 and later need one (older
+              versions sign in with your email and password, for now). A key
+              acts only as this computer and can be revoked on its own.
         .shrink-0.flex.items-center.gap-1
           - if @computer.api_key?
             = button_to computer_api_key_path(@user, @computer),
