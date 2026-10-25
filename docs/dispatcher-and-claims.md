@@ -289,11 +289,15 @@ Read-only. Asks the testhub for a recommendation.
 }
 ```
 
-`scope` is what the client *wants* — `"build"` or `"test"`. A
-client that wants the full `install_and_test` loop calls dispatch
-with `scope: "build"`, gets a SHA, claims/builds/submits, then
-loops on `scope: "test"` **passing that SHA as `commit_sha`** for
-each test case, until it gets a 204.
+`scope` is what the client *wants* — `"build"` or `"test"`.
+mesa_test's `best` mode uses only `scope: "build"`: it gets a SHA and
+run modes, then builds and runs the whole suite in MESA's order like
+any other run. Test-scope dispatch (below) remains for
+`request_work --scope test` and other clients. Until Oct 2026,
+`install_and_test best` looped on `scope: "test"` (passing the SHA as
+`commit_sha`) for each test until a 204. That handed tests out
+alphabetically, so the long star tests ran last, and idle `--jobs`
+workers kept polling through the tail.
 
 `commit_sha` is only accepted with `scope: "test"` (422 for
 build). With it, the dispatcher picks the next test on that commit.
@@ -793,10 +797,9 @@ debugging.
   loops over tests serially. Each test goes through its own
   claim cycle. (Reuse of `mesa_test test` internally avoids the
   client-side "intent for all tests" concept entirely.) With
-  `best`, the loop asks `scope: "test"` dispatch, pinned to the
-  installed SHA via `commit_sha`, for the next test until it gets a
-  204; that's how CI-requested configurations reach the right
-  tests.
+  `best`, build dispatch picks the commit and its modes (including
+  a CI-requested one), and the suite then runs exactly as with a SHA.
+  (It used to loop on test-scope dispatch; see "Request" above.)
 
 ### New config: `claim_strategy`
 
@@ -944,10 +947,9 @@ Two simplifications from the original sketch:
 - `install_and_test SHA` runs the whole suite. It has a build claim,
   and (since Oct 2026) claims each test as it starts and submits it
   as it finishes, rather than claiming everything up front and sending
-  one bulk submission at the end. `install_and_test best` is the
-  new dispatch-driven loop: build dispatch → claim → install → submit
-  the build → per-test dispatch pinned to the SHA → claim → run →
-  submit, until a 204.
+  one bulk submission at the end. `install_and_test best` is the same
+  run on the commit and modes that build dispatch picks (since Oct
+  2026; before that it looped on per-test dispatch until a 204).
 
 ### Phase E (V2+): Smart TTLs
 
