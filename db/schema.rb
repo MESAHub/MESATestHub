@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_10_24_200000) do
+ActiveRecord::Schema[8.0].define(version: 2026_10_25_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -288,8 +288,10 @@ ActiveRecord::Schema[8.0].define(version: 2026_10_24_200000) do
     t.boolean "use_fpe", default: false, null: false
     t.boolean "use_full_inlists", default: false, null: false
     t.boolean "use_converge", default: false, null: false
+    t.string "fingerprint"
     t.index ["claim_id"], name: "index_submissions_on_claim_id"
     t.index ["commit_id"], name: "index_submissions_on_commit_id"
+    t.index ["computer_id", "commit_id", "fingerprint"], name: "index_submissions_on_computer_commit_fingerprint", unique: true, where: "(fingerprint IS NOT NULL)"
     t.index ["computer_id", "created_at"], name: "index_submissions_on_computer_id_and_created_at"
     t.index ["computer_id"], name: "index_submissions_on_computer_id"
   end

@@ -515,6 +515,9 @@ This was found in the first production run of the claims client
 Matching (added in Phase D) means a client never has to keep track
 of claim ids. A whole-suite `entire` submission, still accepted from
 older clients, fulfills the build claim and every test claim in one go.
+Since Oct 2026 it is stored as one build row plus one row per test, and
+results whose fingerprint is already stored are skipped (CLAUDE.md, "One
+submission row = one build report or one test result").
 Current `mesa_test` never sends one: it submits the build status as
 soon as the build finishes, then each test as soon as it finishes. Prior status isn't checked:
 `pending` and `expired` both move to `fulfilled`.

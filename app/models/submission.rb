@@ -31,6 +31,12 @@ class Submission < ApplicationRecord
 
   paginates_per 25
 
+  # Set when a batch of rows is saved together (SubmissionsController
+  # splitting a combined `entire` submission): each row's
+  # after_commit refreshes are skipped, and the caller refreshes the
+  # affected TCCs, the commit's scalars, and CI satisfaction once.
+  attr_accessor :skip_scalar_refresh
+
   # Inclusive of both endpoints. Either bound is optional — pass nil
   # to leave that end open. Used by the computers#show submissions
   # toolbar so users can narrow down a bad batch by submission time
@@ -127,6 +133,8 @@ class Submission < ApplicationRecord
   end
 
   def refresh_ci_satisfaction
+    return if skip_scalar_refresh
+
     commit.refresh_ci_satisfaction!
   end
 
@@ -149,6 +157,8 @@ class Submission < ApplicationRecord
   # `Commit#update_scalars` reads from `test_case_commits.where(
   # status: ...)`.
   def update_commit
+    return if skip_scalar_refresh
+
     tcc_ids = if destroyed?
                 @affected_tcc_ids || []
               else
