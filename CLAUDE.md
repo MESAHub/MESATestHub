@@ -59,8 +59,8 @@ Before doing non-trivial work, read the appropriate doc:
   `WorkDispatcher` service, CI-request satisfaction tracking) are
   merged; Phase D, the `mesa_test` client, is done as **mesa_test
   2.0.0** (Oct 2026: `best`, run modes, parallel tests, per-test
-  claims and submissions, API keys required), soft-launching on the
-  maintainer's machines before it goes to RubyGems.
+  claims and submissions, API keys required), released on RubyGems
+  Oct 25, 2026.
 - **[`docs/api-keys.md`](docs/api-keys.md)** — per-computer API
   keys (`Authorization: Bearer mth_…`) accepted on every client
   endpoint alongside the legacy email + password, which keeps working.
