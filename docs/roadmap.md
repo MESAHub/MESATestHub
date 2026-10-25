@@ -224,12 +224,13 @@ don't get lost.
   **Status:** Phases A (schema + CI flag parsing) and B (claims
   endpoint, sweeper, claims as the "pending" signal) merged in
   May 2026. Phase C (dispatcher endpoint, `POST /api/v1/dispatch`)
-  merged Oct 2026. Phase D (`mesa_test` client) is next.
+  merged Oct 2026. Phase D (`mesa_test` client) done as mesa_test
+  2.0.0 (Oct 2026).
 
 - **Per-computer API keys** (decided Oct 2026; ship alongside
-  dispatcher Phase D). **Status:** testhub side implemented Oct 2026;
-  see [`docs/api-keys.md`](api-keys.md). Password auth is kept
-  working indefinitely for now. Replace the email + password that `mesa_test`
+  dispatcher Phase D). **Status:** done. Testhub side Oct 2026 (see
+  [`docs/api-keys.md`](api-keys.md)); mesa_test 2.0.0 requires a key.
+  The hub still accepts passwords so 1.x clients keep working. Replace the email + password that `mesa_test`
   sends with every submission, claim, and dispatch.
   - **Why:**
     - That password sits in plain text in `~/.mesa_test.yml`, often

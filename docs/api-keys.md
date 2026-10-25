@@ -1,8 +1,10 @@
 # Per-computer API keys
 
-**Status:** testhub side implemented on `feature-computer-api-keys`
-(Oct 2026). The `mesa_test` side ships with the claims-aware client
-(dispatcher Phase D, [`dispatcher-and-claims.md`](dispatcher-and-claims.md)).
+**Status:** done (Oct 2026). The hub accepts a key on every client
+endpoint. mesa_test 2.0.0 (the claims-aware client, dispatcher Phase D,
+[`dispatcher-and-claims.md`](dispatcher-and-claims.md)) *requires* one:
+it no longer asks for, stores, or sends email and password. The hub
+still accepts passwords, so 1.x clients keep working.
 
 ## Why
 
@@ -106,6 +108,7 @@ computer page:
 - **Logs.** The same key should authorize log uploads once logs move
   into object storage (roadmap backlog). That removes the separately
   issued `logs_token`.
-- **Retiring passwords.** Once a key-capable `mesa_test` has been out
-  a while, consider deprecating password auth on the API: warn in the
-  response first, refuse later. Not decided; passwords stay for now.
+- **Retiring passwords.** mesa_test 2.0 no longer uses them; only 1.x
+  clients (and hand-made requests) do. Once 2.0 has been out a while,
+  consider deprecating password auth on the API: warn in the response
+  first, refuse later. Not decided; passwords stay for now.

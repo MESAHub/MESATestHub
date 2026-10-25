@@ -1,9 +1,10 @@
 # Dispatcher & claims
 
 **Status:** Phases A and B merged (MESAHub/MESATestHub#97, #99, May
-2026). Phase C (dispatcher endpoint) merged Oct 2026. Phase D (`mesa_test`
-client) is next, shipping alongside per-computer API keys (roadmap
-feature backlog). Claim sweeping runs as the `claim_sweep` Solid Queue
+2026). Phase C (dispatcher endpoint) merged Oct 2026. Phase D (the
+`mesa_test` client) is done as mesa_test 2.0.0 (Oct 2026), which also
+requires per-computer API keys; it's soft-launching on the maintainer's
+machines before it goes to RubyGems. Claim sweeping runs as the `claim_sweep` Solid Queue
 recurring task (`ClaimSweeperJob`, every 5 min — see
 `config/recurring.yml`).
 
