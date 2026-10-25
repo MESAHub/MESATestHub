@@ -51,6 +51,18 @@ RSpec.describe 'Page renders', type: :request do
       expect(response).to have_http_status(:ok)
     end
 
+    it 'shows a computer that has claimed tests but not submitted yet' do
+      computer = create(:computer, name: 'corvus', user: user)
+      create(:claim, computer: computer, commit: commit)
+      create(:claim, :test_scope, computer: computer, commit: commit, test_case_commit: test_case_commit)
+
+      get "/main/commits/#{commit.short_sha}?tab=computers"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('corvus', 'Testing in progress', '1 test claimed')
+      expect(response.body).not_to include('Compilation failed')
+    end
+
     it 'renders a separate matrix column for a convergence run' do
       computer = create(:computer, name: 'rusty', user: user)
       [1.0, 0.5].each do |factor|

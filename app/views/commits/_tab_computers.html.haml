@@ -21,7 +21,7 @@
     - sdk_label = computer_sdk_label(row)
     - log_link_href = computer ? "?tab=logs&computer=#{computer.name}" : nil
     - status_url = computer ? commit_build_log_status_path(branch: @selected_branch.name, sha: @commit.short_sha, computer: computer.name) : nil
-    - last_good = (!row[:built] && computer) ? @commit.last_successful_build_commit_for(computer) : nil
+    - last_good = (!row[:built] && !row[:in_progress] && computer) ? @commit.last_successful_build_commit_for(computer) : nil
     .rounded-lg.border.border-border.bg-bg-elev.p-4{
       style: "box-shadow: var(--shadow-card-sm); border-left: 3px solid var(--color-#{accent});",
       data: { controller: "computer-card", computer_card_status_url_value: status_url.to_s } }
@@ -47,7 +47,18 @@
         %div.font-mono.text-fg-muted.rounded-md.bg-bg-subtle.px-2.py-1.mb-2.truncate{ class: "text-[11px]", title: sdk_label }
           = sdk_label
 
-      - if row[:built]
+      - if row[:in_progress]
+        -# Claimed work, nothing submitted yet (CommitState#_in_progress_computers).
+        .rounded-md.bg-info-soft.px-3.py-2.text-info-soft-text.text-xs{ class: "flex items-center gap-2" }
+          = mesa_icon(:clock, size: 13)
+          %span
+            - if row[:counts][:pending].positive?
+              %strong Testing in progress.
+              = "#{pluralize(row[:counts][:pending], 'test')} claimed; no results yet."
+            - else
+              %strong Build in progress.
+              No results yet.
+      - elsif row[:built]
         -# 5-stat grid. Below sm, a single full-width card on a 375px
         -# viewport leaves ~50px per column, which clips "CHECKSUM" on
         -# its label row. Switch to a 3+2 layout there; from sm up,
