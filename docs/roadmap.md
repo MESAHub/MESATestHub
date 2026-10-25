@@ -294,6 +294,41 @@ don't get lost.
       Active Storage, the CLAUDE.md note that its CVEs are unreachable
       stops being true, and its security updates start to matter.
 
+- **Live-updating pages as results arrive** (noted Oct 2026;
+  after mesa_test 2.0 settles). With per-test claims and submissions,
+  a commit's results trickle in over hours, but its pages only change
+  on reload.
+  - **Pages:** the commit page (`commits#show`), the commits index
+    (status rings), and the test-on-commit page. Other pages rarely
+    change while someone is looking at them.
+  - **Mechanism:** Turbo 8 page refreshes with morphing
+    (`turbo_refreshes_with method: :morph, scroll: :preserve`; we're on
+    turbo-rails 2.0.23). The browser re-fetches the page and patches
+    only what changed, so no per-fragment Turbo Stream templates.
+  - **Trigger, step one (no new infrastructure):** an open page polls a
+    tiny endpoint every 15–30 s for a fingerprint of the commit's latest
+    submission and claim changes, and refreshes only when it changes.
+    Debounce, so a burst of results costs one refresh. Results land
+    minutes apart, so the polling delay doesn't matter.
+  - **Trigger, if polling ever feels slow:** push over Action Cable
+    with Solid Cable (Postgres-backed, no Redis, like Solid Queue):
+    `broadcast_refresh_later` after submissions and claim changes, and
+    `turbo_stream_from` on the pages. Action Cable is installed but
+    unconfigured; `config/cable.yml`'s production adapter points at a
+    Redis we don't run. Swapping the trigger leaves the morph work
+    untouched.
+  - **The real work is making pages survive a refresh underneath the
+    viewer.** On the commit page:
+    - matrix filters live only in DOM/Stimulus state, so they must move
+      into the URL or be marked `data-turbo-permanent`;
+    - open popovers would close;
+    - the lazy Diff `turbo_frame` must not reload on every refresh.
+  - **Cost to watch:** `commits#show` is the heaviest page, so each
+    refresh is one full render per viewer. That's fine at current
+    traffic; fragment-caching the matrix would be the fix if it isn't.
+  - **Status:** not started. Frontend-only (no client or API change),
+    on its own branch.
+
 - **Adopt Solid Cache for `Rails.cache`.** Replace the
   `:memory_store` (`config/application.rb`) with Rails 8's
   DB-backed Solid Cache, completing the Solid* trio alongside the
