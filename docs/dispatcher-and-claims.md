@@ -424,9 +424,10 @@ and `Claim#environment_label`.
 (with no test name) creates one claim per test on the commit in a
 single request. It skips tests this computer already holds a pending
 claim on, and responds with `{ "claim_ids": [...], "expires_at": ... }`.
-`mesa_test install_and_test SHA` uses this, since it runs every test
-in one go. Each test is still its own row, so the matrix shows them
-pending individually.
+Each test is still its own row, so the matrix shows them pending
+individually. `mesa_test` used this for whole-suite runs until Oct 2026.
+It now claims each test just as it starts, so a claim means "running
+now" (see below). The endpoint stays for other clients.
 
 The client writes `claim_id` to its local YAML (build YAML for
 build claims, per-test YAML for test claims) so the eventual
@@ -512,8 +513,10 @@ This was found in the first production run of the claims client
   build. A test claim is answered by an instance of its test.
 
 Matching (added in Phase D) means a client never has to keep track
-of claim ids. A whole-suite `entire` submission fulfills the build
-claim and every test claim in one go. Prior status isn't checked:
+of claim ids. A whole-suite `entire` submission, still accepted from
+older clients, fulfills the build claim and every test claim in one go.
+Current `mesa_test` never sends one: it submits the build status as
+soon as the build finishes, then each test as soon as it finishes. Prior status isn't checked:
 `pending` and `expired` both move to `fulfilled`.
 
 ### TTLs
@@ -934,8 +937,10 @@ the client at the dev server.
 Two simplifications from the original sketch:
 - Because fulfillment is by matching, the client keeps no claim-id
   state on disk, and `claim_strategy` isn't needed for V1.
-- `install_and_test SHA` keeps its whole-suite behavior, plus a
-  build claim and an all-tests claim. `install_and_test best` is the
+- `install_and_test SHA` runs the whole suite. It has a build claim,
+  and (since Oct 2026) claims each test as it starts and submits it
+  as it finishes, rather than claiming everything up front and sending
+  one bulk submission at the end. `install_and_test best` is the
   new dispatch-driven loop: build dispatch → claim → install → submit
   the build → per-test dispatch pinned to the SHA → claim → run →
   submit, until a 204.
