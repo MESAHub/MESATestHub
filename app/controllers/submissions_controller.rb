@@ -39,6 +39,20 @@ class SubmissionsController < ApplicationController
     if @submission.entire? || @submission.empty?
       @submission.compiled = commit_params[:compiled]
     end
+
+    # A combined submission is stored as a build row plus one row per test.
+    return create_split if @submission.entire? && !@submission.empty?
+
+    # Already have this exact result (same fingerprint from this computer on
+    # this commit)? Don't store it twice -- answer as if it were new, so a
+    # retrying client counts it as delivered.
+    fingerprint = submission_fingerprint
+    if (existing = duplicate_of(fingerprint))
+      @submission = existing
+      return succeed
+    end
+    @submission.fingerprint = fingerprint
+
     # we're done if it's empty
     if @submission.empty?
       (@submission.save && succeed and return)
@@ -74,6 +88,13 @@ class SubmissionsController < ApplicationController
     # we've gotten this far, so submission is good and test instances were
     # saved
     succeed
+  rescue ActiveRecord::RecordNotUnique
+    # A concurrent request stored the same fingerprint first. Going again
+    # finds it and answers this one as the duplicate it is.
+    raise if @retried_duplicate
+
+    @retried_duplicate = true
+    retry
   end
 
   def show
@@ -169,6 +190,116 @@ class SubmissionsController < ApplicationController
 
   private
 
+  # --- Splitting combined submissions and ignoring duplicates -----------
+
+  # A combined (`entire`) submission -- the build status plus every test's
+  # results in one request -- is stored as what it reports: one build row
+  # (`empty`, carrying the compile status) plus one row per test. Each can
+  # then be deleted on its own, and every row means one thing, whether it
+  # came in live one test at a time or in a single request afterwards.
+  # One transaction: any unsaveable instance rolls everything back, as
+  # before. Rows whose fingerprint is already stored are skipped. Each
+  # row's refreshes are deferred and done once at the end, so a 107-test
+  # submission costs one scalar refresh, not 108.
+  def create_split
+    fingerprints = fingerprint_params
+    template = @submission
+    created = []
+    @failures = []
+    build_row = nil
+    Submission.transaction do
+      build_row = duplicate_of(fingerprints['build'])
+      unless build_row
+        build_row = split_row(template, empty: true, compiled: template.compiled,
+                                        fingerprint: fingerprints['build'], claim_id: template.claim_id)
+        build_row.save!
+        created << build_row
+      end
+      split_instance_params.each do |instance_params|
+        key = instance_key(instance_params)
+        next if duplicate_of(fingerprints[key])
+
+        row = split_row(template, empty: false, compiled: nil, fingerprint: fingerprints[key])
+        instance = TestInstance.submission_new(instance_params.permit!, row)
+        if instance&.save
+          created << row
+        else
+          @failures << (instance || unknown_test_case(key))
+        end
+      end
+      raise ActiveRecord::Rollback unless @failures.empty?
+    end
+    return submission_fail_instances unless @failures.empty?
+
+    refresh_after_split(created)
+    @submission = build_row
+    succeed
+  end
+
+  def split_row(template, empty:, compiled:, fingerprint:, claim_id: nil)
+    Submission.new(
+      computer: template.computer, commit: template.commit,
+      platform_version: template.platform_version, compiler: template.compiler,
+      compiler_version: template.compiler_version, sdk_version: template.sdk_version,
+      math_backend: template.math_backend, started_at: template.started_at,
+      use_fpe: template.use_fpe, use_full_inlists: template.use_full_inlists,
+      use_converge: template.use_converge,
+      entire: false, empty: empty, compiled: compiled, fingerprint: fingerprint,
+      claim_id: claim_id, skip_scalar_refresh: true
+    )
+  end
+
+  # The per-row refreshes create_split deferred, done once.
+  def refresh_after_split(rows)
+    tcc_ids = TestInstance.where(submission_id: rows.map(&:id)).distinct.pluck(:test_case_commit_id)
+    TestCaseCommit.where(id: tcc_ids).find_each(&:update_and_save_scalars)
+    @commit.reload
+    @commit.update_scalars
+    @commit.save
+    @commit.refresh_ci_satisfaction!
+  end
+
+  # A build-only submission has no instances; a failed-build combined
+  # submission may omit them too.
+  def split_instance_params
+    Array(params[:instances])
+  end
+
+  # Fingerprints ride in a top-level `fingerprints` hash -- "build" for
+  # the build status, "<module>/<test>" for each test -- rather than inside
+  # each instance, because older servers build instances straight from
+  # their params and would reject an unknown key. Values are client
+  # hashes; anything absent just means "no duplicate check".
+  def fingerprint_params
+    raw = params[:fingerprints]
+    return {} unless raw.respond_to?(:to_unsafe_h)
+
+    raw.to_unsafe_h.transform_values { |v| v.to_s[0, 128] }.reject { |_k, v| v.empty? }
+  end
+
+  # The fingerprint for a build-only or single-test submission.
+  def submission_fingerprint
+    fingerprints = fingerprint_params
+    return fingerprints['build'] if @submission.empty?
+
+    instances = split_instance_params
+    instances.size == 1 ? fingerprints[instance_key(instances.first)] : nil
+  end
+
+  def instance_key(instance_params)
+    "#{instance_params[:module].to_s.delete_prefix(':')}/#{instance_params[:test_case]}"
+  end
+
+  def duplicate_of(fingerprint)
+    return nil if fingerprint.blank?
+
+    Submission.find_by(computer: @computer, commit: @commit, fingerprint: fingerprint)
+  end
+
+  def unknown_test_case(key)
+    TestInstance.new.tap { |ti| ti.errors.add(:test_case, "#{key} is not a known test case") }
+  end
+
   def create_instances
     # relies on having @submission be set
 
@@ -183,6 +314,8 @@ class SubmissionsController < ApplicationController
     # set up basic test instance
     test_instance = TestInstance.submission_new(single_instance_params.permit!,
                                                 @submission)
+    # An unknown test case comes back as nil; report it rather than crash.
+    return unknown_test_case(instance_key(single_instance_params)) if test_instance.nil?
 
     # return nil if we successfully save, otherwise the failed test_instance
     # these can then be queried for their errors and reported back to the

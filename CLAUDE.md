@@ -413,6 +413,24 @@ helper or partial exists.
   showed under the wrong computers or not at all. Creation paths now
   skip conflicts (`insert_all … unique_by`, `create_or_find_by!`);
   don't add a TCC-creating path that checks-then-inserts without one.
+- **One submission row = one build report or one test result.** A
+  combined (`entire`) submission is split on arrival
+  (`SubmissionsController#create_split`) into a build row (`empty`,
+  carrying `compiled`) plus one row per test, all in one transaction.
+  Each row's after_commit refresh is skipped via
+  `Submission#skip_scalar_refresh`, and one refresh runs at the end. So
+  `entire: true` rows only exist from before Oct 2026, and every result
+  can be deleted on its own.
+  - **Fingerprints:** clients may send a top-level `fingerprints` hash
+    (`"build"` / `"<module>/<test>"` → a hash of `build.log` /
+    `testhub.yml`). A result whose fingerprint this computer already has
+    on this commit is skipped but still answered 201, so retries and
+    head-node re-uploads are safe. There's a partial unique index on
+    `[computer_id, commit_id, fingerprint]`; a concurrent duplicate
+    retries once.
+  - Fingerprints live outside the instance hashes because instances are
+    built straight from their params (`permit!`), so an unknown key would
+    make an older server reject the submission.
 - **Client API auth is two-track: per-computer API key or email +
   password.** `ApiKeyAuthentication` (included in
   ApplicationController) reads `Authorization: Bearer`. No key means
