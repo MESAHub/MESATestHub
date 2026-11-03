@@ -50,6 +50,17 @@ That target is concretely:
 This matches `git log <branch>` with default options and is the cheapest
 of the plausible sort rules to compute from local state.
 
+> **Correction (Nov 2026).** It only matches while committer dates
+> follow the history. `git log` never shows a parent before its
+> child, and a pure date sort can. A rebase of
+> `EbF/hydro_03_rti_transport` onto main's `e669d81` kept the stack's
+> older committer dates, and the index put `e669d81` above the whole
+> rebased stack. Branch order now uses `commits.corrected_time`, Git's
+> corrected commit date: max(commit_time, latest parent + 1s), kept up
+> by `Commit.correct_times_from` on every edge insert. The same change
+> made force-pushes remove the dropped commits from the branch and
+> record them in `commit_rewrites`; see CLAUDE.md.
+
 ## The data model change
 
 One new table:

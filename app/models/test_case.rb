@@ -423,12 +423,12 @@ class TestCase < ApplicationRecord
 
     last_run = scope.joins(:commit)
                     .where.not(status: -1)
-                    .reorder("commits.commit_time DESC")
+                    .reorder("commits.corrected_time DESC")
                     .first
 
     last_passing = scope.joins(:commit)
                         .where(status: 0)
-                        .reorder("commits.commit_time DESC")
+                        .reorder("commits.corrected_time DESC")
                         .first
 
     # If newer commits exist that haven't been tested yet, surface
@@ -438,8 +438,8 @@ class TestCase < ApplicationRecord
     pending_on_head = if last_run
                         scope.joins(:commit)
                              .where(status: -1)
-                             .where("commits.commit_time > ?", last_run.commit.commit_time)
-                             .reorder("commits.commit_time DESC")
+                             .where("commits.corrected_time > ?", last_run.commit.corrected_time)
+                             .reorder("commits.corrected_time DESC")
                              .first
                       end
 
@@ -519,12 +519,12 @@ class TestCase < ApplicationRecord
     # (continuity beats teleporting).
     half = [size / 2, 1].max
     older_target = branch.ordered_commits
-                         .where("commits.commit_time < ?", anchor_commit.commit_time)
+                         .where("commits.corrected_time < ?", anchor_commit.corrected_time)
                          .limit(half)
                          .last
     newer_target = branch.ordered_commits
-                         .where("commits.commit_time > ?", anchor_commit.commit_time)
-                         .reorder("commits.commit_time ASC")
+                         .where("commits.corrected_time > ?", anchor_commit.corrected_time)
+                         .reorder("commits.corrected_time ASC")
                          .limit(half)
                          .last
 

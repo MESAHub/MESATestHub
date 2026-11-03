@@ -366,7 +366,7 @@ class TestCaseCommit < ApplicationRecord
     # is shared among several methods. Probably good enough for now, though.
     return @relevant_instances if @relevant_instances && !force
     # commits = Commit.subset_of_branch(branch: branch, depth: depth)
-    commits = branch.commits.order(commit_time: :desc).limit(depth)
+    commits = branch.commits.order(corrected_time: :desc).limit(depth)
     query = test_case.test_instances.where(computer: computers,
       commit: commits, passed: true).includes(:computer)
     @relevant_instances = query.to_a

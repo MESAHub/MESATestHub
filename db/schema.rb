@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_11_03_210000) do
+ActiveRecord::Schema[8.0].define(version: 2026_11_04_120100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -70,6 +70,21 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_03_210000) do
     t.index ["parent_id"], name: "index_commit_relations_on_parent_id"
   end
 
+  create_table "commit_rewrites", force: :cascade do |t|
+    t.bigint "branch_id", null: false
+    t.bigint "old_commit_id", null: false
+    t.bigint "new_commit_id"
+    t.string "before_sha"
+    t.string "after_sha"
+    t.datetime "rewritten_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["branch_id", "old_commit_id"], name: "index_commit_rewrites_on_branch_id_and_old_commit_id", unique: true
+    t.index ["branch_id"], name: "index_commit_rewrites_on_branch_id"
+    t.index ["new_commit_id"], name: "index_commit_rewrites_on_new_commit_id"
+    t.index ["old_commit_id"], name: "index_commit_rewrites_on_old_commit_id"
+  end
+
   create_table "commits", force: :cascade do |t|
     t.string "sha", null: false
     t.string "author", null: false
@@ -99,6 +114,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_03_210000) do
     t.datetime "fpe_satisfied_at"
     t.datetime "converge_satisfied_at"
     t.float "converge_factor"
+    t.datetime "author_time"
+    t.datetime "corrected_time", null: false
     t.index ["sha"], name: "index_commits_on_sha", unique: true
     t.index ["short_sha"], name: "index_commits_on_short_sha", unique: true
   end
@@ -400,6 +417,9 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_03_210000) do
   add_foreign_key "claims", "test_case_commits"
   add_foreign_key "commit_relations", "commits", column: "child_id"
   add_foreign_key "commit_relations", "commits", column: "parent_id"
+  add_foreign_key "commit_rewrites", "branches", on_delete: :cascade
+  add_foreign_key "commit_rewrites", "commits", column: "new_commit_id", on_delete: :nullify
+  add_foreign_key "commit_rewrites", "commits", column: "old_commit_id", on_delete: :cascade
   add_foreign_key "computers", "users", on_delete: :cascade
   add_foreign_key "inlist_data", "instance_inlists"
   add_foreign_key "instance_inlists", "test_instances"

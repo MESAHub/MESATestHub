@@ -2,9 +2,13 @@ namespace :db do
     desc "Clean up commits that no longer belong to any branch"
     task cleanup_orphaned_commits: :environment do
       # Find commits that don't have any branch memberships
+      # A commit a force-push took off its branch has no memberships
+      # either, but its results are what the rebased commit's page shows
+      # as "before the rebase", so keep any commit with a rewrite record.
       orphaned_commits = Commit.left_joins(:branch_memberships)
                               .where(branch_memberships: { id: nil })
-                              
+                              .where.not(id: CommitRewrite.select(:old_commit_id))
+
       if orphaned_commits.any?
         puts "Found #{orphaned_commits.count} orphaned commits to clean up"
         

@@ -21,7 +21,7 @@ class TestCaseCommitsController < ApplicationController
   def show
     @selected_branch = Branch.named(params[:branch])
     if branch_mismatch?(@selected_branch, @commit)
-      target = @commit.preferred_branch
+      target = branch_mismatch_target(@commit)
       return render_404("Commit '#{@commit.short_sha}' is not on any branch") unless target
       flash[:warning] = branch_mismatch_message(
         requested_name: CGI.unescape(params[:branch]),
@@ -85,7 +85,13 @@ class TestCaseCommitsController < ApplicationController
     # TCC for this test on each commit. Commits where the test
     # wasn't tested still render as a gray "untested" station so the
     # spacing stays consistent across the map.
-    @subway_window = @selected_branch.focused_commit_window(@commit, size: 5)
+    # A commit a force-push took off the branch gets no neighbors.
+    @subway_window = if @rewritten_away
+                       [@commit]
+                     else
+                       @selected_branch.focused_commit_window(@commit, size: 5)
+                     end
+    load_rebased_from(@commit)
     @subway_tccs_by_commit = TestCaseCommit
                               .where(commit_id: @subway_window.map(&:id),
                                      test_case_id: @test_case.id)
