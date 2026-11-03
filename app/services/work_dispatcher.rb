@@ -8,8 +8,8 @@
 # algorithm") in brief:
 #
 #   * Candidates: commits from the last 30 days, on main or an
-#     unmerged branch active in the last 90 days, not `[ci skip]`,
-#     and not blocklisted for this computer.
+#     unmerged branch active in the last 90 days (never `shields`),
+#     not `[ci skip]`, and not blocklisted for this computer.
 #   * Build: skip commits this computer already submitted on or holds
 #     a pending build claim for; score the rest by branch, recency,
 #     coverage by other computers, and unmet CI requests it can serve.
@@ -29,6 +29,12 @@ class WorkDispatcher
   # computer isn't sent back to finish weeks-old commits it skipped
   # tests on.
   RECENT_BUILD_WINDOW  = 7.days
+
+  # Branches that exist for bookkeeping, not testing, and must never be
+  # dispatched. `shields` carries the test-coverage badge data. A commit
+  # on one of these is still a candidate through any other branch it's
+  # on.
+  EXCLUDED_BRANCHES = %w[shields].freeze
 
   MAIN_WEIGHT      = 10
   BRANCH_WEIGHT    = 5
@@ -188,12 +194,14 @@ class WorkDispatcher
           .pluck(:id)
   end
 
-  # Main, plus unmerged branches whose head landed recently.
+  # Main, plus unmerged branches whose head landed recently, minus the
+  # bookkeeping branches in EXCLUDED_BRANCHES.
   def active_branch_ids
     Branch.joins(:head)
           .where("branches.name = 'main' OR " \
                  '(branches.merged = FALSE AND commits.commit_time >= ?)',
                  @now - ACTIVE_BRANCH_WINDOW)
+          .where.not(name: EXCLUDED_BRANCHES)
           .pluck(:id)
   end
 

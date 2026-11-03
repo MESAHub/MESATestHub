@@ -665,7 +665,9 @@ it checks 939 flagged commits in about 2 s.
 
 - `commit_time` within the last 30 days.
 - On an **active branch**: `main`, or an unmerged branch whose head
-  commit is less than 90 days old.
+  commit is less than 90 days old. `shields` never counts: it holds the
+  test-coverage badge data, not code to test
+  (`WorkDispatcher::EXCLUDED_BRANCHES`).
 - `ci_skip = false`.
 - Not blocklisted for this computer (an expired build claim on the
   commit that never got a submission; see

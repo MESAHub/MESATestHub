@@ -119,6 +119,16 @@ RSpec.describe WorkDispatcher do
       expect(dispatch).to be_nil
     end
 
+    it 'never dispatches commits only on the shields branch' do
+      shields = create(:branch, name: 'shields')
+      commit_on(shields, age: 1.hour)
+      expect(dispatch).to be_nil
+
+      shared = commit_on(main, age: 2.hours)
+      BranchMembership.create!(branch: shields, commit: shared)
+      expect(dispatch.commit).to eq(shared)
+    end
+
     it 'boosts an unmet [ci fpe] request only for computers that can run FPE checks' do
       plain = commit_on(main, age: 1.hour)
       fpe   = commit_on(main, age: 2.days, wants_fpe: true)
