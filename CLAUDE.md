@@ -188,7 +188,14 @@ helper or partial exists.
   `commit_time` (the author date, which survives rebases). Non-main
   sections leave out commits that are also on main, so a branch that
   only merged main drops out, and `WorkDispatcher::EXCLUDED_BRANCHES`
-  (`shields`) never shows. Headings render from one pluck. Each
+  (`shields`) never shows. Headings render from one pluck.
+  `recently_pushed` is cached, because every section frame asks for the
+  whole list. The key is a freshness fingerprint: max membership id,
+  newest commit `created_at`, and branch count + newest `updated_at`.
+  That way a push shows up on the next request. A 5-minute TTL only
+  bounds how far the window's edge drifts. A write path that changes
+  memberships without inserting rows, or without touching a branch,
+  would go unseen for up to those 5 minutes. Each
   section's table (the shared `commits/_commit_table` partial, same
   rows as the index) is a lazy Turbo Frame from `commits#home_section`,
   showing 3 commits with a "Show N more" toggle that re-fetches the

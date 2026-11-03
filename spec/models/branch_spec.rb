@@ -68,5 +68,52 @@ RSpec.describe Branch, type: :model do
 
       expect(sections).to eq('main' => [shared.id], 'feature' => [own.id])
     end
+
+    context 'with a real cache' do
+      # The test env's cache is :null_store; nothing would ever hit.
+      around do |example|
+        original = Rails.cache
+        Rails.cache = ActiveSupport::Cache::MemoryStore.new
+        example.run
+      ensure
+        Rails.cache = original
+      end
+
+      def sections
+        Branch.recently_pushed(within: 10.days).to_h { |s| [s[:branch].name, s[:commit_ids]] }
+      end
+
+      it 'computes once while nothing changes' do
+        pushed(main, at: 1.hour.ago)
+        sections
+        expect(Branch).not_to receive(:recently_pushed_sections)
+        expect(sections.keys).to eq(['main'])
+      end
+
+      it 'picks up a new push on the next call' do
+        first = pushed(main, at: 2.hours.ago)
+        expect(sections).to eq('main' => [first.id])
+        feature = create(:branch, name: 'feature')
+        own = pushed(feature, at: 1.hour.ago)
+        expect(sections).to eq('feature' => [own.id], 'main' => [first.id])
+      end
+
+      it 'picks up an existing commit joining another branch' do
+        feature = create(:branch, name: 'feature')
+        own = pushed(feature, at: 1.hour.ago)
+        expect(sections).to eq('feature' => [own.id])
+        BranchMembership.create!(branch: main, commit: own)
+        expect(sections).to eq('main' => [own.id])
+      end
+
+      it 'drops a deleted branch' do
+        feature = create(:branch, name: 'feature')
+        pushed(feature, at: 1.hour.ago)
+        expect(sections.keys).to eq(['feature'])
+        feature.branch_memberships.delete_all
+        feature.delete
+        expect(sections).to eq({})
+      end
+    end
   end
 end
