@@ -318,6 +318,51 @@ RSpec.describe 'Page renders', type: :request do
       expect(response.body).to include('Also on feature/stacked')
     end
 
+    describe 'unified view' do
+      it 'renders the view toggle and a lazy unified frame' do
+        commit.update_columns(created_at: 1.hour.ago)
+
+        get '/', params: { view: 'unified', days: 30 }
+
+        body = response.body
+        expect(body).to include('newest push first')
+        expect(body).to include(CGI.escapeHTML(home_unified_path(days: 30, offset: 0)))
+        expect(body).to include(CGI.escapeHTML(root_path(days: 30)))
+      end
+
+      it 'lists commits across branches by push time with their branches' do
+        feature = create(:branch, name: 'feature/fast')
+        older_push = pushed_commit_on(feature, message: 'Older push', at: 3.hours.ago)
+        newer_push = pushed_commit_on(feature, message: 'Newer push', at: 1.hour.ago)
+        stacked = create(:branch, name: 'feature/stacked')
+        BranchMembership.create!(branch: stacked, commit: older_push)
+        older_push.update_columns(commit_time: Time.current)
+
+        get home_unified_path(days: 10, offset: 0)
+
+        body = response.body
+        expect(body).to include('home_unified_0')
+        expect(body.index(newer_push.short_sha)).to be < body.index(older_push.short_sha)
+        expect(body).to include('On feature/fast, feature/stacked')
+        expect(body).not_to include('Show ')
+      end
+
+      it 'pages with a nested "Show more" frame' do
+        commit.update_columns(created_at: 30.days.ago)
+        feature = create(:branch, name: 'feature/fast')
+        commits = (1..27).map { |i| pushed_commit_on(feature, message: "Step #{i}", at: i.minutes.ago) }
+
+        get home_unified_path(days: 10, offset: 0)
+        expect(response.body).to include('home_unified_25')
+        expect(response.body).to include('Show 2 more commits')
+        expect(response.body).not_to include(commits[25].short_sha)
+
+        get home_unified_path(days: 10, offset: 25, after_bucket: 'today')
+        expect(response.body).to include(commits[25].short_sha)
+        expect(response.body).not_to include('>Today<')
+      end
+    end
+
     it '404s a section for an unknown branch' do
       get home_section_path(branch: 'nope', days: 10)
 

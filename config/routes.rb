@@ -123,6 +123,8 @@ Rails.application.routes.draw do
   # Lazy-loaded commit table for one home-page branch section
   # (?branch=<name>&days=N); see CommitsController#root.
   get '/home/section', to: 'commits#home_section', as: 'home_section'
+  # One page of the home page's unified view (?days=N&offset=M).
+  get '/home/unified', to: 'commits#home_unified', as: 'home_unified'
 
   # searching test_instances (should work for remote JSON requests)
   get '/test_instances/search', to: 'test_instances#search', as: 'search_instances'

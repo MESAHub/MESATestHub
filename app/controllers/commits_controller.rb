@@ -10,7 +10,10 @@ class CommitsController < ApplicationController
   # so this is the front door to wherever work is happening — main
   # included, as one section among the rest.
   #
-  #   ?days=N  window size (default HOME_DEFAULT_DAYS, clamped 1–90).
+  #   ?days=N        window size (default HOME_DEFAULT_DAYS, clamped 1–90).
+  #   ?view=unified  one list of every commit in those sections, newest
+  #                  push first (commit_time breaks ties within a push),
+  #                  each row naming its branches; see #home_unified.
   #
   # Only the headings render here (one pluck). Each section's commit
   # table is a lazy Turbo Frame filled by #home_section: commit_state
@@ -20,10 +23,45 @@ class CommitsController < ApplicationController
   HOME_WINDOW_CHOICES = [3, 10, 30].freeze
   HOME_COMMITS_COLLAPSED = 3
   HOME_COMMITS_EXPANDED = 25
+  HOME_UNIFIED_PAGE = 25
 
   def root
     @days = home_days
+    @view = params[:view] == 'unified' ? :unified : :branches
     @sections = Branch.recently_pushed(within: @days.days)
+    @unified_count = @sections.flat_map { |s| s[:commit_ids] }.uniq.size if @view == :unified
+  end
+
+  # One page of the home page's unified view (Turbo Frame response).
+  # The commits are those the branch view would list, deduplicated and
+  # ordered by push time (`created_at`) rather than commit_time, so a
+  # rebase lands at the top as the new work it is. Each page ends with
+  # a nested frame whose "Show more" link fetches the next page into
+  # it; ?after_bucket= keeps the next page from repeating the age
+  # header the previous one ended under.
+  #
+  # @branches_of lists each commit's sections in page order, so the
+  # first name (the row's link and chip) is its most recent push.
+  def home_unified
+    @days = home_days
+    @offset = params[:offset].to_i.clamp(0, 100_000)
+    sections = Branch.recently_pushed(within: @days.days)
+    @branches_of = {}
+    sections.each do |s|
+      s[:commit_ids].each { |id| (@branches_of[id] ||= []) << s[:branch].name }
+    end
+    @total = @branches_of.size
+    @commits = Commit.where(id: @branches_of.keys)
+                     .includes(:submissions,
+                               :pending_claims,
+                               test_case_commits: [:test_instances,
+                                                   :pending_claims])
+                     .order(created_at: :desc, commit_time: :desc, id: :desc)
+                     .offset(@offset)
+                     .limit(HOME_UNIFIED_PAGE)
+                     .to_a
+    @commit_states = @commits.to_h { |c| [c.id, c.commit_state] }
+    render layout: false
   end
 
   # One home-page section's commit table (Turbo Frame response).

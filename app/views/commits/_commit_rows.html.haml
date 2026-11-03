@@ -1,0 +1,100 @@
+-# Commit rows for `_commit_table`: age-bucket headers, then per
+-# commit a stacked mobile row (< sm) and a 7-column grid row (≥ sm).
+-#
+-# Locals:
+-#   commits:       Commits to list, in display order.
+-#   commit_states: { commit.id => commit.commit_state }.
+-#   branch:        Branch the row links resolve against, unless
+-#                  `branches_of` names one per commit.
+-#   when_anchor:   Time the "When" column and age headers measure from.
+-#   when_mode:     :now (ages) or :date (offsets before a picked day).
+-#   also_on:       Optional { commit.id => [other branch names] }; rows
+-#                  with an entry get a chain-link marker by the SHA.
+-#   branches_of:   Optional { commit.id => [branch names] } for lists
+-#                  that mix branches (the home page's unified view):
+-#                  each row gets a branch chip in its meta line and
+-#                  links through the first name.
+-#   time_attr:     Which time the When column and age buckets read
+-#                  (default :commit_time; the unified view passes
+-#                  :created_at, i.e. push time).
+-#   after_bucket:  Bucket id the previous page of rows ended in; its
+-#                  header isn't repeated. Pages also omit bucket
+-#                  counts, which would only count the page.
+- also_on = local_assigns.fetch(:also_on, {})
+- branches_of = local_assigns[:branches_of]
+- time_attr = local_assigns.fetch(:time_attr, :commit_time)
+- paged = local_assigns.key?(:after_bucket)
+- after_bucket = local_assigns[:after_bucket]
+- group_commits_by_age(commits, now: when_anchor.in_time_zone(time_zone), mode: when_mode, time_attr: time_attr).each do |bucket_id, bucket_label, bucket_commits|
+  - unless bucket_id.to_s == after_bucket.to_s
+    .border-b.border-border-subtle.bg-bg-subtle.px-4.py-1.flex.items-center.justify-between
+      %span.font-semibold.uppercase.tracking-wide.text-fg-subtle{ class: "text-[10px]" }= bucket_label
+      - unless paged
+        %span.text-fg-subtle.tabular-nums{ class: "text-[10px]" }= bucket_commits.size
+  - bucket_commits.each do |commit|
+    - state = commit_states[commit.id]
+    - row_branch_names = branches_of && branches_of[commit.id]
+    - row_branch = row_branch_names&.first || local_assigns[:branch].name
+    - row_time = commit.public_send(time_attr)
+
+    -# Mobile row (< sm). The 7-column desktop grid below has no
+    -# chance of fitting status pills + author + flags in a 343px
+    -# content area, so on mobile we stack the same information
+    -# in three lines: message, identity meta (sha · author · age
+    -# · optional PR + test count), then status pills wrapping
+    -# freely. Both rows are rendered; Tailwind's display:none
+    -# pulls the non-matching one out of the accessibility tree.
+    = link_to commit_path(branch: row_branch, sha: commit.short_sha),
+             class: "flex sm:hidden items-start gap-3 border-b border-border-subtle px-4 py-3 text-sm text-fg no-underline hover:bg-bg-subtle" do
+      %span.shrink-0= render "status_ring", state: state, size: 24
+      .min-w-0.flex-1.flex.flex-col.gap-1.5
+        %span.font-medium.text-fg{ class: "line-clamp-2" }= commit.message_first_line(120)
+        .flex.flex-wrap.items-center.gap-x-2.gap-y-0.5.text-fg-muted{ class: "text-[11px]" }
+          - if row_branch_names
+            = commit_branches_chip(row_branch_names)
+            %span.text-fg-subtle ·
+          %span.font-mono.text-brand= commit.short_sha
+          = shared_commit_marker(also_on[commit.id])
+          %span.text-fg-subtle ·
+          .inline-flex.items-center.gap-1.min-w-0
+            = commit_avatar(commit.author, size: 14)
+            %span.truncate= commit.author
+          %span.text-fg-subtle ·
+          %span.tabular-nums= commit_when_label(row_time, anchor: when_anchor, mode: when_mode)
+          - if commit.respond_to?(:pr_number) && commit.pr_number
+            %span.text-fg-subtle ·
+            %span= "##{commit.pr_number}"
+          - if commit.test_case_count.to_i > 0
+            %span.text-fg-subtle ·
+            %span= "#{commit.test_case_count} tests"
+        .flex.flex-wrap.items-center.gap-1.5
+          = build_status_pill(state, size: :sm)
+          = test_result_chips(state)
+
+    -# Desktop row (≥ sm). 7-column grid; Tests carries every result kind
+    -# (Flags merged into it — they overlapped once FPE and ≠ became statuses).
+    = link_to commit_path(branch: row_branch, sha: commit.short_sha),
+             class: "hidden sm:grid gap-3 border-b border-border-subtle px-4 py-3 text-sm text-fg no-underline hover:bg-bg-subtle items-center grid-cols-[30px_minmax(0,2.4fr)_minmax(0,1.2fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,2.6fr)_minmax(0,0.8fr)]" do
+      %span.flex= render "status_ring", state: state, size: 30
+      .min-w-0.flex.flex-col.gap-0.5
+        %span.truncate.font-medium.text-fg= commit.message_first_line(80)
+        %span.flex.items-center.gap-1.min-w-0.text-fg-subtle{ class: "text-[11px]" }
+          -# In a mixed-branch list the branch chip takes the meta line;
+          -# the test-case count is the same on nearly every commit.
+          - if row_branch_names
+            = commit_branches_chip(row_branch_names)
+          - else
+            - meta_parts = []
+            - meta_parts << "##{commit.pr_number}" if commit.respond_to?(:pr_number) && commit.pr_number
+            - meta_parts << "#{commit.test_case_count} test cases" if commit.test_case_count.to_i > 0
+            = meta_parts.join(" · ").presence || pluralize(commit.computer_count.to_i, "computer")
+      .flex.items-center.min-w-0{ class: "gap-1.5" }
+        %span.font-mono.text-brand.truncate{ class: "text-[12px]" }= commit.short_sha
+        = shared_commit_marker(also_on[commit.id])
+      .flex.items-center.gap-2.min-w-0
+        = commit_avatar(commit.author)
+        %span.truncate.text-fg-muted{ class: "text-[12px]" }= commit.author
+      .min-w-0= build_status_pill(state, size: :sm)
+      .flex.flex-wrap.items-center.gap-1.min-w-0= test_result_chips(state)
+      %span.text-right.text-fg-subtle.tabular-nums{ class: "text-[11px]" }= commit_when_label(row_time, anchor: when_anchor, mode: when_mode)
+
