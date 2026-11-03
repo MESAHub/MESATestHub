@@ -206,7 +206,10 @@ helper or partial exists.
   come from `commits#home_unified`, each ending in a nested frame
   whose "Show more" link fetches the next page into it. Rows are the
   `commits/_commit_rows` partial, split out of `_commit_table` so
-  pages can stack under one header.
+  pages can stack under one header. `prefetch_frames_controller.js`
+  on the page flips each lazy frame to `loading="eager"` once it's
+  within one viewport height, since Turbo's lazy loading waits for
+  actual intersection and left blank placeholders while scrolling.
 - **Commit detail tabs are server-pre-rendered, EXCEPT Diff.**
   `commits#show` renders the Summary / Computers / Logs panels on
   each request; the `tabs_controller.js` Stimulus controller toggles
