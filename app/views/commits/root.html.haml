@@ -1,0 +1,51 @@
+- content_for :title, "Recent activity"
+
+.space-y-8
+  -# Headline + window chips. The chips are plain links (?days=N), so
+  -# any window is bookmarkable; a hand-typed ?days= outside the chip
+  -# set still works and simply leaves no chip highlighted.
+  %header.flex.flex-wrap.items-end.justify-between.gap-x-6.gap-y-3
+    .flex.flex-col.gap-2.min-w-0
+      %h1.text-2xl.font-semibold.tracking-tight.text-fg Recent activity
+      %p.text-xs.text-fg-muted
+        = "#{pluralize(@sections.size, 'branch')} pushed to in the last #{pluralize(@days, 'day')}, most recent first"
+    %nav.flex.items-center.gap-1.text-xs.shrink-0.ml-auto{ "aria-label": "Time window" }
+      %span.mesa-label.mr-1 Window
+      - CommitsController::HOME_WINDOW_CHOICES.each do |d|
+        - active = d == @days
+        = link_to "#{d}d", root_path(days: (d == CommitsController::HOME_DEFAULT_DAYS ? nil : d)),
+                  class: "mesa-btn #{'border-brand text-brand' if active}",
+                  aria: { current: (active ? "true" : nil) }
+
+  - if @sections.empty?
+    .rounded-lg.border.border-border.bg-bg-elev.px-4.py-10.text-center.text-sm.text-fg-muted
+      = "No branches have been pushed to in the last #{pluralize(@days, 'day')}."
+      = link_to "Browse commits on main →", commits_path(branch: "main")
+  - else
+    - @sections.each do |section|
+      - branch = section[:branch]
+      - commit_count = section[:commit_ids].size
+      %section.space-y-2{ "aria-label": "Commits on #{branch.name}" }
+        -# Branch heading: the name links to the branch's full commits
+        -# index; the meta line says when it was last pushed and how many
+        -# commits arrived in the window.
+        .flex.flex-wrap.items-baseline.justify-between.gap-x-4.gap-y-1.border-b.border-border-subtle.pb-2
+          %h2.min-w-0
+            = link_to commits_path(branch: branch.name), class: "group/branch inline-flex items-center gap-1.5 min-w-0 font-mono text-base font-semibold text-fg no-underline hover:text-brand", title: "All commits on #{branch.name}" do
+              = mesa_icon(:branch, size: 14)
+              %span.truncate{ class: "group-hover/branch:underline" }= branch.name
+          %p.text-fg-subtle.tabular-nums{ class: "text-[11px]" }
+            %span{ title: section[:last_pushed_at].in_time_zone(time_zone).to_s }= "pushed #{time_ago_compact(section[:last_pushed_at])}"
+            %span.mx-1 ·
+            = "#{pluralize(commit_count, 'new commit')}"
+            %span.mx-1 ·
+            = link_to "All commits →", commits_path(branch: branch.name), class: "text-brand no-underline hover:underline"
+
+        -# Lazy frame: the table (and its commit_state work) loads as the
+        -# section scrolls into view, collapsed to the newest few commits
+        -# with a toggle for more. The placeholder reserves roughly the
+        -# collapsed height so the page doesn't jump much as frames fill.
+        = turbo_frame_tag "home_section_#{branch.id}", src: home_section_path(branch: branch.name, days: @days), loading: "lazy", target: "_top" do
+          .rounded-lg.border.border-border.bg-bg-elev.px-4.text-sm.text-fg-subtle.flex.items-center.justify-center{ style: "box-shadow: var(--shadow-card-sm); min-height: #{[commit_count, CommitsController::HOME_COMMITS_COLLAPSED].min * 57 + 90}px;" }
+            Loading commits…
+

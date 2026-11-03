@@ -180,9 +180,24 @@ helper or partial exists.
   test has a result.
   Above the list, up to three cards link to the branches tested most
   recently (`Branch.recently_tested`, 30-day window, excluding the
-  branch on screen). `/` goes to `commits#root`, which redirects to
-  `/main/commits` — an action rather than a routing redirect so
-  logged-out visitors hit the login page directly.
+  branch on screen).
+- **The home page (`/`, `commits#root`) is one section per branch
+  pushed to recently**, newest push first (`?days=N`, default 10).
+  `Branch.recently_pushed` decides membership: a commit counts as
+  pushed when it was first ingested (`commits.created_at`), not by
+  `commit_time` (the author date, which survives rebases). Non-main
+  sections leave out commits that are also on main, so a branch that
+  only merged main drops out, and `WorkDispatcher::EXCLUDED_BRANCHES`
+  (`shields`) never shows. Headings render from one pluck. Each
+  section's table (the shared `commits/_commit_table` partial, same
+  rows as the index) is a lazy Turbo Frame from `commits#home_section`,
+  showing 3 commits with a "Show N more" toggle that re-fetches the
+  frame with `?expanded=1` (up to 25). Rendering every section inline
+  took several seconds: a busy week puts 150+ commits on screen, and
+  commit_state costs a few queries each. Repeats across sections
+  (stacked or rebased branches) are kept, not hidden. A chain-link
+  marker by the SHA (`shared_commit_marker`) names the other sections
+  that list the commit.
 - **Commit detail tabs are server-pre-rendered, EXCEPT Diff.**
   `commits#show` renders the Summary / Computers / Logs panels on
   each request; the `tabs_controller.js` Stimulus controller toggles

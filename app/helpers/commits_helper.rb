@@ -20,7 +20,8 @@ module CommitsHelper
     github: '<path d="M8 1.5C4.4 1.5 1.5 4.4 1.5 8c0 2.9 1.9 5.3 4.4 6.2.3.1.4-.1.4-.3v-1.2c-1.8.4-2.2-.8-2.2-.8-.3-.7-.7-.9-.7-.9-.6-.4 0-.4 0-.4.6 0 1 .7 1 .7.6 1 1.6.7 2 .6.1-.4.2-.7.4-.9-1.4-.2-2.9-.7-2.9-3.2 0-.7.3-1.3.7-1.7-.1-.2-.3-.9.1-1.8 0 0 .6-.2 1.8.7.5-.1 1.1-.2 1.6-.2.6 0 1.1.1 1.6.2 1.2-.8 1.8-.7 1.8-.7.4.9.1 1.6.1 1.8.4.4.7 1 .7 1.7 0 2.5-1.5 3-2.9 3.2.2.2.4.6.4 1.2v1.8c0 .2.1.4.4.3 2.6-.9 4.4-3.3 4.4-6.2 0-3.6-2.9-6.5-6.5-6.5z"/>'.html_safe,
     copy: '<rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1 1 0 011-1h7"/>'.html_safe,
     download: '<path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M3 13h10"/>'.html_safe,
-    crosshair: '<circle cx="8" cy="8" r="5"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/>'.html_safe
+    crosshair: '<circle cx="8" cy="8" r="5"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/>'.html_safe,
+    link: '<path d="M6.5 9.5l3-3"/><path d="M7.5 4.5l1-1a2.5 2.5 0 013.5 3.5l-1 1"/><path d="M8.5 11.5l-1 1a2.5 2.5 0 01-3.5-3.5l1-1"/>'.html_safe
   }.freeze
 
   # Same output as the `commits/_matrix_cell_visual` partial, but
@@ -87,6 +88,24 @@ module CommitsHelper
     x1, y1 = point.(to_deg)
     large = (to_deg - from_deg) > 180 ? 1 : 0
     "M#{x0} #{y0}A#{r} #{r} 0 #{large} 1 #{x1} #{y1}"
+  end
+
+  # Chain-link marker for a home-page commit row whose commit also
+  # sits in other sections on the page (stacked or rebased branches
+  # share most of their commits). The row is itself a link, so the
+  # branch list lives in the tooltip rather than as nested links.
+  # Returns nil when there's nothing to mark.
+  def shared_commit_marker(branch_names)
+    return if branch_names.blank?
+
+    shown = branch_names.first(8)
+    extra = branch_names.size - shown.size
+    tip = "Also on #{shown.join(', ')}#{" and #{extra} more" if extra.positive?}"
+    content_tag(:span, class: "inline-flex shrink-0 items-center gap-0.5 text-fg-subtle", title: tip) do
+      safe_join([mesa_icon(:link, size: 12),
+                 content_tag(:span, branch_names.size, class: "tabular-nums text-[10px]"),
+                 content_tag(:span, tip, class: "sr-only")])
+    end
   end
 
   def mesa_icon(name, size: 16, css: nil)

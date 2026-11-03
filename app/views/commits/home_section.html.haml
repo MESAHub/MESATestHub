@@ -1,0 +1,31 @@
+-# Turbo Frame response for one home-page branch section (see
+-# commits#home_section and the matching turbo_frame_tag in
+-# root.html.haml). The frame carries target="_top" on the page, so
+-# row links navigate the whole page; the expand/collapse toggle
+-# targets the frame itself to swap in the other size.
+- frame_id = "home_section_#{@branch.id}"
+- cap = CommitsController::HOME_COMMITS_EXPANDED
+- more_in_frame = [@commit_count, cap].min - @commits.size
+- beyond_cap = @commit_count - cap
+= turbo_frame_tag frame_id do
+  = render "commits/commit_table", commits: @commits, commit_states: @commit_states, branch: @branch,
+                                    when_anchor: Time.zone.now, when_mode: :now, also_on: @also_on,
+                                    empty_message: "No new commits in this window."
+
+  - if @expanded || more_in_frame > 0
+    .mt-2.flex.flex-wrap.items-center.justify-between.gap-x-4.gap-y-1.text-xs
+      - if @expanded
+        = link_to home_section_path(branch: @branch.name, days: @days),
+                  class: "inline-flex items-center gap-1 text-brand no-underline hover:underline",
+                  data: { turbo_frame: frame_id } do
+          %span.inline-flex.rotate-180= mesa_icon(:chevron, size: 12)
+          Show fewer
+      - else
+        = link_to home_section_path(branch: @branch.name, days: @days, expanded: 1),
+                  class: "inline-flex items-center gap-1 text-brand no-underline hover:underline",
+                  data: { turbo_frame: frame_id } do
+          = mesa_icon(:chevron, size: 12)
+          = "Show #{more_in_frame} more recent #{'commit'.pluralize(more_in_frame)}"
+      - if @expanded && beyond_cap > 0
+        = link_to "#{pluralize(beyond_cap, 'more commit')} on #{@branch.name} →", commits_path(branch: @branch.name),
+                  class: "text-brand no-underline hover:underline"

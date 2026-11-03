@@ -324,6 +324,59 @@ class Branch < ApplicationRecord
     end
   end
 
+  # The home page's sections: every branch that received commits in
+  # the last `within`, most recently pushed first, each paired with
+  # the commits that arrived in that window (newest commit_time first,
+  # like the commits index). "Pushed" means first ingested here —
+  # `commits.created_at`, stamped by the sync when the push lands —
+  # since `commit_time` is the author date and survives rebases.
+  #
+  # A branch's section leaves out commits that are also on the trunk:
+  # a feature branch that merges main, or is cut from a freshly pushed
+  # main, would otherwise repeat main's commits under its own heading.
+  # A branch whose only new commits came from the trunk drops out.
+  #
+  # Branches that hold no code to test (WorkDispatcher's exclusion
+  # list — `shields` is badge data) never get a section.
+  #
+  # Uses branch_memberships rather than the recursive reachability
+  # walk — one indexed join for every branch instead of a CTE each —
+  # and plucks ids rather than loading commits: a busy stacked branch
+  # can carry hundreds of new commits, and the home page loads each
+  # section's first few (with commit_state's preloads) in its own
+  # lazy frame.
+  #
+  # Returns [{ branch:, last_pushed_at:, commit_ids: }], commit_ids
+  # in display order.
+  def self.recently_pushed(within: 10.days, trunk: 'main')
+    trunk_id = where(name: trunk).pick(:id)
+    rows = BranchMembership.joins(:commit, :branch)
+                           .where('commits.created_at > ?', within.ago)
+                           .where.not(branches: { name: WorkDispatcher::EXCLUDED_BRANCHES })
+    if trunk_id
+      rows = rows.where(<<~SQL.squish, trunk_id: trunk_id)
+        branch_memberships.branch_id = :trunk_id OR NOT EXISTS (
+          SELECT 1 FROM branch_memberships tm
+           WHERE tm.commit_id = branch_memberships.commit_id
+             AND tm.branch_id = :trunk_id)
+      SQL
+    end
+    rows = rows.pluck('branch_memberships.branch_id', 'commits.id',
+                      'commits.commit_time', 'commits.created_at')
+    return [] if rows.empty?
+
+    branches = includes(:head).where(id: rows.map(&:first).uniq).index_by(&:id)
+    rows.group_by(&:first).filter_map do |branch_id, branch_rows|
+      branch = branches[branch_id]
+      next unless branch
+
+      ordered = branch_rows.sort_by { |_, id, time, _| [-time.to_f, id] }
+      { branch: branch,
+        last_pushed_at: branch_rows.map(&:last).max,
+        commit_ids: ordered.map(&:second) }
+    end.sort_by { |entry| [-entry[:last_pushed_at].to_f, entry[:branch].name] }
+  end
+
   def focused_commit_window(focused_commit, size: 5)
     half = (size - 1) / 2
 
