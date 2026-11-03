@@ -197,7 +197,16 @@ helper or partial exists.
   commit_state costs a few queries each. Repeats across sections
   (stacked or rebased branches) are kept, not hidden. A chain-link
   marker by the SHA (`shared_commit_marker`) names the other sections
-  that list the commit.
+  that list the commit. A View toggle (`?view=unified`) swaps the
+  sections for one list of the same commits, deduplicated, newest
+  *push* first (commit_time breaks ties within a push, so rebases
+  surface as new work). The When column and age buckets read push
+  time (`time_attr: :created_at`). Each row's chip names its branches,
+  and the row links through the most recently pushed one. Pages of 25
+  come from `commits#home_unified`, each ending in a nested frame
+  whose "Show more" link fetches the next page into it. Rows are the
+  `commits/_commit_rows` partial, split out of `_commit_table` so
+  pages can stack under one header.
 - **Commit detail tabs are server-pre-rendered, EXCEPT Diff.**
   `commits#show` renders the Summary / Computers / Logs panels on
   each request; the `tabs_controller.js` Stimulus controller toggles

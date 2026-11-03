@@ -1,0 +1,27 @@
+-# Turbo Frame response for one page of the home page's unified view
+-# (see commits#home_unified and the frame in root.html.haml). Frames
+-# carry target="_top" so row links navigate the whole page; the
+-# "Show more" link targets the nested frame it sits in, which the next
+-# page's response fills, so pages stack up under one table header.
+- now = Time.zone.now
+- next_offset = @offset + @commits.size
+- remaining = @total - next_offset
+= turbo_frame_tag "home_unified_#{@offset}", target: "_top", class: "block" do
+  - if @commits.empty?
+    .px-4.py-10.text-center.text-sm.text-fg-muted
+      = "No commits pushed in the last #{pluralize(@days, 'day')}."
+  - else
+    = render "commits/commit_rows", commits: @commits, commit_states: @commit_states,
+                                     branches_of: @branches_of, time_attr: :created_at,
+                                     when_anchor: now, when_mode: :now,
+                                     after_bucket: params[:after_bucket].presence
+  - if remaining > 0
+    - last_bucket = age_bucket(@commits.last.created_at, now: now.in_time_zone(time_zone))
+    = turbo_frame_tag "home_unified_#{next_offset}", target: "_top", class: "block" do
+      = link_to home_unified_path(days: @days, offset: next_offset, after_bucket: last_bucket),
+                class: "flex items-center justify-center gap-1 px-4 py-2.5 text-xs text-brand no-underline hover:bg-bg-subtle hover:underline",
+                data: { turbo_frame: "home_unified_#{next_offset}" } do
+        = mesa_icon(:chevron, size: 12)
+        - page = [remaining, CommitsController::HOME_UNIFIED_PAGE].min
+        = "Show #{page} more #{'commit'.pluralize(page)}"
+        %span.text-fg-subtle= "(#{remaining} left)"

@@ -108,6 +108,21 @@ module CommitsHelper
     end
   end
 
+  # Branch chip for a row in a list that mixes branches (the home
+  # page's unified view): the first branch, which the row links
+  # through, plus "+N" for the rest, all named in the tooltip.
+  def commit_branches_chip(branch_names)
+    return if branch_names.blank?
+
+    first, *rest = branch_names
+    tip = "On #{branch_names.first(8).join(', ')}#{" and #{branch_names.size - 8} more" if branch_names.size > 8}"
+    content_tag(:span, class: "inline-flex min-w-0 items-center gap-1 font-mono text-fg-muted", title: tip) do
+      safe_join([mesa_icon(:branch, size: 11),
+                 content_tag(:span, first, class: "truncate max-w-[16rem]"),
+                 (content_tag(:span, "+#{rest.size}", class: "shrink-0 tabular-nums text-fg-subtle") if rest.any?)].compact)
+    end
+  end
+
   def mesa_icon(name, size: 16, css: nil)
     paths = ICON_PATHS[name] or return ""
     content_tag(:svg,
@@ -852,9 +867,9 @@ module CommitsHelper
   # buckets are dropped.
   # `mode` is :now (labels read "Today", "Last week") or :date
   # (labels read relative to a picked day: "Same day", "Week before").
-  def group_commits_by_age(commits, now: Time.current, mode: :date)
+  def group_commits_by_age(commits, now: Time.current, mode: :date, time_attr: :commit_time)
     by_bucket = AGE_BUCKETS.to_h { |id, _| [id, []] }
-    commits.each { |c| by_bucket[age_bucket(c.commit_time, now: now)] << c }
+    commits.each { |c| by_bucket[age_bucket(c.public_send(time_attr), now: now)] << c }
     AGE_BUCKETS.filter_map do |id, label|
       next nil if by_bucket[id].empty?
       [id, mode == :now ? AGE_BUCKETS_NOW[id] : label, by_bucket[id]]
