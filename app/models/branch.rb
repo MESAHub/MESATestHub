@@ -352,7 +352,46 @@ class Branch < ApplicationRecord
   #
   # Returns [{ branch:, last_pushed_at:, commit_ids: }], commit_ids
   # in display order.
+  #
+  # Cached: the home page asks for this once per section frame (32
+  # sections for a busy 10 days), and each computation plucks every
+  # recent membership (~1k rows) to keep one branch's. The key carries
+  # a cheap freshness fingerprint (see #recently_pushed_freshness), so a
+  # push shows up on the next request; the TTL only bounds how far the
+  # `within` window's edge can drift before old commits age out.
+  RECENTLY_PUSHED_TTL = 5.minutes
+
   def self.recently_pushed(within: 10.days, trunk: 'main')
+    key = ['branch_recently_pushed', within.to_i, trunk, recently_pushed_freshness]
+    sections = Rails.cache.fetch(key, expires_in: RECENTLY_PUSHED_TTL) do
+      recently_pushed_sections(within: within, trunk: trunk)
+    end
+    return [] if sections.empty?
+
+    branches = includes(:head).where(id: sections.map(&:first)).index_by(&:id)
+    sections.filter_map do |branch_id, last_pushed_at, commit_ids|
+      branch = branches[branch_id]
+      { branch: branch, last_pushed_at: last_pushed_at, commit_ids: commit_ids } if branch
+    end
+  end
+
+  # Changes whenever recently_pushed's answer can: a new commit (pushes
+  # stamp commits.created_at), any membership insert (new ids, including
+  # BranchSyncJob's delete-and-reinsert), or a branch created, deleted
+  # (`branch.delete`, so a count change), or updated (head moves). One
+  # round trip, each part an index lookup or a scan of ~100 branches.
+  def self.recently_pushed_freshness
+    connection.select_rows(<<~SQL.squish).first
+      SELECT (SELECT max(id) FROM branch_memberships),
+             (SELECT max(created_at) FROM commits),
+             (SELECT count(*) FROM branches),
+             (SELECT max(updated_at) FROM branches)
+    SQL
+  end
+
+  # The uncached computation: [[branch_id, last_pushed_at, commit_ids]]
+  # in section order. Plain values so the cache never holds records.
+  def self.recently_pushed_sections(within:, trunk:)
     trunk_id = where(name: trunk).pick(:id)
     rows = BranchMembership.joins(:commit, :branch)
                            .where('commits.created_at > ?', within.ago)
@@ -365,20 +404,14 @@ class Branch < ApplicationRecord
              AND tm.branch_id = :trunk_id)
       SQL
     end
-    rows = rows.pluck('branch_memberships.branch_id', 'commits.id',
+    rows = rows.pluck('branch_memberships.branch_id', 'branches.name', 'commits.id',
                       'commits.commit_time', 'commits.created_at')
-    return [] if rows.empty?
 
-    branches = includes(:head).where(id: rows.map(&:first).uniq).index_by(&:id)
-    rows.group_by(&:first).filter_map do |branch_id, branch_rows|
-      branch = branches[branch_id]
-      next unless branch
-
-      ordered = branch_rows.sort_by { |_, id, time, _| [-time.to_f, id] }
-      { branch: branch,
-        last_pushed_at: branch_rows.map(&:last).max,
-        commit_ids: ordered.map(&:second) }
-    end.sort_by { |entry| [-entry[:last_pushed_at].to_f, entry[:branch].name] }
+    rows.group_by(&:first).map do |branch_id, branch_rows|
+      ordered = branch_rows.sort_by { |_, _, id, time, _| [-time.to_f, id] }
+      [branch_id, branch_rows.first.second, branch_rows.map(&:last).max, ordered.map(&:third)]
+    end.sort_by { |_, name, pushed_at, _| [-pushed_at.to_f, name] }
+       .map { |branch_id, _name, pushed_at, commit_ids| [branch_id, pushed_at, commit_ids] }
   end
 
   def focused_commit_window(focused_commit, size: 5)
