@@ -79,8 +79,12 @@ Rails.application.configure do
   # Prepend all log lines with the following tags.
   config.log_tags = [ :request_id ]
 
-  # Use a different cache store in production.
-  # config.cache_store = :mem_cache_store
+  # Solid Cache (config/cache.yml): entries live in the primary DB, so
+  # they survive deploys and would be shared across Puma processes. The
+  # in-memory store emptied on every deploy, leaving each page's first
+  # views to recompute commit states. Rack::Attack keeps its own memory
+  # store (config/initializers/rack_attack.rb).
+  config.cache_store = :solid_cache_store
 
   # Use Solid Queue for Active Job. The solid_queue_* tables live in the
   # primary database (no separate queue DB), so there's no connects_to

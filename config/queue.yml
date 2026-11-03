@@ -6,7 +6,11 @@ default: &default
     - queues: "*"
       threads: 3
       processes: <%= ENV.fetch("JOB_CONCURRENCY", 1) %>
-      polling_interval: 0.1
+      # How often an idle worker asks the DB for ready jobs. The default
+      # 0.1s meant ~10 polls a second, all day, inside the web process
+      # (56M since Aug 2026). Jobs here are webhook syncs and recurring
+      # tasks; a second's pickup delay costs nothing.
+      polling_interval: 1
 
 development:
   <<: *default

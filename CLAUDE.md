@@ -51,7 +51,12 @@ Before doing non-trivial work, read the appropriate doc:
 - **[`docs/solid-queue-migration.md`](docs/solid-queue-migration.md)**
   — Solid Queue adoption (in-Puma supervisor, single DB). Recurring
   schedules live in [`config/recurring.yml`](config/recurring.yml)
-  and replaced the old per-task Railway cron services.
+  and replaced the old per-task Railway cron services. Idle workers
+  poll for ready jobs once a second (`config/queue.yml`; the 0.1s
+  default was ~10 queries a second all day). Production's
+  `Rails.cache` is **Solid Cache**, in the same primary DB
+  ([`config/cache.yml`](config/cache.yml), table
+  `solid_cache_entries`).
 - **[`docs/dispatcher-and-claims.md`](docs/dispatcher-and-claims.md)**
   — dispatcher API + `claims` model. Phases A (schema + CI flag
   parsing) and B (claims endpoint, sweeper, claims as the
@@ -231,12 +236,17 @@ helper or partial exists.
   - **Keep commit_state a pure function of those rows.** Don't make it
     read the clock or the viewer. Any write path that changes what it
     reads must change a count or an `updated_at`.
-  - **Code changes:** the key carries `RAILWAY_GIT_COMMIT_SHA`, so every
-    deploy starts cold. With dev caching on, bump
-    `CommitStateCache::VERSION` after changing the rules.
+  - **Code changes:** the key carries a digest of
+    `CommitStateCache::RULES_FILES` (CommitState, ChecksumComparison,
+    TestInstance, …). Deploys that touch those start cold; others keep
+    the cache. If status logic moves into another file, add it to the
+    list, or bump `CommitStateCache::VERSION`.
   - **Don't add eager loads to list-page queries.** On a warm cache they
     load thousands of test instances nothing reads.
-  - The store is still the per-process 64MB `:memory_store`.
+  - In production the store is Solid Cache, so cached states survive
+    deploys and would be shared by multiple Puma processes. Rack-attack
+    is the exception: it keeps a per-process memory store so throttle
+    counters aren't a DB write per request.
 - **Commit detail tabs are server-pre-rendered, EXCEPT Diff.**
   `commits#show` renders the Summary / Computers / Logs panels on
   each request; the `tabs_controller.js` Stimulus controller toggles

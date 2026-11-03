@@ -12,8 +12,13 @@ class Rack::Attack
     end
   end
 
-  # Configure cache store (uses Rails cache by default)
-  Rack::Attack.cache.store = Rails.cache
+  # Throttle counters are bumped on nearly every request. In production
+  # Rails.cache is Solid Cache (a Postgres table), so give rack-attack a
+  # per-process memory store rather than a DB write per request. Other
+  # environments keep Rails.cache: :null_store in test, so throttles
+  # never fire there unless a spec swaps a store in.
+  Rack::Attack.cache.store =
+    Rails.env.production? ? ActiveSupport::Cache::MemoryStore.new(size: 16.megabytes) : Rails.cache
 
   # Allow localhost requests (for development)
   safelist('allow from localhost') do |req|

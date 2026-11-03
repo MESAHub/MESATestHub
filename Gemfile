@@ -70,3 +70,5 @@ group :test do
 end
 
 gem "solid_queue", "~> 1.4"
+
+gem "solid_cache", "~> 1.0"
