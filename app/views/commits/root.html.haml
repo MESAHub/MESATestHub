@@ -4,7 +4,7 @@
 - view_param = @view == :unified ? "unified" : nil
 - days_param = @days == default_days ? nil : @days
 
-.space-y-8
+.space-y-8{ data: { controller: "prefetch-frames" } }
   -# Headline + view and window chips. The chips are plain links
   -# (?view=unified, ?days=N) that keep each other's setting, so any
   -# combination is bookmarkable; a hand-typed ?days= outside the chip
