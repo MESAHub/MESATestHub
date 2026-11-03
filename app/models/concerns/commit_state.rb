@@ -824,10 +824,24 @@ module CommitState
   # `pending_claims` is included so the row-classification loop in
   # `commit_state` can ask each TCC "is anyone actually working on
   # you?" without firing a query per test case.
+  #
+  # When the caller already preloaded test_case_commits (the index and
+  # home-page controllers do, with test_instances and pending_claims),
+  # reuse those records and preload only what's missing. Calling
+  # `.includes` on the association builds a fresh relation and loaded
+  # every TCC and test instance a second time, a handful of extra
+  # queries per commit row.
   def _tccs_for_matrix
-    @_tccs_for_matrix ||= test_case_commits
-                            .includes(:test_case, :test_instances, :pending_claims)
-                            .to_a
+    @_tccs_for_matrix ||=
+      if association(:test_case_commits).loaded?
+        test_case_commits.to_a.tap do |tccs|
+          ActiveRecord::Associations::Preloader.new(
+            records: tccs, associations: %i[test_case test_instances pending_claims]
+          ).call
+        end
+      else
+        test_case_commits.includes(:test_case, :test_instances, :pending_claims).to_a
+      end
   end
 
   # `test_case_id` set for every TCC on this commit that currently

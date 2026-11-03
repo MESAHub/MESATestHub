@@ -748,10 +748,11 @@ class Commit < ApplicationRecord
     self.checksum_count = test_case_commits.where.not(
       checksum_count: [0, 1]).count
     self.untested_count = test_case_commits.where(status: -1).count
-    self.computer_count = computer_info.count
-    self.complete_computer_count = computer_info.select do |spec|
-      spec[:frac] == 1.0
-    end.count
+    # computer_info loads every submission on the commit (one per test
+    # result since Oct 2026), so build it once.
+    info = computer_info
+    self.computer_count = info.count
+    self.complete_computer_count = info.count { |spec| spec[:frac] == 1.0 }
     # Uniform failures outrank mixed pass/fail, matching CommitState
     # and the morning mailer's worst-first ordering.
     self.status = if failed_count > 0
