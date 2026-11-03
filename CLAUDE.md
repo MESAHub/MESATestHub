@@ -210,6 +210,26 @@ helper or partial exists.
   on the page flips each lazy frame to `loading="eager"` once it's
   within one viewport height, since Turbo's lazy loading waits for
   actual intersection and left blank placeholders while scrolling.
+- **List pages read commit states through `CommitStateCache`.**
+  [`CommitStateCache.fetch(commits)`](app/services/commit_state_cache.rb)
+  returns `{ id => commit_state }` from `Rails.cache`. It preloads and
+  computes only the commits that missed. This covers the commits index,
+  the home sections and unified view, the recent-branch cards, the hero
+  subway map, and the diff tab's clean-baseline walk.
+  - **The key is a fingerprint, not a TTL.** It holds the row count and
+    newest `updated_at` of the commit's submissions, test_instances,
+    TCCs and claims, all fetched in one query per page. Claims change
+    through `insert_all` / `update_all`, which skip callbacks, so
+    callback-driven expiry would miss them.
+  - **Keep commit_state a pure function of those rows.** Don't make it
+    read the clock or the viewer. Any write path that changes what it
+    reads must change a count or an `updated_at`.
+  - **Code changes:** the key carries `RAILWAY_GIT_COMMIT_SHA`, so every
+    deploy starts cold. With dev caching on, bump
+    `CommitStateCache::VERSION` after changing the rules.
+  - **Don't add eager loads to list-page queries.** On a warm cache they
+    load thousands of test instances nothing reads.
+  - The store is still the per-process 64MB `:memory_store`.
 - **Commit detail tabs are server-pre-rendered, EXCEPT Diff.**
   `commits#show` renders the Summary / Computers / Logs panels on
   each request; the `tabs_controller.js` Stimulus controller toggles

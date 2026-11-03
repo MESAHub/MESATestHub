@@ -69,9 +69,12 @@ Rails.application.configure do
   # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
   config.force_ssl = true
 
-  # Use the lowest log level to ensure availability of diagnostic information
-  # when problems arise.
-  config.log_level = :debug
+  # :info, not :debug. Debug logs every SQL statement (with ANSI color),
+  # which costs formatting + stdout I/O on each of the hundreds of queries
+  # a commit page or a burst of per-test submissions runs. Lograge's
+  # request lines are :info and still come through. Set RAILS_LOG_LEVEL
+  # to debug temporarily when the SQL trace is needed.
+  config.log_level = ENV.fetch("RAILS_LOG_LEVEL", "info")
 
   # Prepend all log lines with the following tags.
   config.log_tags = [ :request_id ]

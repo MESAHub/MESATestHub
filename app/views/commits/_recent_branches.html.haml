@@ -8,6 +8,7 @@
 -# Locals:
 -#   entries: output of Branch.recently_tested — [{ branch:, last_tested_at: }].
 - return if entries.blank?
+- head_states = CommitStateCache.fetch(entries.map { |e| e[:branch].head })
 %section{ "aria-label": "Recently tested branches" }
   %h2.mesa-label.mb-2 Recently tested branches
   .grid.gap-3{ class: "grid-cols-1 sm:grid-cols-3" }
@@ -23,7 +24,7 @@
           %span.shrink-0.text-fg-subtle.tabular-nums{ class: "text-[11px]", title: entry[:last_tested_at].in_time_zone.to_s }
             = "tested #{time_ago_compact(entry[:last_tested_at])}"
         = link_to commit_path(branch: branch.name, sha: head.short_sha), class: "flex items-center gap-2 min-w-0 rounded-md px-1 py-1.5 no-underline hover:bg-bg-subtle", title: "Head commit #{head.short_sha}: #{head.message_first_line(200)}" do
-          = render "status_ring", state: head.commit_state, size: 24
+          = render "status_ring", state: head_states[head.id], size: 24
           .min-w-0.flex.flex-col
             %span.text-fg-subtle{ class: "text-[10px] uppercase tracking-wide" }
               Head commit
