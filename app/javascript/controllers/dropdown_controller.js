@@ -8,6 +8,11 @@ import { Controller } from "@hotwired/stimulus"
 //   </div>
 // The `trigger` target is optional; when present its `aria-expanded`
 // attribute is kept in sync with the menu's open state.
+//
+// Opening focuses the first `[data-dropdown-autofocus]` element in the
+// menu; opening and closing dispatch `dropdown:opened` / `dropdown:closed`. Escape inside a
+// non-empty `[data-dropdown-escape-clears]` field doesn't close the
+// menu, so the field's own handler can clear it first.
 export default class extends Controller {
   static targets = ["menu", "trigger"]
 
@@ -30,6 +35,8 @@ export default class extends Controller {
     this.syncAria()
     document.addEventListener("click", this._outside, true)
     document.addEventListener("keydown", this._escape, true)
+    this.dispatch("opened")
+    this.menuTarget.querySelector("[data-dropdown-autofocus]")?.focus()
   }
 
   close() {
@@ -39,6 +46,7 @@ export default class extends Controller {
     this.syncAria()
     document.removeEventListener("click", this._outside, true)
     document.removeEventListener("keydown", this._escape, true)
+    this.dispatch("closed")
   }
 
   syncAria() {
@@ -52,7 +60,10 @@ export default class extends Controller {
   }
 
   closeFromEscape(event) {
-    if (event.key === "Escape") this.close()
+    if (event.key !== "Escape") return
+    const field = event.target
+    if (field.matches?.("[data-dropdown-escape-clears]") && field.value !== "") return
+    this.close()
   }
 
   get open() {
