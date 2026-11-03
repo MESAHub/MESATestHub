@@ -52,15 +52,11 @@ class CommitsController < ApplicationController
     end
     @total = @branches_of.size
     @commits = Commit.where(id: @branches_of.keys)
-                     .includes(:submissions,
-                               :pending_claims,
-                               test_case_commits: [:test_instances,
-                                                   :pending_claims])
                      .order(created_at: :desc, commit_time: :desc, id: :desc)
                      .offset(@offset)
                      .limit(HOME_UNIFIED_PAGE)
                      .to_a
-    @commit_states = @commits.to_h { |c| [c.id, c.commit_state] }
+    @commit_states = CommitStateCache.fetch(@commits)
     render layout: false
   end
 
@@ -85,13 +81,9 @@ class CommitsController < ApplicationController
     ids = all_ids.first(@expanded ? HOME_COMMITS_EXPANDED : HOME_COMMITS_COLLAPSED)
     @commit_count = all_ids.size
     by_id = Commit.where(id: ids)
-                  .includes(:submissions,
-                            :pending_claims,
-                            test_case_commits: [:test_instances,
-                                                :pending_claims])
                   .index_by(&:id)
     @commits = ids.filter_map { |id| by_id[id] }
-    @commit_states = @commits.to_h { |c| [c.id, c.commit_state] }
+    @commit_states = CommitStateCache.fetch(@commits)
 
     shown = ids.to_set
     @also_on = {}
@@ -221,10 +213,6 @@ class CommitsController < ApplicationController
                     .where('commits.commit_time > ?', @after_time)
                     .reorder('commits.commit_time ASC')
                     .limit(@page_size + 1)
-                    .includes(:submissions,
-                              :pending_claims,
-                              test_case_commits: [:test_instances,
-                                                  :pending_claims])
                     .to_a
       @has_more_newer = rows.size > @page_size
       rows.pop if @has_more_newer
@@ -236,10 +224,6 @@ class CommitsController < ApplicationController
       rows = @branch.ordered_commits
                     .where('commits.commit_time < ?', @before_time_param)
                     .limit(@page_size + 1)
-                    .includes(:submissions,
-                              :pending_claims,
-                              test_case_commits: [:test_instances,
-                                                  :pending_claims])
                     .to_a
       @has_more_older_via_main_fetch = rows.size > @page_size
       rows.pop if @has_more_older_via_main_fetch
@@ -298,12 +282,9 @@ class CommitsController < ApplicationController
     @max_num = @branch.reachable_commit_count
 
     # Per-commit aggregated state — feeds the status ring, pills, and
-    # flag chips. The CommitState concern memoizes its
-    # queries on each Commit instance, so calling these helpers across
-    # views in the same request stays cheap.
-    @commit_states = @commits.each_with_object({}) do |commit, h|
-      h[commit.id] = commit.commit_state
-    end
+    # flag chips. Cached per commit (CommitStateCache), which preloads
+    # and computes only the commits whose data changed.
+    @commit_states = CommitStateCache.fetch(@commits)
 
     @last_activity_at = @commits.first&.commit_time
 

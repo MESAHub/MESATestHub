@@ -286,8 +286,12 @@ class Branch < ApplicationRecord
                    .limit(depth)
                    .to_a
 
+    # Cached states first; compute the rest one at a time so a cold walk
+    # still stops at the first clean commit.
+    cache = CommitStateCache.new(candidates)
+    cached = cache.read_all
     candidates.find do |c|
-      state = c.commit_state
+      state = cached[c.id] || cache.fetch_one(c)
       state[:build][:status] == :all_ok &&
         state[:tests][:status] == :all_pass
     end

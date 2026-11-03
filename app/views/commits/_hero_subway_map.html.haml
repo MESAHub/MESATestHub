@@ -19,6 +19,7 @@
 -#   focused_sha: full SHA of the commit to mark as "current."
 
 - window = window.reverse
+- window_states = CommitStateCache.fetch(window)
 - count = window.size
 - at_head = count.positive? && window.last.id == @selected_branch.head_id
 - if count.zero?
@@ -86,7 +87,7 @@
                stroke: "var(--color-border-strong)", "stroke-width": 2, "stroke-dasharray": "3 4" }
           %title Newer commits continue
       - window.each_with_index do |commit, i|
-        - state = commit.commit_state
+        - state = window_states[commit.id]
         - x = pad_x + station_spacing * i
         - focused = (commit.sha == focused_sha)
         - size = focused ? f_ring_size : ring_size
@@ -120,7 +121,7 @@
     .pointer-events-none.absolute.inset-0
       - window.each_with_index do |commit, i|
         - next if commit.sha == focused_sha
-        - state = commit.commit_state
+        - state = window_states[commit.id]
         - x_pct = ((pad_x + station_spacing * i).to_f / width * 100).round(2)
         .absolute.z-20.rounded-md.border.border-border.bg-bg-elev.p-2.text-xs{ hidden: true,
             style: "box-shadow: var(--shadow-card-md); width: 240px; left: #{x_pct}%; bottom: 100%; transform: translateX(-50%); margin-bottom: 8px;",
