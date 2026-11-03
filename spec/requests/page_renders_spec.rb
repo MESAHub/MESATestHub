@@ -228,11 +228,83 @@ RSpec.describe 'Page renders', type: :request do
     end
   end
 
-  describe 'GET / (root → commits on main)' do
-    it 'redirects to the main commits index' do
+  describe 'GET / (home page: recently pushed branches)' do
+    def pushed_commit_on(branch, message:, at: 1.hour.ago)
+      c = create(:commit, message: message, commit_time: at)
+      c.update_columns(created_at: at)
+      BranchMembership.create!(branch: branch, commit: c)
+      branch.update!(head: c)
+      c
+    end
+
+    it 'lists a section per recently pushed branch, newest push first' do
+      commit.update_columns(created_at: 3.hours.ago)
+      feature = create(:branch, name: 'feature/fast')
+      pushed_commit_on(feature, message: 'Speed up the solver', at: 1.hour.ago)
+      stale = create(:branch, name: 'feature/stale')
+      pushed_commit_on(stale, message: 'Old work', at: 20.days.ago)
+
       get '/'
 
-      expect(response).to redirect_to('/main/commits')
+      expect(response).to have_http_status(:ok)
+      body = response.body
+      expect(body).to include('Recent activity')
+      expect(body.index('feature/fast')).to be < body.index('Commits on main')
+      expect(body).not_to include('feature/stale')
+      expect(body).to include(CGI.escapeHTML(home_section_path(branch: 'feature/fast', days: 10)))
+    end
+
+    it 'widens the window with ?days=' do
+      stale = create(:branch, name: 'feature/stale')
+      pushed_commit_on(stale, message: 'Old work', at: 20.days.ago)
+
+      get '/', params: { days: 30 }
+
+      expect(response.body).to include('feature/stale')
+    end
+
+    it 'renders a collapsed section frame with an expand toggle' do
+      feature = create(:branch, name: 'feature/fast')
+      commits = (1..5).map { |i| pushed_commit_on(feature, message: "Step #{i}", at: i.hours.ago) }
+
+      get home_section_path(branch: 'feature/fast', days: 10)
+
+      expect(response).to have_http_status(:ok)
+      body = response.body
+      expect(body).to include("home_section_#{feature.id}")
+      expect(body).to include(commits.first.short_sha)
+      expect(body).not_to include(commits.last.short_sha)
+      expect(body).to include('Show 2 more recent commits')
+    end
+
+    it 'expands a section frame and links past the cap' do
+      feature = create(:branch, name: 'feature/fast')
+      commits = (1..27).map { |i| pushed_commit_on(feature, message: "Step #{i}", at: i.hours.ago) }
+
+      get home_section_path(branch: 'feature/fast', days: 10, expanded: 1)
+
+      body = response.body
+      expect(body).to include(commits[24].short_sha)
+      expect(body).not_to include(commits[25].short_sha)
+      expect(body).to include('Show fewer')
+      expect(body).to include('2 more commits on feature/fast')
+    end
+
+    it 'marks commits that other sections on the page also list' do
+      feature = create(:branch, name: 'feature/fast')
+      shared = pushed_commit_on(feature, message: 'Shared work')
+      stacked = create(:branch, name: 'feature/stacked')
+      BranchMembership.create!(branch: stacked, commit: shared)
+
+      get home_section_path(branch: 'feature/fast', days: 10)
+
+      expect(response.body).to include('Also on feature/stacked')
+    end
+
+    it '404s a section for an unknown branch' do
+      get home_section_path(branch: 'nope', days: 10)
+
+      expect(response).to have_http_status(:not_found)
     end
   end
 

@@ -4,14 +4,67 @@ class CommitsController < ApplicationController
 
   before_action :set_commit, only: [:show, :diff]
 
-  # The landing page. Most development happens on branches now, so the
-  # commits index (with its recently-tested-branch cards) is a better
-  # front door than main's head commit — and main is still the right
-  # default list, since failures there should be rare and loud.
+  # The landing page: one section per branch pushed to recently, most
+  # recently pushed first, each listing that window's commits the way
+  # the commits index does. Most development happens on branches now,
+  # so this is the front door to wherever work is happening — main
+  # included, as one section among the rest.
+  #
+  #   ?days=N  window size (default HOME_DEFAULT_DAYS, clamped 1–90).
+  #
+  # Only the headings render here (one pluck). Each section's commit
+  # table is a lazy Turbo Frame filled by #home_section: commit_state
+  # costs a few queries per commit, and a busy week puts 150+ commits
+  # on screen, which made a single render take several seconds.
+  HOME_DEFAULT_DAYS = 10
+  HOME_WINDOW_CHOICES = [3, 10, 30].freeze
+  HOME_COMMITS_COLLAPSED = 3
+  HOME_COMMITS_EXPANDED = 25
+
   def root
-    redirect_to commits_path(branch: 'main')
+    @days = home_days
+    @sections = Branch.recently_pushed(within: @days.days)
   end
-  layout "modern", only: [:index, :show]
+
+  # One home-page section's commit table (Turbo Frame response).
+  # Collapsed it shows the HOME_COMMITS_COLLAPSED newest commits and a
+  # "show N more" toggle; ?expanded=1 re-renders the frame with up to
+  # HOME_COMMITS_EXPANDED (an index page's worth), so the extra
+  # commit_state work only runs for sections someone opens. Past that,
+  # the footer links to the branch's commits index.
+  #
+  # @also_on maps each shown commit to the other sections on the page
+  # that list it too — rebased or stacked branches share most of their
+  # commits, and the rows mark that rather than hiding the repeats.
+  def home_section
+    @branch = Branch.named(params[:branch].to_s)
+    return render_404("Branch '#{params[:branch]}' not found") unless @branch
+
+    @days = home_days
+    @expanded = params[:expanded].present?
+    sections = Branch.recently_pushed(within: @days.days)
+    all_ids = sections.find { |s| s[:branch].id == @branch.id }&.dig(:commit_ids) || []
+    ids = all_ids.first(@expanded ? HOME_COMMITS_EXPANDED : HOME_COMMITS_COLLAPSED)
+    @commit_count = all_ids.size
+    by_id = Commit.where(id: ids)
+                  .includes(:submissions,
+                            :pending_claims,
+                            test_case_commits: [:test_instances,
+                                                :pending_claims])
+                  .index_by(&:id)
+    @commits = ids.filter_map { |id| by_id[id] }
+    @commit_states = @commits.to_h { |c| [c.id, c.commit_state] }
+
+    shown = ids.to_set
+    @also_on = {}
+    sections.each do |s|
+      next if s[:branch].id == @branch.id
+
+      s[:commit_ids].each { |id| (@also_on[id] ||= []) << s[:branch].name if shown.include?(id) }
+    end
+    render layout: false
+  end
+  layout "modern", only: [:root, :index, :show]
 
   # Branch lookup for the commit detail page. The :branch URL segment
   # might disagree with where the commit actually lives — branch got
@@ -329,6 +382,10 @@ class CommitsController < ApplicationController
   end
 
   private
+
+  def home_days
+    (params[:days].presence || HOME_DEFAULT_DAYS).to_i.clamp(1, 90)
+  end
 
   # Pin the `main` branch to the front of a Branch array, preserving
   # the relative order of everything else. Used to keep the trunk

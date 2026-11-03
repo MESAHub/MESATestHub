@@ -120,6 +120,9 @@ Rails.application.routes.draw do
   # Commits on main. Goes through a controller action (not a routing
   # redirect) so logged-out visitors land on the login page directly.
   root to: 'commits#root'
+  # Lazy-loaded commit table for one home-page branch section
+  # (?branch=<name>&days=N); see CommitsController#root.
+  get '/home/section', to: 'commits#home_section', as: 'home_section'
 
   # searching test_instances (should work for remote JSON requests)
   get '/test_instances/search', to: 'test_instances#search', as: 'search_instances'

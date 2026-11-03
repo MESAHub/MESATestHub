@@ -28,4 +28,45 @@ RSpec.describe Branch, type: :model do
       expect(Branch.recently_tested(limit: 5).map { |e| e[:branch] }).not_to include(old)
     end
   end
+
+  describe '.recently_pushed' do
+    def pushed(branch, at:, time: at)
+      c = create(:commit, commit_time: time)
+      c.update_columns(created_at: at)
+      BranchMembership.create!(branch: branch, commit: c)
+      branch.update!(head: c)
+      c
+    end
+
+    let!(:main) { create(:branch, name: 'main') }
+
+    it 'orders branches by latest push and commits by commit_time' do
+      feature = create(:branch, name: 'feature')
+      newer_time = pushed(feature, at: 3.hours.ago, time: 1.day.ago)
+      older_time = pushed(feature, at: 2.hours.ago, time: 2.days.ago)
+      on_main = pushed(main, at: 5.hours.ago)
+      pushed(create(:branch, name: 'stale'), at: 20.days.ago)
+
+      sections = Branch.recently_pushed(within: 10.days)
+
+      expect(sections.map { |s| s[:branch] }).to eq([feature, main])
+      expect(sections.first[:commit_ids]).to eq([newer_time.id, older_time.id])
+      expect(sections.first[:last_pushed_at]).to be_within(1.second).of(2.hours.ago)
+      expect(sections.last[:commit_ids]).to eq([on_main.id])
+    end
+
+    it "leaves main's commits out of other branches and skips excluded branches" do
+      shared = pushed(main, at: 1.hour.ago)
+      feature = create(:branch, name: 'feature')
+      BranchMembership.create!(branch: feature, commit: shared)
+      own = pushed(feature, at: 2.hours.ago)
+      merged_main_only = create(:branch, name: 'synced')
+      BranchMembership.create!(branch: merged_main_only, commit: shared)
+      pushed(create(:branch, name: 'shields'), at: 1.hour.ago)
+
+      sections = Branch.recently_pushed(within: 10.days).to_h { |s| [s[:branch].name, s[:commit_ids]] }
+
+      expect(sections).to eq('main' => [shared.id], 'feature' => [own.id])
+    end
+  end
 end
