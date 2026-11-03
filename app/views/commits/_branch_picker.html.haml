@@ -11,24 +11,46 @@
 -#               `commits_path(branch:)`; commit detail splits
 -#               between same-commit-on-new-branch (containing) and
 -#               that-branch's-head (non-containing).
-.relative.inline-flex{ data: { controller: "dropdown", open: "false" } }
+-#   wrapper_class — optional extra classes on the outer element.
+-#
+-# The menu opens with a filter field focused (`branch-filter`
+-# controller): typing narrows the rows by name, Enter follows the
+-# first match, arrows walk the rows, Escape clears then closes.
+.relative.inline-flex{ class: local_assigns[:wrapper_class], data: { controller: "dropdown branch-filter", open: "false", action: "dropdown:opened->branch-filter#position dropdown:closed->branch-filter#reset" } }
   %button.inline-flex.items-center.gap-2.rounded-md.px-2.5.py-1.text-sm.font-mono.text-brand-soft-text.bg-brand-soft.hover:bg-brand-soft.border.border-brand-soft.cursor-pointer{ type: "button", "aria-haspopup": "listbox", "aria-expanded": "false", data: { dropdown_target: "trigger", action: "click->dropdown#toggle" } }
     %span.text-brand= mesa_icon(:branch, size: 13)
     %span= branch.name
     %span.text-brand-soft-text= mesa_icon(:chevron, size: 12)
 
-  .absolute.left-0.top-full.z-10.mt-1.w-72.rounded-md.border.border-border.bg-bg-elev.p-1.text-sm{ hidden: true, style: "box-shadow: var(--shadow-card-md);", data: { dropdown_target: "menu" } }
+  .absolute.left-0.top-full.z-10.mt-1.w-72.rounded-md.border.border-border.bg-bg-elev.p-1.text-sm{ hidden: true, style: "box-shadow: var(--shadow-card-md); max-width: calc(100vw - 2rem);", data: { dropdown_target: "menu", branch_filter_target: "menu", action: "keydown->branch-filter#navigate" } }
+    .relative.mb-1
+      %span.absolute.inset-y-0.left-0.flex.items-center.pl-2.text-fg-subtle{ "aria-hidden": "true" }
+        = mesa_icon(:search, size: 12)
+      %input{ type: "search",
+              placeholder: "Filter branches…",
+              "aria-label": "Filter branches",
+              autocomplete: "off",
+              spellcheck: "false",
+              class: "w-full rounded-md border border-border bg-bg-elev pl-7 pr-2 py-1 font-mono text-base sm:text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-brand",
+              data: { branch_filter_target: "search",
+                      action: "input->branch-filter#filter",
+                      dropdown_autofocus: true,
+                      dropdown_escape_clears: true } }
     .max-h-80.overflow-y-auto
       - sections.each do |section|
         - next if section[:branches].blank?
-        .px-2.pt-2.pb-1.text-fg-subtle.uppercase.tracking-wide{ class: "text-[10px]" }= section[:label]
-        - section[:branches].each do |b|
-          - active = (b == branch)
-          = link_to link_for.call(b),
-                   class: "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 font-mono no-underline #{active ? 'bg-brand text-fg-on-brand' : 'text-fg hover:bg-bg-muted'}",
-                   style: "font-size: 12px;" do
-            %span.flex.items-center.gap-1.5.truncate
-              %span= mesa_icon(:branch, size: 11)
-              = b.name
-            - if active
-              %span.uppercase.tracking-wide.opacity-80{ class: "text-[10px]" } current
+        %div{ data: { branch_filter_target: "section" } }
+          .px-2.pt-2.pb-1.text-fg-subtle.uppercase.tracking-wide{ class: "text-[10px]" }= section[:label]
+          - section[:branches].each do |b|
+            - active = (b == branch)
+            = link_to link_for.call(b),
+                     class: "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 font-mono no-underline #{active ? 'bg-brand text-fg-on-brand' : 'text-fg hover:bg-bg-muted focus:bg-bg-muted focus:outline-none'}",
+                     style: "font-size: 12px;",
+                     data: { branch_filter_target: "row", search_key: b.name.downcase } do
+              %span.flex.items-center.gap-1.5.truncate
+                %span= mesa_icon(:branch, size: 11)
+                = b.name
+              - if active
+                %span.uppercase.tracking-wide.opacity-80{ class: "text-[10px]" } current
+      .px-2.py-3.text-fg-subtle.text-xs.text-center{ hidden: true, data: { branch_filter_target: "empty" } }
+        No branches match.

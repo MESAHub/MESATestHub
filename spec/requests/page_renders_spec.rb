@@ -184,6 +184,16 @@ RSpec.describe 'Page renders', type: :request do
       get '/main/commits', params: { before: '2026-09-04' }
       expect(response.body).to include('Before Sep 4')
     end
+
+    it 'puts a filter field atop the branch picker, with a search key per row' do
+      create(:branch, name: 'EbF/Rotation-Fix')
+
+      get '/main/commits'
+
+      expect(response.body).to match(/placeholder=['"]Filter branches…/)
+      expect(response.body).to match(/data-search-key=['"]ebf\/rotation-fix['"]/)
+      expect(response.body).to include('No branches match.')
+    end
   end
 
   describe 'GET /:branch/test_cases/:module/:test_case' do
@@ -191,6 +201,13 @@ RSpec.describe 'Page renders', type: :request do
       get "/main/test_cases/#{test_case.module}/#{test_case.name}"
 
       expect(response).to have_http_status(:ok)
+    end
+
+    it 'shares the filterable branch picker, linking rows to this test case' do
+      get "/main/test_cases/#{test_case.module}/#{test_case.name}"
+
+      expect(response.body).to match(/placeholder=['"]Filter branches…/)
+      expect(response.body).to match(%r{href=['"]/main/test_cases/#{test_case.module}/#{test_case.name}['"]})
     end
   end
 
