@@ -1,0 +1,22 @@
+# Solid Cache (production's Rails.cache). No `database:` key, so entries
+# live in the primary DB's solid_cache_entries table, like Solid Queue's
+# tables (docs/solid-queue-migration.md): one Postgres, no cache service
+# to run. Development and test keep the stores their environment files
+# set, so this only matters where production.rb selects
+# :solid_cache_store.
+default: &default
+  store_options:
+    # Commit states are keyed on fingerprints (CommitStateCache), so old
+    # versions are never read again; age and size caps reclaim them.
+    max_age: <%= 30.days.to_i %>
+    max_size: <%= 256.megabytes %>
+    namespace: <%= Rails.env %>
+
+development:
+  <<: *default
+
+test:
+  <<: *default
+
+production:
+  <<: *default

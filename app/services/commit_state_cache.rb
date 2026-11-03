@@ -19,11 +19,23 @@
 #
 # Nothing in commit_state reads the clock or the viewer, so a key match
 # means the cached hash is what a fresh computation would return. The
-# key also carries the deploy's git SHA, so a change to the rules
-# (CommitState, ChecksumComparison, …) never serves hashes from before
-# it. Locally, bump VERSION after changing them with dev caching on.
+# key also carries a digest of the files that define the rules
+# (RULES_FILES), so a deploy that changes them never serves hashes from
+# before it, while other deploys keep the cache (Solid Cache outlives the
+# process). Bump VERSION for a rules change that lives elsewhere.
 class CommitStateCache
   VERSION = 1
+
+  # Where commit_state's logic lives. Add a file here if it starts
+  # deciding statuses, flags, or counts.
+  RULES_FILES = %w[
+    app/models/concerns/commit_state.rb
+    app/services/checksum_comparison.rb
+    app/models/test_instance.rb
+    app/models/test_case_commit.rb
+    app/models/test_case.rb
+    app/models/claim.rb
+  ].freeze
 
   # What commit_state reads, preloaded in one batch for the commits that
   # missed. Matches CommitState#_tccs_for_matrix.
@@ -67,11 +79,15 @@ class CommitStateCache
   end
 
   def key_for(commit)
-    ['commit_state', VERSION, self.class.revision, commit.id, @fingerprints[commit.id]]
+    ['commit_state', VERSION, self.class.rules_digest, commit.id, @fingerprints[commit.id]]
   end
 
-  def self.revision
-    ENV['RAILWAY_GIT_COMMIT_SHA'].to_s.first(12)
+  # Recomputed on code reload in development, since the class reloads
+  # with the files.
+  def self.rules_digest
+    @rules_digest ||= Digest::SHA256.hexdigest(
+      RULES_FILES.map { |path| Rails.root.join(path).read }.join("\0")
+    ).first(12)
   end
 
   # { commit_id => "n:t|n:t|…" } with one (count, newest updated_at)

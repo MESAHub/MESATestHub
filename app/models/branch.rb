@@ -311,16 +311,28 @@ class Branch < ApplicationRecord
   # `within` (bounded so the join stays cheap — ~85ms on production
   # data). Returns [{ branch:, last_tested_at: }, ...] with each
   # branch's head preloaded.
+  #
+  # The ranking is cached for RECENTLY_TESTED_TTL: the join reads every
+  # submission in the window, and with one submission per test result
+  # (5k+ a day) it grows with testing volume while a card's "tested 3m
+  # ago" barely needs to be current. One cached ranking, one longer than
+  # `limit`, serves every branch's index: excluding the branch on screen
+  # drops at most one entry.
+  RECENTLY_TESTED_TTL = 1.minute
+
   def self.recently_tested(limit: 3, excluding: nil, within: 30.days)
-    scope = joins('JOIN branch_memberships bm ON bm.branch_id = branches.id ' \
-                  'JOIN submissions s ON s.commit_id = bm.commit_id')
-              .where('s.created_at > ?', within.ago)
-              .where.not(head_id: nil)
-    scope = scope.where.not(id: excluding.id) if excluding
-    rows = scope.group('branches.id')
-                .order(Arel.sql('MAX(s.created_at) DESC'))
-                .limit(limit)
-                .pluck(:id, Arel.sql('MAX(s.created_at)'))
+    ranked = Rails.cache.fetch(['branch_recently_tested', limit + 1, within.to_i],
+                               expires_in: RECENTLY_TESTED_TTL) do
+      joins('JOIN branch_memberships bm ON bm.branch_id = branches.id ' \
+            'JOIN submissions s ON s.commit_id = bm.commit_id')
+        .where('s.created_at > ?', within.ago)
+        .where.not(head_id: nil)
+        .group('branches.id')
+        .order(Arel.sql('MAX(s.created_at) DESC'))
+        .limit(limit + 1)
+        .pluck(:id, Arel.sql('MAX(s.created_at)'))
+    end
+    rows = ranked.reject { |id, _| excluding && id == excluding.id }.first(limit)
     branches = includes(:head).where(id: rows.map(&:first)).index_by(&:id)
     rows.filter_map do |id, at|
       branch = branches[id]
