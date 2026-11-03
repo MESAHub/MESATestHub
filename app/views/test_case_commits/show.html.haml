@@ -12,6 +12,7 @@
 .space-y-4{ data: { controller: "tabs", tabs_active_value: @active_tab.to_s } }
   = render "breadcrumb"
   = render "headline"
+  = render "shared/rewrite_banners", test_case: @test_case
   = render "show_tab_strip"
 
   -# Tab panels — both render up-front; the tabs controller

@@ -96,7 +96,7 @@ class TestCasesController < ApplicationController
       begin
         date = Date.parse(date_str)
         anchor = branch.ordered_commits
-                       .where("commits.commit_time <= ?", date.end_of_day)
+                       .where("commits.corrected_time <= ?", date.end_of_day)
                        .first
         return anchor if anchor
       rescue ArgumentError

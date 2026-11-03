@@ -42,6 +42,7 @@ class Commit < ApplicationRecord
 
   after_create :api_update_test_cases
   before_save :update_scalars
+  before_save :floor_corrected_time
 
   paginates_per 50
 
@@ -88,7 +89,9 @@ class Commit < ApplicationRecord
 
     timestamp = Time.zone.now
     rows = commit_hashes.map do |gh|
-      hash_from_github(gh).merge(
+      attrs = hash_from_github(gh)
+      attrs.merge(
+        corrected_time: attrs[:commit_time],
         created_at: timestamp,
         updated_at: timestamp,
         status: -1
@@ -131,7 +134,7 @@ class Commit < ApplicationRecord
     return if ids.empty?
 
     Commit.where(id: ids, test_case_count: 0)
-          .order(commit_time: :asc)
+          .order(corrected_time: :asc)
           .each do |commit|
       sources_touched = file_changes_by_sha&.dig(commit.sha)&.then do |paths|
         paths.any? { |p| p.match?(TEST_SOURCE_PATTERN) }
@@ -251,8 +254,42 @@ class Commit < ApplicationRecord
 
     return 0 if edges.empty?
 
-    CommitRelation.insert_all(edges,
-                              unique_by: %i[child_id parent_id]).length
+    inserted = CommitRelation.insert_all(edges,
+                                         unique_by: %i[child_id parent_id]).length
+    correct_times_from(edges.map { |e| e[:child_id] }.uniq)
+    inserted
+  end
+
+  # Raise `corrected_time` on `child_ids`, and on their descendants,
+  # wherever a commit sits at or below one of its parents. This is the
+  # "corrected commit date" from Git's commit-graph: max(commit_time,
+  # latest parent + 1s). It matches commit_time while dates follow the
+  # history, and keeps a parent from ever ranking above its child when
+  # they don't — a rebase that keeps old committer dates, same-second
+  # commits in a stack, or old rows whose commit_time is still an author
+  # date. Branch views order by it (see Branch#ordered_commits).
+  #
+  # Each round moves one generation, so a normal push settles in one
+  # query that changes nothing. Runs from every edge insert, which also
+  # covers parents that arrive after their children (backfill pages
+  # newest first).
+  def self.correct_times_from(child_ids)
+    frontier = child_ids.map(&:to_i).uniq
+    until frontier.empty?
+      moved = connection.select_values(<<~SQL).map(&:to_i)
+        UPDATE commits c SET corrected_time = s.t
+          FROM (SELECT cr.child_id, MAX(p.corrected_time) + interval '1 second' AS t
+                  FROM commit_relations cr
+                  JOIN commits p ON p.id = cr.parent_id
+                 WHERE cr.child_id IN (#{frontier.join(',')})
+                 GROUP BY cr.child_id) s
+         WHERE c.id = s.child_id AND c.corrected_time < s.t
+        RETURNING c.id
+      SQL
+      break if moved.empty?
+
+      frontier = CommitRelation.where(parent_id: moved).distinct.pluck(:child_id)
+    end
   end
 
   ####################
@@ -340,6 +377,7 @@ class Commit < ApplicationRecord
       short_sha: github_hash[:sha][(0...7)],
       author: github_hash[:commit][:author][:name],
       author_email: github_hash[:commit][:author][:email],
+      author_time: github_hash[:commit][:author][:date],
       commit_time: github_hash[:commit][:committer][:date],
       message: message,
       github_url: github_hash[:html_url]
@@ -736,6 +774,17 @@ class Commit < ApplicationRecord
     update_columns(updates) if updates.any?
   end
 
+  # corrected_time never sits below commit_time. Commits made through
+  # ActiveRecord (create_or_update_from_github_hash, specs) start equal
+  # to it; edges raise it from there (Commit.correct_times_from). Only
+  # touches the column when it's missing or too low, so a save never
+  # writes back a stale in-memory value over a correction made in SQL.
+  def floor_corrected_time
+    return unless commit_time
+    return if corrected_time && corrected_time >= commit_time
+
+    self.corrected_time = commit_time
+  end
 
   # make this stuff searchable directly on the database without having
   # to summon all the test case commits. This should be called whenever

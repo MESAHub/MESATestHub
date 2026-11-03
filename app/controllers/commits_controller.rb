@@ -52,7 +52,7 @@ class CommitsController < ApplicationController
     end
     @total = @branches_of.size
     @commits = Commit.where(id: @branches_of.keys)
-                     .order(created_at: :desc, commit_time: :desc, id: :desc)
+                     .order(created_at: :desc, corrected_time: :desc, id: :desc)
                      .offset(@offset)
                      .limit(HOME_UNIFIED_PAGE)
                      .to_a
@@ -107,7 +107,7 @@ class CommitsController < ApplicationController
   def show
     @selected_branch = Branch.includes(:head).named(CGI.unescape(params[:branch]))
     if branch_mismatch?(@selected_branch, @commit)
-      target = @commit.preferred_branch
+      target = branch_mismatch_target(@commit)
       return render_404("Commit '#{@commit.short_sha}' is not on any branch") unless target
       flash[:warning] = branch_mismatch_message(
         requested_name: CGI.unescape(params[:branch]),
@@ -134,8 +134,16 @@ class CommitsController < ApplicationController
     @per_computer    = @commit.per_computer_summary
     @per_test        = @commit.per_test_summary
     @popover_data    = @commit.cell_popover_data
-    @neighbors       = @selected_branch.commit_neighbors(@commit)
-    @hero_window     = @selected_branch.focused_commit_window(@commit, size: 5)
+    load_rebased_from(@commit)
+    # A commit a force-push took off this branch has no place in its
+    # history any more, so no neighbors: the banner links its replacement.
+    if @rewritten_away
+      @neighbors   = { older: nil, newer: nil }
+      @hero_window = [@commit]
+    else
+      @neighbors   = @selected_branch.commit_neighbors(@commit)
+      @hero_window = @selected_branch.focused_commit_window(@commit, size: 5)
+    end
 
     @default_tab = @commit.default_detail_tab(state: @commit_state)
     requested = params[:tab].to_s.to_sym
@@ -190,10 +198,10 @@ class CommitsController < ApplicationController
                 redirect_to(commits_path(branch: 'main'), alert: "Branch <span class='text-monospace'>#{CGI.unescape(params[:branch])}</span> does not exist; showing commits on <span class='text-monospace'>main</span>.") and return
               end
 
-    # Cursor pagination by commit_time. Two URL params drive it:
+    # Cursor pagination by corrected_time. Two URL params drive it:
     #
-    #   ?before=X   page of newest 25 commits with commit_time < X.
-    #   ?after=Y    page of oldest 25 commits with commit_time > Y,
+    #   ?before=X   page of newest 25 commits with corrected_time < X.
+    #   ?after=Y    page of oldest 25 commits with corrected_time > Y,
     #               displayed newest-first — the "Newer" link, so
     #               paging back lands exactly on the adjacent page.
     #
@@ -210,8 +218,8 @@ class CommitsController < ApplicationController
     if params[:after].present?
       @after_time = parse_after_param(params[:after])
       rows = @branch.ordered_commits
-                    .where('commits.commit_time > ?', @after_time)
-                    .reorder('commits.commit_time ASC')
+                    .where('commits.corrected_time > ?', @after_time)
+                    .reorder('commits.corrected_time ASC')
                     .limit(@page_size + 1)
                     .to_a
       @has_more_newer = rows.size > @page_size
@@ -222,7 +230,7 @@ class CommitsController < ApplicationController
       @before_time_param = parse_before_param(params[:before])
       @before_explicit = params[:before].present?
       rows = @branch.ordered_commits
-                    .where('commits.commit_time < ?', @before_time_param)
+                    .where('commits.corrected_time < ?', @before_time_param)
                     .limit(@page_size + 1)
                     .to_a
       @has_more_older_via_main_fetch = rows.size > @page_size
@@ -236,14 +244,14 @@ class CommitsController < ApplicationController
     # the other we run a cheap EXISTS against the same recursive
     # CTE. On a multi-thousand-commit branch this stays sub-ms.
     if @commits.any?
-      newest_visible_time = @commits.first.commit_time
-      oldest_visible_time = @commits.last.commit_time
+      newest_visible_time = @commits.first.corrected_time
+      oldest_visible_time = @commits.last.corrected_time
       @has_more_older =
         if defined?(@has_more_older_via_main_fetch)
           @has_more_older_via_main_fetch
         else
           Commit.from("(#{@branch.reachable_commits_sql}) AS commits")
-                .where('commits.commit_time < ?', oldest_visible_time)
+                .where('commits.corrected_time < ?', oldest_visible_time)
                 .exists?
         end
       @has_more_newer ||=
@@ -251,7 +259,7 @@ class CommitsController < ApplicationController
           false
         else
           Commit.from("(#{@branch.reachable_commits_sql}) AS commits")
-                .where('commits.commit_time > ?', newest_visible_time)
+                .where('commits.corrected_time > ?', newest_visible_time)
                 .exists?
         end
     else
@@ -260,7 +268,7 @@ class CommitsController < ApplicationController
     end
 
     # Effective display cursor — what the headline + date chip read.
-    @before_time = @commits.first&.commit_time || @before_time_param || Time.zone.now
+    @before_time = @commits.first&.corrected_time || @before_time_param || Time.zone.now
 
     # What the "When" column and the age-group headers measure from.
     # A date picked in the calendar (bare `?before=YYYY-MM-DD`) anchors
@@ -272,11 +280,11 @@ class CommitsController < ApplicationController
 
     @older_href =
       if @has_more_older
-        commits_path(branch: @branch.name, before: (@commits.last.commit_time - 1.second).iso8601)
+        commits_path(branch: @branch.name, before: (@commits.last.corrected_time - 1.second).iso8601)
       end
     @newer_href =
       if @has_more_newer
-        commits_path(branch: @branch.name, after: @commits.first.commit_time.iso8601)
+        commits_path(branch: @branch.name, after: @commits.first.corrected_time.iso8601)
       end
 
     @max_num = @branch.reachable_commit_count

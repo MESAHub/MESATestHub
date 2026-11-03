@@ -134,7 +134,7 @@ Outcomes delivered:
 
 - Commit ordering on each branch matches what
   `github.com/MESAHub/mesa/commits/{branch}` shows, driven by a
-  recursive CTE over `commit_time`.
+  recursive CTE over `commit_time` (since Nov 2026, `corrected_time`; see `docs/sync-overhaul.md`).
 - Typical-push sync cost dropped from "100+ commits fetched and
   repositioned per branch + 3 content calls per new commit" to
   "one `api.compare` call per push, plus zero (copy-from-parent) or

@@ -394,6 +394,50 @@ RSpec.describe 'Page renders', type: :request do
     end
   end
 
+  describe 'commits a force-push rewrote' do
+    let(:feature) { create(:branch, name: 'feature') }
+    let(:old_commit) { create(:commit, message: 'add thing') }
+    let(:new_commit) { create(:commit, message: 'add thing') }
+
+    before do
+      TestCaseCommit.create!(test_case: test_case, commit: old_commit, status: 0, computer_count: 2)
+      old_commit.update!(passed_count: 1)
+      TestCaseCommit.create!(test_case: test_case, commit: new_commit)
+      BranchMembership.create!(branch: feature, commit: new_commit)
+      feature.update!(head: new_commit)
+      CommitRewrite.create!(branch: feature, old_commit: old_commit, new_commit: new_commit,
+                            rewritten_at: Time.zone.parse('2026-11-03'))
+    end
+
+    it 'renders a dropped commit on its old branch, linking its replacement' do
+      get "/feature/commits/#{old_commit.short_sha}"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('This commit is no longer on')
+      expect(response.body).to include("/feature/commits/#{new_commit.short_sha}")
+    end
+
+    it 'sends a dropped commit on no branch to the branch it left, not a 404' do
+      get "/main/commits/#{old_commit.short_sha}"
+
+      expect(response).to redirect_to("/feature/commits/#{old_commit.short_sha}")
+    end
+
+    it "shows the replacement's results from before the rebase" do
+      get "/feature/commits/#{new_commit.short_sha}"
+
+      expect(response.body).to include('Rebased from')
+      expect(response.body).to include('Before the rebase: 1 passing.')
+    end
+
+    it 'speaks about the one test on the test-on-commit page' do
+      get "/feature/commits/#{new_commit.short_sha}/test_cases/#{test_case.module}/#{test_case.name}"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('this test was passing on 2 computers')
+    end
+  end
+
   describe 'render_404 (modern layout)' do
     # Confirms the Tailwind/Hotwire layout boots cleanly during Phase 4.
     # test_case_commits#show falls into render_404 when the SHA misses,

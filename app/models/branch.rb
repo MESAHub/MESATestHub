@@ -17,19 +17,22 @@ class Branch < ApplicationRecord
   # Ordering comes from a recursive CTE walking commit_relations
   # back from this branch's head. UNION (not UNION ALL) dedupes,
   # short-circuiting once multiple merge paths converge on a shared
-  # ancestor. Results are then sorted by commit_time DESC, matching
-  # what github.com/.../commits/<branch> shows.
+  # ancestor. Results are then sorted by corrected_time DESC, matching
+  # what github.com/.../commits/<branch> shows. Not commit_time: a
+  # rebase can keep committer dates older than the commit it now sits
+  # on, and sorting by them put that base commit above the whole
+  # rebased stack (Commit.correct_times_from).
   #
   # branch_memberships is still around as a cache for the dual
   # question ("which branches contain commit X?"), but its `position`
   # column is no longer read — Step 5 drops it.
 
   # Relation of every commit reachable from this branch's head,
-  # ordered newest-first by commit_time. Supports normal Rails
+  # ordered newest-first by corrected_time. Supports normal Rails
   # chaining and Kaminari .page(n).per(n).
   def ordered_commits
     Commit.from("(#{reachable_commits_sql}) AS commits")
-          .order('commits.commit_time DESC')
+          .order('commits.corrected_time DESC')
   end
 
   # Count of commits reachable from this branch's head.
@@ -193,6 +196,105 @@ class Branch < ApplicationRecord
     absorb_commits(reachable_ids)
   end
 
+  # After a force-push (a rebase, an amend, a reset), take the commits
+  # that left this branch off it and remember where they went. Memberships
+  # only ever grew before this, so a rebased branch kept every pre-rebase
+  # SHA: they stayed in its home-page section, its "Also on" lists, and
+  # preferred_branch, though the commits index (which walks from the
+  # head) no longer showed them.
+  #
+  # `dropped_ids` are commits that were on the branch and no longer are.
+  # `candidate_ids` are commits that just joined it; each dropped commit
+  # is paired with one of them when CommitRewrite.pair finds a match.
+  # Run after the head has moved and the new commits are members.
+  # Returns the number of commits dropped.
+  def record_rewrite(dropped_ids:, candidate_ids:, before_sha: nil, after_sha: nil,
+                     at: Time.current)
+    dropped_ids = dropped_ids.map(&:to_i).uniq
+    return 0 if dropped_ids.empty?
+
+    old_commits = Commit.where(id: dropped_ids).to_a
+    new_commits = Commit.where(id: candidate_ids - dropped_ids).to_a
+    pairs = CommitRewrite.pair(old_commits, new_commits)
+
+    rows = old_commits.map do |c|
+      { branch_id: id, old_commit_id: c.id, new_commit_id: pairs[c.id],
+        before_sha: before_sha, after_sha: after_sha, rewritten_at: at,
+        created_at: at, updated_at: at }
+    end
+    Branch.transaction do
+      CommitRewrite.upsert_all(rows, unique_by: %i[branch_id old_commit_id])
+      branch_memberships.where(commit_id: dropped_ids).delete_all
+      touch # the home page's recently_pushed key reads branches.updated_at
+    end
+    dropped_ids.size
+  end
+
+  # Members reachable from `sha` (an old head) that this branch's head
+  # can't reach any more: what a force-push from `sha` dropped.
+  def commits_dropped_since(sha)
+    old_head_id = Commit.where(sha: sha).pick(:id)
+    return [] unless old_head_id && head_id
+
+    dropped = Branch.reachable_difference(old_head_id, head_id)
+    branch_memberships.where(commit_id: dropped).pluck(:commit_id)
+  end
+
+  # Commits the head reaches that `sha` (an old head) didn't: what a
+  # force-push from `sha` brought in, the replacements among them.
+  def commits_added_since(sha)
+    old_head_id = Commit.where(sha: sha).pick(:id)
+    return [] unless old_head_id && head_id
+
+    Branch.reachable_difference(head_id, old_head_id)
+  end
+
+  # Ids reachable from `from_id` but not from `not_from_id`. Walks the
+  # `from` side only as far as it stays outside the other side, so the
+  # cost is the size of the difference plus one walk of the other side.
+  def self.reachable_difference(from_id, not_from_id)
+    connection.select_values(<<~SQL).map(&:to_i)
+      WITH RECURSIVE other(id) AS (
+        SELECT #{not_from_id.to_i}::bigint
+        UNION
+        SELECT cr.parent_id FROM commit_relations cr JOIN other ON cr.child_id = other.id
+      ),
+      diff(id) AS (
+        SELECT #{from_id.to_i}::bigint
+         WHERE NOT EXISTS (SELECT 1 FROM other WHERE other.id = #{from_id.to_i})
+        UNION
+        SELECT cr.parent_id
+          FROM commit_relations cr
+          JOIN diff ON cr.child_id = diff.id
+         WHERE NOT EXISTS (SELECT 1 FROM other WHERE other.id = cr.parent_id)
+      )
+      SELECT id FROM diff
+    SQL
+  end
+
+  # Members that the head can't reach, for cleaning up rewrites from
+  # before force-pushes were handled (`rake branches:prune_rewritten`).
+  # Limited to commits ingested since `since`: old history has stale
+  # memberships from missing edges too (main has some from 2020–21),
+  # and those aren't rewrites.
+  def unreachable_member_ids(since:)
+    return [] unless head_id
+
+    ActiveRecord::Base.connection.select_values(<<~SQL).map(&:to_i)
+      WITH RECURSIVE kept(id) AS (
+        SELECT #{head_id.to_i}::bigint
+        UNION
+        SELECT cr.parent_id FROM commit_relations cr JOIN kept ON cr.child_id = kept.id
+      )
+      SELECT bm.commit_id
+        FROM branch_memberships bm
+        JOIN commits c ON c.id = bm.commit_id
+       WHERE bm.branch_id = #{id.to_i}
+         AND c.created_at >= #{ActiveRecord::Base.connection.quote(since)}
+         AND NOT EXISTS (SELECT 1 FROM kept WHERE kept.id = bm.commit_id)
+    SQL
+  end
+
   # use github api to create an array of hashes that contain data about all
   # known branches
   def self.api_branches(**params)
@@ -228,20 +330,20 @@ class Branch < ApplicationRecord
   end
 
   # Return up to `window` commits on either side of `commit` in this
-  # branch, plus `commit` itself, sorted newest-first by commit_time.
+  # branch, plus `commit` itself, sorted newest-first by corrected_time.
   # Up to 2*window + 1 commits total. Uses branch_memberships as the
   # "is this commit in the branch?" cache (still maintained by the
-  # sync flow); ordering is by commit_time so it agrees with
+  # sync flow); ordering is by corrected_time so it agrees with
   # ordered_commits.
   def nearby_commits(commit, window = 2)
     return [commit] unless branch_memberships.exists?(commit_id: commit.id)
 
-    older = commits.where('commit_time < ?', commit.commit_time)
-                   .order(commit_time: :desc)
+    older = commits.where('corrected_time < ?', commit.corrected_time)
+                   .order(corrected_time: :desc)
                    .limit(window)
                    .to_a
-    newer = commits.where('commit_time > ?', commit.commit_time)
-                   .order(commit_time: :asc)
+    newer = commits.where('corrected_time > ?', commit.corrected_time)
+                   .order(corrected_time: :asc)
                    .limit(window)
                    .to_a
 
@@ -257,15 +359,15 @@ class Branch < ApplicationRecord
     Branch.where('updated_at <= ?', weeks.weeks.ago).order(:name)
   end
 
-  # Adjacent commits on this branch by commit_time. Older = the most
-  # recent commit with `commit_time < commit.commit_time`. Newer = the
-  # least-recent commit with `commit_time > commit.commit_time`. Either
+  # Adjacent commits on this branch by corrected_time. Older = the most
+  # recent commit with `corrected_time < commit.corrected_time`. Newer = the
+  # least-recent commit with `corrected_time > commit.corrected_time`. Either
   # can be nil at the ends of the branch. Returns `{older:, newer:}`.
   def commit_neighbors(commit)
-    older = ordered_commits.where('commits.commit_time < ?', commit.commit_time)
+    older = ordered_commits.where('commits.corrected_time < ?', commit.corrected_time)
                            .first
-    newer = ordered_commits.where('commits.commit_time > ?', commit.commit_time)
-                           .reorder('commits.commit_time ASC')
+    newer = ordered_commits.where('commits.corrected_time > ?', commit.corrected_time)
+                           .reorder('commits.corrected_time ASC')
                            .first
     { older: older, newer: newer }
   end
@@ -282,7 +384,7 @@ class Branch < ApplicationRecord
   # disabled in the view.
   def last_clean_commit_before(commit, depth: 25)
     candidates = ordered_commits
-                   .where('commits.commit_time < ?', commit.commit_time)
+                   .where('commits.corrected_time < ?', commit.corrected_time)
                    .limit(depth)
                    .to_a
 
@@ -342,10 +444,10 @@ class Branch < ApplicationRecord
 
   # The home page's sections: every branch that received commits in
   # the last `within`, most recently pushed first, each paired with
-  # the commits that arrived in that window (newest commit_time first,
+  # the commits that arrived in that window (newest corrected_time first,
   # like the commits index). "Pushed" means first ingested here —
   # `commits.created_at`, stamped by the sync when the push lands —
-  # since `commit_time` is the author date and survives rebases.
+  # since a rebase can keep old commit dates.
   #
   # A branch's section leaves out commits that are also on the trunk:
   # a feature branch that merges main, or is cut from a freshly pushed
@@ -417,7 +519,7 @@ class Branch < ApplicationRecord
       SQL
     end
     rows = rows.pluck('branch_memberships.branch_id', 'branches.name', 'commits.id',
-                      'commits.commit_time', 'commits.created_at')
+                      'commits.corrected_time', 'commits.created_at')
 
     rows.group_by(&:first).map do |branch_id, branch_rows|
       ordered = branch_rows.sort_by { |_, _, id, time, _| [-time.to_f, id] }
@@ -430,12 +532,12 @@ class Branch < ApplicationRecord
     half = (size - 1) / 2
 
     newer = ordered_commits
-              .where('commits.commit_time > ?', focused_commit.commit_time)
-              .reorder('commits.commit_time ASC')
+              .where('commits.corrected_time > ?', focused_commit.corrected_time)
+              .reorder('commits.corrected_time ASC')
               .limit(half)
               .to_a
     older = ordered_commits
-              .where('commits.commit_time < ?', focused_commit.commit_time)
+              .where('commits.corrected_time < ?', focused_commit.corrected_time)
               .limit(half)
               .to_a
 
@@ -444,13 +546,13 @@ class Branch < ApplicationRecord
     deficit = (size - 1) - newer.size - older.size
     if deficit > 0 && newer.size < half
       older = ordered_commits
-                .where('commits.commit_time < ?', focused_commit.commit_time)
+                .where('commits.corrected_time < ?', focused_commit.corrected_time)
                 .limit(half + deficit)
                 .to_a
     elsif deficit > 0 && older.size < half
       newer = ordered_commits
-                .where('commits.commit_time > ?', focused_commit.commit_time)
-                .reorder('commits.commit_time ASC')
+                .where('commits.corrected_time > ?', focused_commit.corrected_time)
+                .reorder('commits.corrected_time ASC')
                 .limit(half + deficit)
                 .to_a
     end
@@ -481,8 +583,8 @@ class Branch < ApplicationRecord
   end
 
   # Return test_case_commits for the same test case on commits near
-  # `test_case_commit.commit` in this branch's commit_time ordering.
-  # Up to 2*window + 1 entries, sorted newest-first by commit_time.
+  # `test_case_commit.commit` in this branch's corrected_time ordering.
+  # Up to 2*window + 1 entries, sorted newest-first by corrected_time.
   # Searches up to 50 commits on either side for ones that have a
   # TestCaseCommit for this test case (test cases may not be present
   # on every commit, especially newly-added ones).
@@ -494,10 +596,10 @@ class Branch < ApplicationRecord
                                        .exists?(commit_id: commit.id)
 
     older_tccs = nearby_tccs_in_direction(
-      test_case, commit.commit_time, direction: :older, limit: window
+      test_case, commit.corrected_time, direction: :older, limit: window
     )
     newer_tccs = nearby_tccs_in_direction(
-      test_case, commit.commit_time, direction: :newer, limit: window
+      test_case, commit.corrected_time, direction: :newer, limit: window
     )
 
     newer_tccs + [test_case_commit] + older_tccs
@@ -516,8 +618,8 @@ class Branch < ApplicationRecord
                     when :newer then ['>', :asc]
                     end
 
-    commit_ids = commits.where("commit_time #{op} ?", anchor_time)
-                        .order(commit_time: order_dir)
+    commit_ids = commits.where("corrected_time #{op} ?", anchor_time)
+                        .order(corrected_time: order_dir)
                         .limit(50)
                         .pluck(:id)
     return [] if commit_ids.empty?
@@ -526,8 +628,8 @@ class Branch < ApplicationRecord
                           .includes(:commit)
                           .to_a
 
-    # Re-sort by the commit_time order we walked in, then take up to limit
-    sorted = found.sort_by { |tcc| tcc.commit.commit_time }
+    # Re-sort by the corrected_time order we walked in, then take up to limit
+    sorted = found.sort_by { |tcc| tcc.commit.corrected_time }
     sorted.reverse! if direction == :older
     sorted.first(limit)
   end

@@ -167,11 +167,42 @@ helper or partial exists.
   explicit `{ class: "…" }` hash. Same goes for empty tags — write
   `%span &nbsp;` or give the tag content; bare `%span` followed by
   sibling tags trips an "illegal nesting" error.
+- **Branch order is `corrected_time`, not `commit_time`.**
+  `commit_time` (the committer date) is for display. Anything that walks a
+  branch in order sorts by `commits.corrected_time`: `ordered_commits`,
+  neighbors, windows, the Diff baseline, test-case history, and index
+  cursors.
+  - **What it is:** Git's corrected commit date, max(commit_time, latest
+    parent + 1s). It's set by `Commit.correct_times_from` on every edge
+    insert. It equals commit_time while dates follow the history.
+  - **Why:** in Nov 2026 a rebase onto main's `e669d81` kept the stack's
+    older committer dates, and the index put `e669d81` above all 28
+    rebased commits. Same-second stacks also came out child-below-parent,
+    and some old rows still carry author dates.
+  - Time-window filters (dispatcher, morning digest, calendar
+    `?center_date`) and cross-branch lookups stay on commit_time.
+- **Force-pushes take commits off branches (`CommitRewrite`).**
+  `BranchSyncJob` treats `forced`, or a compare status of `diverged` or
+  `behind`, as a rewrite. It removes the dropped commits' memberships,
+  which before this only ever grew, so pre-rebase SHAs stayed in
+  home-page sections, "Also on" lists, and `preferred_branch`.
+  - Each dropped commit gets a `commit_rewrites` row, paired by author +
+    message (author date breaks ties) with its replacement when one
+    matches.
+  - A dropped commit still renders on its old branch with a "no longer on
+    this branch" banner and no neighbors, instead of 404ing. Its
+    replacement shows "Rebased from …" with the old SHA's results
+    (`shared/_rewrite_banners`).
+  - `db:cleanup_orphaned_commits` keeps commits that have a rewrite row.
+  - A compare truncated at 250 commits falls back to `BranchBackfillJob`.
+  - Rewrites from before this landed: `rake branches:prune_rewritten`
+    (dry run unless `APPLY=1`; skips main, whose unreachable members are
+    2020–21 history with missing edges).
 - **Cursor pagination on the commits index, two URL params.**
   `commits#index` accepts two mutually-exclusive cursors:
-  `?before=X` (show commits with `commit_time < X`, newest first —
+  `?before=X` (show commits with `corrected_time < X`, newest first —
   the "Older" link and every calendar pick) and `?after=Y` (show the
-  oldest page of commits with `commit_time > Y`, then reversed —
+  oldest page of commits with `corrected_time > Y`, then reversed —
   the "Newer" link, so paging back lands on exactly the adjacent
   page). Parsing helpers: `parse_before_param` (end-of-day default)
   and `parse_after_param` (beginning-of-day) in
@@ -190,7 +221,7 @@ helper or partial exists.
   pushed to recently**, newest push first (`?days=N`, default 10).
   `Branch.recently_pushed` decides membership: a commit counts as
   pushed when it was first ingested (`commits.created_at`), not by
-  `commit_time` (the author date, which survives rebases). Non-main
+  `commit_time` (a rebase can keep old commit dates). Non-main
   sections leave out commits that are also on main, so a branch that
   only merged main drops out, and `WorkDispatcher::EXCLUDED_BRANCHES`
   (`shields`) never shows. Headings render from one pluck.
@@ -211,7 +242,7 @@ helper or partial exists.
   marker by the SHA (`shared_commit_marker`) names the other sections
   that list the commit. A View toggle (`?view=unified`) swaps the
   sections for one list of the same commits, deduplicated, newest
-  *push* first (commit_time breaks ties within a push, so rebases
+  *push* first (corrected_time breaks ties within a push, so rebases
   surface as new work). The When column and age buckets read push
   time (`time_attr: :created_at`). Each row's chip names its branches,
   and the row links through the most recently pushed one. Pages of 25

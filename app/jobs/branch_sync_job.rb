@@ -72,7 +72,11 @@ class BranchSyncJob < ApplicationJob
 
     comparison = Commit.api.compare(Commit.repo_path, before, after)
     commits    = Array(comparison && comparison[:commits])
-    return if commits.empty?
+    # A force-push either diverges from the old head (rebase, amend) or
+    # moves the head back to an ancestor (reset), which compares with no
+    # commits at all but still drops some.
+    rewritten = payload[:forced] || %w[diverged behind].include?(comparison && comparison[:status].to_s)
+    return if commits.empty? && !rewritten
 
     sha_to_id = Commit.ingest_payload_commits(commits)
     Commit.ingest_payload_edges(commits, sha_to_id)
@@ -89,13 +93,48 @@ class BranchSyncJob < ApplicationJob
     Commit.populate_payload_test_cases(commits, sha_to_id,
                                        file_changes_by_sha: file_changes_by_sha)
 
-    if (head_id = sha_to_id[after])
+    # compare lists at most 250 commits, oldest first, so a long push
+    # (a rebase onto a lot of new main history, say) arrives without its
+    # newest commits, head included. Walk the branch from its tip on
+    # GitHub instead; the backfill stops once it reaches known history.
+    if comparison && comparison[:total_commits].to_i > commits.size
+      BranchBackfillJob.perform_now(branch.id)
+    end
+
+    if (head_id = sha_to_id[after] || Commit.where(sha: after).pick(:id))
       branch.update!(head_id: head_id)
     end
 
     branch.absorb_commits(sha_to_id.values)
 
     absorb_merge_ancestors(branch, commits)
+
+    record_rewrite(branch, before, after) if rewritten
+  end
+
+  # A real rewrite drops a branch's own stack: tens of commits. Many more
+  # means the new head's walk broke on a missing edge and the "dropped"
+  # walk ran into shared history, so the memberships are left alone.
+  MAX_REWRITE_DROP = 500
+
+  # Take what the force-push dropped off the branch, pairing each
+  # dropped commit with its rebased replacement where one matches.
+  def record_rewrite(branch, before, after)
+    branch.reload
+    dropped = branch.commits_dropped_since(before)
+    return if dropped.empty?
+
+    if dropped.size > MAX_REWRITE_DROP
+      Rails.logger.warn(
+        "BranchSyncJob: force-push to '#{branch.name}' would drop #{dropped.size} " \
+        "commits; skipping (check commit_relations for a missing edge)"
+      )
+      return
+    end
+
+    branch.record_rewrite(dropped_ids: dropped,
+                          candidate_ids: branch.commits_added_since(before),
+                          before_sha: before, after_sha: after)
   end
 
   # Convert the webhook payload's commits[] array into a

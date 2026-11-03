@@ -1,0 +1,46 @@
+-# Force-push banners for commits#show and test_case_commits#show.
+-# @rewritten_away: this commit was taken off @selected_branch (it
+-# renders here anyway, with no neighbors). @rebased_from: commits this
+-# one replaced, whose results are the only ones until it's tested.
+-# Pass test_case: on the test-on-commit page to talk about that test.
+- test_case = local_assigns[:test_case]
+- away = @rewritten_away
+- before = @rebased_from.present? ? rebase_predecessor(@rebased_from, test_case: test_case) : nil
+
+- if away
+  .rounded-md.p-3{ style: "background: var(--color-warning-soft); border: 1px solid var(--color-warning);" }
+    .flex.items-start.gap-3
+      %span.text-warning-soft-text.shrink-0= mesa_icon(:branch, size: 16)
+      .flex-1.min-w-0.text-warning-soft-text
+        %p.text-sm
+          This commit is no longer on
+          = succeed "." do
+            %span.font-mono.font-semibold= away.branch.name
+          - if away.new_commit
+            A force-push on #{rewrite_date(away)} replaced it with
+            = succeed "." do
+              = link_to away.new_commit.short_sha, rewrite_link_path(away.new_commit, away.branch, test_case: test_case),
+                class: "font-mono font-semibold underline"
+          - else
+            A force-push on #{rewrite_date(away)} took it off the branch.
+          %span.opacity-80.ml-1 Results here are from before that.
+
+- if before
+  - phrase = rewrite_results_phrase(before.old_commit, test_case: test_case)
+  .rounded-md.p-3{ style: "background: var(--color-info-soft); border: 1px solid var(--color-info);" }
+    .flex.items-start.gap-3
+      %span.text-info-soft-text.shrink-0= mesa_icon(:branch, size: 16)
+      .flex-1.min-w-0.text-info-soft-text
+        %p.text-sm
+          Rebased from
+          = link_to before.old_commit.short_sha, rewrite_link_path(before.old_commit, before.branch, test_case: test_case),
+            class: "font-mono font-semibold underline"
+          on #{rewrite_date(before)}.
+          - if phrase && test_case
+            Before the rebase, this test was #{phrase}.
+          - elsif phrase
+            Before the rebase: #{phrase}.
+          - else
+            It had no results.
+          - if phrase
+            %span.opacity-80.ml-1 A difference may come from the new base rather than this commit.
