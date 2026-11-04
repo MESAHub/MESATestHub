@@ -94,9 +94,14 @@
             %td.mesa-fg{ style: "color:#1f2328; font-size:13px; font-weight:600; letter-spacing:0.02em; text-transform:uppercase;" }
               Performance anomalies
             %td.mesa-fg-muted{ style: "color:#57606a; font-size:11px; text-align:right;" }
-              = @report.anomalies.size
+              = @report.anomalies.size + @report.machine_slowdowns.size
         %div.mesa-fg-muted{ style: "margin-top:4px; font-size:12px; color:#57606a;" }
-          Passing runs much slower or bigger than the last 50 passing runs of the same test on the same computer, set up the same way (inlists, FPE checks, resolution, threads). Each test name links to that history.
+          Passing runs much slower or bigger than the last 50 passing runs of the same test on the same computer, set up the same way (inlists, FPE checks, resolution, threads), on at least two commits in a row. A single slow run is left out. Each test name links to that history.
+
+        - @report.machine_slowdowns.each do |slow|
+          %div{ style: "margin-top:10px; padding:8px 10px; background:#f7f8fa; border:1px solid #e6e8ec; border-radius:6px; font-size:12px; color:#57606a;", class: "mesa-card-subtle mesa-fg-muted" }
+            %strong.mesa-fg{ style: "color:#1f2328;" }= slow.computer.name
+            ran #{pluralize(slow.test_count, 'test')} #{mailer_ratio_range(slow)} slower than usual. That's likely the machine (load, throttling), not the code, so those tests aren't listed one by one.
 
         %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "margin-top:10px;" }
           - @report.anomalies.first(15).each_with_index do |anomaly, i|
@@ -118,8 +123,7 @@
                       %strong.mesa-fg{ style: "color:#1f2328;" }= mailer_anomaly_value(anomaly, anomaly.value)
                       vs. usual #{mailer_anomaly_value(anomaly, anomaly.cohort_mean)}
                       %span{ style: "padding:0 4px; color:#8b949e;" } ·
-                      - if anomaly.occurrences.to_i > 1
-                        on #{anomaly.occurrences} commits, worst
+                      #{anomaly.occurrences} commits in a row, worst
                       %code{ style: "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;" }= ti.commit.short_sha
         - if @report.anomalies.size > 15
           %div.mesa-fg-subtle{ style: "margin-top:6px; font-size:11px; color:#8b949e;" }

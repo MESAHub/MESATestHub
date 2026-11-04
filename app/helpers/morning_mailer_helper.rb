@@ -162,6 +162,13 @@ module MorningMailerHelper
     runtime: 'runtime_minutes', rn_mem: 'mem_rn', re_mem: 'mem_re'
   }.freeze
 
+  # "×1.7" or "×1.6–2.4" for a MachineSlowdown.
+  def mailer_ratio_range(slow)
+    lo = format('%.1f', slow.min_ratio)
+    hi = format('%.1f', slow.max_ratio)
+    lo == hi ? "×#{lo}" : "×#{lo}–#{hi}"
+  end
+
   # Where an anomaly's test name links: the test's Trend tab on the
   # branch the digest links that commit through, centered on the
   # flagged commit, plotting the flagged metric, with the computer's

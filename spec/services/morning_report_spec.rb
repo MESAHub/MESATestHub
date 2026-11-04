@@ -245,21 +245,31 @@ RSpec.describe MorningReport, type: :model do
 
     # A stable cohort of passing runs from before the window (runtime in
     # minutes, memory in kB, with a little spread), then fresh results.
-    def seed_cohort(runtime:, mem_rn: 1_000_000, count: cohort_size, **attrs)
+    def seed_cohort(runtime:, mem_rn: 1_000_000, count: cohort_size, tc: test_case, **attrs)
       count.times do |i|
         commit = create(:commit, commit_time: as_of - (10 + i).days)
-        make_instance(commit: commit, computer: computer, test_case: test_case,
+        make_instance(commit: commit, computer: computer, test_case: tc,
                       created_at: as_of - (10 + i).days,
                       runtime_minutes: runtime + (i % 2) * 0.1 * runtime,
                       mem_rn: mem_rn, mem_re: mem_rn / 2, **attrs)
       end
     end
 
-    def add_candidate(runtime:, mem_rn: 1_000_000, **overrides)
-      commit = create(:commit, commit_time: as_of - 1.hour)
-      make_instance(commit: commit, computer: computer, test_case: test_case,
-                    created_at: as_of - 1.hour, runtime_minutes: runtime,
+    # One passing run on a fresh commit, in the window by default. Each
+    # call lands a minute after the last, so runs keep their order.
+    def add_candidate(runtime:, mem_rn: 1_000_000, at: nil, commit: nil, tc: test_case, **overrides)
+      @candidate_clock = (@candidate_clock || as_of - 3.hours) + 1.minute
+      at ||= @candidate_clock
+      commit ||= create(:commit, commit_time: at)
+      make_instance(commit: commit, computer: computer, test_case: tc,
+                    created_at: at, runtime_minutes: runtime,
                     mem_rn: mem_rn, mem_re: mem_rn / 2, **overrides)
+    end
+
+    # Two commits in a row out of range: the shape that gets reported.
+    def add_streak(runtime:, **overrides)
+      add_candidate(runtime: runtime, **overrides)
+      add_candidate(runtime: runtime, **overrides)
     end
 
     def flagged(candidate)
@@ -267,54 +277,119 @@ RSpec.describe MorningReport, type: :model do
                      .select { |a| a.test_instance.id == candidate.id }
     end
 
-    it 'flags a run far slower than its cohort' do
+    it 'flags runs far slower than their cohort on two commits in a row' do
       seed_cohort(runtime: 10)
-      candidate = add_candidate(runtime: 40)
+      candidate = add_streak(runtime: 40)
 
       hits = flagged(candidate)
       expect(hits.map(&:metric)).to eq([:runtime])
       expect(hits.first.cohort_size).to eq(cohort_size)
       expect(hits.first.ratio).to be > 3
+      expect(hits.first.occurrences).to eq(2)
     end
 
-    it 'does not flag a run within normal variance' do
+    it 'leaves out a lone slow run between normal ones' do
       seed_cohort(runtime: 10)
-      expect(flagged(add_candidate(runtime: 11))).to be_empty
+      add_candidate(runtime: 10)
+      spike = add_candidate(runtime: 40)
+      add_candidate(runtime: 10)
+      expect(flagged(spike)).to be_empty
+    end
+
+    it 'leaves out a slow commit that a normal rerun of the same commit clears' do
+      seed_cohort(runtime: 10)
+      first = add_candidate(runtime: 40)
+      add_candidate(runtime: 10, commit: first.commit)
+      expect(flagged(add_candidate(runtime: 40))).to be_empty
+    end
+
+    it 'counts the last run before the window toward the streak' do
+      seed_cohort(runtime: 10)
+      add_candidate(runtime: 40, at: as_of - 2.days)
+      candidate = add_candidate(runtime: 40)
+      expect(flagged(candidate).map(&:occurrences)).to eq([2])
+    end
+
+    it 'does not repeat a streak an earlier digest already reported' do
+      seed_cohort(runtime: 10)
+      add_candidate(runtime: 40, at: as_of - 3.days)
+      add_candidate(runtime: 40, at: as_of - 2.days)
+      expect(flagged(add_candidate(runtime: 40))).to be_empty
+    end
+
+    describe 'in branch order' do
+      # A commit on `branch`, `minutes` into the branch's history.
+      def branch_commit(branch, minutes)
+        commit = create(:commit, commit_time: as_of - 1.day + minutes.minutes)
+        commit.update_columns(corrected_time: commit.commit_time)
+        create(:branch_membership, branch: branch, commit: commit)
+        commit
+      end
+
+      let(:feature) { create(:branch, name: 'feature') }
+      let(:other) { create(:branch, name: 'other') }
+
+      it 'finds a streak tested out of order' do
+        seed_cohort(runtime: 10)
+        f1, f2, f3 = [1, 2, 3].map { |m| branch_commit(feature, m) }
+        add_candidate(runtime: 40, commit: f1)
+        add_candidate(runtime: 10, commit: f3)
+        later = add_candidate(runtime: 40, commit: f2)
+
+        expect(flagged(later).map(&:occurrences)).to eq([2])
+      end
+
+      it 'does not join slow commits on different branches tested back to back' do
+        seed_cohort(runtime: 10)
+        fa, fb = [1, 3].map { |m| branch_commit(feature, m) }
+        oa, ob = [2, 4].map { |m| branch_commit(other, m) }
+        add_candidate(runtime: 10, commit: fa, at: as_of - 2.days)
+        add_candidate(runtime: 10, commit: oa, at: as_of - 2.days + 1.minute)
+        add_candidate(runtime: 40, commit: fb)
+        add_candidate(runtime: 40, commit: ob)
+
+        expect(described_class.new(as_of: as_of).build.anomalies).to be_empty
+      end
+    end
+
+    it 'does not flag runs within normal variance' do
+      seed_cohort(runtime: 10)
+      expect(flagged(add_streak(runtime: 11))).to be_empty
     end
 
     it 'does not flag a big ratio on a tiny absolute change' do
       seed_cohort(runtime: 0.2)
-      expect(flagged(add_candidate(runtime: 0.8))).to be_empty
+      expect(flagged(add_streak(runtime: 0.8))).to be_empty
     end
 
     it 'does not flag when the cohort is below COHORT_MIN_SIZE' do
       seed_cohort(runtime: 10, count: described_class::COHORT_MIN_SIZE - 1)
-      expect(flagged(add_candidate(runtime: 999))).to be_empty
+      expect(flagged(add_streak(runtime: 999))).to be_empty
     end
 
     it 'keeps cohorts apart by inlist count, FPE checks and threads' do
       seed_cohort(runtime: 10, inlist_count: 1)
-      expect(flagged(add_candidate(runtime: 999, inlist_count: 3))).to be_empty
-      expect(flagged(add_candidate(runtime: 999, inlist_count: 1, fpe_checks: true))).to be_empty
-      expect(flagged(add_candidate(runtime: 999, inlist_count: 1, omp_num_threads: 64))).to be_empty
+      expect(flagged(add_streak(runtime: 999, inlist_count: 3))).to be_empty
+      expect(flagged(add_streak(runtime: 999, inlist_count: 1, fpe_checks: true))).to be_empty
+      expect(flagged(add_streak(runtime: 999, inlist_count: 1, omp_num_threads: 64))).to be_empty
     end
 
     it 'ignores run_optional when the inlist count matches' do
       # Single-inlist tests arrive with the flag both ways.
       seed_cohort(runtime: 10, inlist_count: 1, run_optional: false)
-      candidate = add_candidate(runtime: 40, inlist_count: 1, run_optional: true)
+      candidate = add_streak(runtime: 40, inlist_count: 1, run_optional: true)
       expect(flagged(candidate).map(&:metric)).to eq([:runtime])
     end
 
     it 'falls back to run_optional for rows without an inlist count' do
       seed_cohort(runtime: 10, inlist_count: nil, run_optional: false)
-      expect(flagged(add_candidate(runtime: 999, inlist_count: nil, run_optional: true))).to be_empty
-      expect(flagged(add_candidate(runtime: 999, inlist_count: nil, run_optional: false))).not_to be_empty
+      expect(flagged(add_streak(runtime: 999, inlist_count: nil, run_optional: true))).to be_empty
+      expect(flagged(add_streak(runtime: 999, inlist_count: nil, run_optional: false))).not_to be_empty
     end
 
     it "links through the branch the digest uses for the commit" do
       seed_cohort(runtime: 10)
-      candidate = add_candidate(runtime: 40)
+      candidate = add_streak(runtime: 40)
       create(:branch_membership, branch: main_branch, commit: candidate.commit)
 
       expect(flagged(candidate).first.link_branch_name).to eq('main')
@@ -322,19 +397,42 @@ RSpec.describe MorningReport, type: :model do
 
     it 'flags a memory blowup as :rn_mem' do
       seed_cohort(runtime: 10, mem_rn: 1_000_000)
-      candidate = add_candidate(runtime: 10, mem_rn: 5_000_000)
+      candidate = add_streak(runtime: 10, mem_rn: 5_000_000)
       expect(flagged(candidate).map(&:metric)).to include(:rn_mem)
     end
 
-    it 'reports the same slowdown on several commits once, with a count' do
+    it 'reports a streak once, at its worst commit, with its length' do
       seed_cohort(runtime: 10)
       add_candidate(runtime: 40)
       add_candidate(runtime: 50)
+      add_candidate(runtime: 45)
 
       anomalies = described_class.new(as_of: as_of).build.anomalies
       expect(anomalies.size).to eq(1)
-      expect(anomalies.first.occurrences).to eq(2)
+      expect(anomalies.first.occurrences).to eq(3)
       expect(anomalies.first.value).to eq(50)
+    end
+
+    it 'folds one computer running slow on many tests into a machine slowdown' do
+      tests = Array.new(described_class::MACHINE_SLOWDOWN_MIN_TESTS) { create(:test_case) }
+      tests.each do |tc|
+        seed_cohort(runtime: 10, mem_rn: 1_000_000, tc: tc)
+        add_streak(runtime: 20, mem_rn: 5_000_000, tc: tc)
+      end
+
+      report = described_class.new(as_of: as_of).build
+      expect(report.machine_slowdowns.map { |m| [m.computer, m.test_count] })
+        .to eq([[computer, tests.size]])
+      # Memory doesn't depend on load, so those findings stay.
+      expect(report.anomalies.map(&:metric).uniq).to contain_exactly(:rn_mem, :re_mem)
+    end
+
+    it 'keeps runtime findings when only a few tests on a computer ran slow' do
+      seed_cohort(runtime: 10)
+      add_streak(runtime: 40)
+      report = described_class.new(as_of: as_of).build
+      expect(report.machine_slowdowns).to be_empty
+      expect(report.anomalies.map(&:metric)).to eq([:runtime])
     end
   end
 end

@@ -123,9 +123,46 @@ One windowed SQL query fetches every cohort. Flagged when **all** of:
   memory. Memory is nearly deterministic, so its stddev is tiny and z
   alone would flag any change.
 
-Cohorts smaller than `COHORT_MIN_SIZE = 8` are skipped. The same
-(test, computer, metric) flagged on several commits is one entry,
-the worst, with a count.
+Cohorts smaller than `COHORT_MIN_SIZE = 8` are skipped.
+
+**Two commits in a row, in branch order.** A run that clears those
+thresholds is reported only when a neighboring commit on its branch,
+tested by the same computer in the same comparison group, does too
+(`flag_streaks`).
+- **Branch:** the one the digest links the commit through.
+- **Sequence:** the comparison group's commits that are members of that
+  branch, sorted by `corrected_time` (`MorningReport::CommitOrder`). A
+  branch's memberships cover its whole history, main's ancestors
+  included, so a feature branch's first commit sits right after the main
+  commit it forked from.
+- **Commits on no branch** fall back to every commit in the group.
+
+Submit time is the wrong order. A computer that alternates between two
+branches, or backfills old commits, puts unrelated commits next to each
+other, and a regression is about the commit before it in history.
+
+Each commit counts once, at its lowest value, so a normal rerun of the
+same commit clears it. Most single flags were one-offs. For example,
+BOSE's `make_zams` rn RAM jumps from 1.6 to 2.6 GB on one commit, then
+drops back on the next. On the Oct 25 – Nov 4, 2026 data, this rule cut
+93 findings to 31.
+
+**Reported once per streak.** A streak needs a commit first tested in the
+window. It's skipped when two of its commits were already adjacent among
+the commits tested before the window, because an earlier digest reported
+it then. A lone spike from before the window is reported once a commit
+next to it on the branch confirms it, whenever that commit was tested.
+Each entry shows how many commits in a row it held for, and the worst
+commit.
+
+**Machine slowdowns.** When one computer has runtime streaks on
+`MACHINE_SLOWDOWN_MIN_TESTS = 5` or more tests in one digest, the machine
+was busy or throttled. Those runtime findings fold into one line,
+`MorningReport#machine_slowdowns`: "Yale_Bouchet ran 15 tests ×1.5–1.8
+slower than usual". Memory findings from that computer stay listed,
+because load doesn't change memory. (Nov 4, 2026: Yale_Bouchet backfilled
+week-old commits 1.5–1.8× slow on 15 tests; the section went from 39
+lines to 5 plus that one.)
 
 Metrics: `runtime_minutes`, `mem_rn`, `mem_re` (kB). The detector
 used to read `runtime_seconds` / `re_time` / `total_runtime_seconds`,
@@ -256,7 +293,7 @@ that mirrors the Railway cron service's variables.)
 - **Before today's send** (8 AM Eastern), the preview is built live
   with the window ending now and is not cached, so looking at it early
   can't freeze what the email sends.
-- **After the send**: cached under `morning_report:v2:<date>` for 24
+- **After the send**: cached under `morning_report:v<CACHE_VERSION>:<date>` for 24
   hours, so the email and the preview agree. The cached report holds
   the states *at build time*; later results on those commits don't
   change it. `?refresh=1` (or `MorningReport.for(date:, force: true)`)
