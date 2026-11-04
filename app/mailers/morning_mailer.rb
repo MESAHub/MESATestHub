@@ -25,7 +25,9 @@ class MorningMailer < ApplicationMailer
     'p7r3d3c7y5u1u9e8@mesadevelopers.slack.com'
   ].freeze
 
-  def daily(date: Date.current, recipients: RECIPIENTS)
+  # `date` is the Eastern date of the send; the report covers the 24
+  # hours up to 8:00 AM that morning (see MorningReport).
+  def daily(date: MorningReport.current_date, recipients: RECIPIENTS)
     @report = MorningReport.for(date: date)
     @date = date
 

@@ -1,6 +1,13 @@
 require 'rails_helper'
 
 RSpec.describe MorningMailer, type: :mailer do
+  include ActiveSupport::Testing::TimeHelpers
+
+  # Before the 8 AM Eastern send, so the report is built live with the
+  # window ending now (after it, the window ends at 8 AM and a result
+  # created "now" would fall outside it).
+  around { |ex| travel_to(Time.utc(2026, 5, 25, 11)) { ex.run } }
+
   describe '#daily' do
     it 'renders an empty-state email when no commits were tested' do
       mail = described_class.daily
@@ -27,7 +34,7 @@ RSpec.describe MorningMailer, type: :mailer do
         Rails.cache.clear
       end
 
-      it 'renders the commit headline + branch section' do
+      it 'renders the commit headline, branch section, and status pill' do
         body = described_class.daily.body.encoded
         # Collapse the HAML-inserted whitespace runs so we can match on
         # logical text strings instead of HTML formatting.
@@ -37,6 +44,8 @@ RSpec.describe MorningMailer, type: :mailer do
         expect(flat).to include(commit.author)
         expect(flat).to include('Add helium burning improvements')
         expect(flat).to include('main')
+        expect(flat).to include('All passing')
+        expect(flat).to include('Computers reporting')
       end
     end
   end

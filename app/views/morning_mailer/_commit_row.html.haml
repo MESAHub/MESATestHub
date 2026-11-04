@@ -1,0 +1,42 @@
+-# One commit in a digest section: message (linked), meta line, build +
+-# tests badges, and its problem tests. Locals: cs (CommitSummary),
+-# first (no divider above), section (its Section).
+- mono = "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;"
+%tr
+  %td{ style: "padding:0 24px;" }
+    - unless first
+      %div.mesa-divider{ style: "border-top:1px solid #eceef2; margin:0;" }
+    %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0" }
+      %tr
+        %td.mesa-stack-on-mobile{ valign: "top", style: "padding:12px 10px 12px 0; overflow-wrap:anywhere; word-break:break-word;" }
+          %div
+            = mailer_link_or_text(mailer_message_excerpt(cs.commit), mailer_commit_url(cs), style: "color:#1f2328; text-decoration:none; font-size:14px; font-weight:500;")
+          %div.mesa-fg-muted{ style: "margin-top:4px; font-size:12px; color:#57606a;" }
+            = mailer_sha_pill(cs.commit)
+            %span{ style: "padding:0 4px; color:#8b949e;" } ·
+            = cs.commit.author
+            - coverage = mailer_coverage_text(cs)
+            - if coverage.present?
+              %span{ style: "padding:0 4px; color:#8b949e;" } ·
+              = coverage
+          - if section.kind == :family
+            %div.mesa-fg-subtle{ style: "margin-top:3px; font-size:11px; color:#8b949e; overflow-wrap:anywhere; #{mono}" }
+              = cs.link_branch_name
+              - if cs.branch_names.size > 1
+                +#{cs.branch_names.size - 1} more
+        %td.mesa-stack-on-mobile.mesa-badges-cell{ valign: "top", align: "right", style: "padding:12px 0; white-space:nowrap;" }
+          - if cs.build_failed?
+            %div{ style: "margin-bottom:4px;" }= mailer_build_badge(cs)
+          - unless cs.tests_status == :not_run && cs.build_failed?
+            = mailer_tests_pill(cs)
+
+    - if cs.problem_tccs.any?
+      %div{ style: "margin:0 0 12px 0; overflow-wrap:anywhere; background:#fafbfc; border:1px solid #e6e8ec; border-radius:6px; padding:6px 10px;" }
+        - cs.problem_tccs.first(8).each do |tcc|
+          %div{ style: "padding:2px 0; font-size:12px;" }
+            = mailer_tcc_badge(cs.label_for(tcc))
+            %span{ style: "padding-left:6px;" }
+              = mailer_link_or_text(tcc.test_case.name, mailer_test_case_commit_url(cs, tcc), style: "color:#1f2328; text-decoration:none; #{mono} font-size:12px;")
+        - if cs.problem_tccs.size > 8
+          %div.mesa-fg-muted{ style: "padding-top:2px; font-size:11px; color:#8b949e;" }
+            (+ #{cs.problem_tccs.size - 8} more)

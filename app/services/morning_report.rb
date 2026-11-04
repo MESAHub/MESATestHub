@@ -1,57 +1,97 @@
 # Builds the data structure for the daily MESA Test Hub digest email.
-# Both MorningMailer and MorningMailerController consume one of these.
+# Both MorningMailer and MorningReportController consume one of these.
 #
-# A report covers a 24-hour test window ending at `as_of` (defaults to now).
-# It groups commits-tested-during-the-window by branch (main first), captures
-# their pass/fail/mixed/checksum scalars, and flags individual passing test
-# instances whose runtime or RAM is anomalously high compared to the cohort
-# of recent passing runs on the same (test_case, computer, run_optional,
-# fpe_checks) combination.
+# A report covers the 24 hours ending at `as_of`. For a dated report
+# that's the digest's send time, 8:00 AM US Eastern, so consecutive
+# digests tile time with no gap. (Until Nov 2026 the window was midnight
+# to midnight UTC on the send date; the 8 AM send only saw its first
+# 12-13 hours, and the US working day after each send was never
+# reported.)
 #
-# Build the report through `MorningReport.for(date:)` — the result is cached
-# in `Rails.cache` for 24 hours so the web preview and the actual email
-# render the same numbers without re-computing the expensive aggregations.
+# A commit is in the report when anything about it arrived in the
+# window: a submission (a build report or a test result) or a claim. A
+# build that failed everywhere has no test instances, so keying on
+# instances alone missed exactly the commits that most need a look.
+#
+# Each commit appears once. Sections follow the home page: main first,
+# then commits that sit on several non-main branches (stacked or
+# rebased work) grouped by that branch set, then one section per
+# branch. A commit on main never repeats in another branch's section,
+# so a branch that merged main doesn't drag main's commits along.
+#
+# Statuses come from CommitState through CommitStateCache, the same
+# source as the home page's pills and rings, so the email says what the
+# site says.
+#
+# Build the report through `MorningReport.for(date:)`. A finished day's
+# report is cached so the email and the web preview agree; a day whose
+# send time hasn't come yet is built live with the window ending now.
 class MorningReport
   WINDOW = 24.hours
+  ZONE = 'America/New_York'.freeze
+  SEND_HOUR = 8
+  CACHE_VERSION = 2
 
   # Cohort math knobs. The cohort is the previous `COHORT_LIMIT` passing
-  # instances on the same (test_case, computer, run_optional, fpe_checks)
-  # — anything older or in a different cohort is irrelevant.
+  # instances with the same cohort key (see #cohort_key) from before the
+  # window — anything older or in a different cohort is irrelevant.
   COHORT_LIMIT = 50
+  COHORT_LOOKBACK = 180.days
   COHORT_MIN_SIZE = 8        # need at least this many samples for stats
   ANOMALY_Z_THRESHOLD = 3.0  # require >= 3 sigma above cohort mean
   ANOMALY_RATIO_FLOOR = 1.25 # AND >= 25% above cohort mean (protects
                              # against tiny-stddev cohorts where 3σ is
                              # still a meaningless absolute jump)
+  # AND an absolute jump big enough to matter. Memory is nearly
+  # deterministic, so its stddev is tiny and z alone flags any change.
+  ANOMALY_MIN_DELTA = {
+    runtime: 1.0,        # minutes
+    rn_mem: 256 * 1024,  # kB (256 MB)
+    re_mem: 256 * 1024
+  }.freeze
 
-  attr_reader :date, :window_start, :window_end, :branch_sections,
-              :anomalies, :countdown_days, :release_blocker_count
+  attr_reader :date, :window_start, :window_end, :sections, :anomalies,
+              :computers_reporting, :release_blocker_count
 
-  def self.for(date: Date.current, force: false)
-    cache_key = "morning_report:#{date.iso8601}"
+  # The date whose digest goes out (or went out) this morning, Eastern.
+  def self.current_date
+    Time.current.in_time_zone(ZONE).to_date
+  end
+
+  # When the digest for `date` is sent: 8:00 AM US Eastern.
+  def self.send_time(date)
+    ActiveSupport::TimeZone[ZONE].local(date.year, date.month, date.day, SEND_HOUR)
+  end
+
+  def self.for(date: current_date, force: false)
+    as_of = send_time(date)
+    # Not sent yet: a live preview of what would go out, never cached.
+    return new(as_of: Time.current).build if as_of > Time.current
+
+    cache_key = "morning_report:v#{CACHE_VERSION}:#{date.iso8601}"
     Rails.cache.delete(cache_key) if force
     Rails.cache.fetch(cache_key, expires_in: 24.hours) do
-      new(as_of: date.end_of_day).tap(&:build)
+      new(as_of: as_of).build
     end
   end
 
   def initialize(as_of: Time.current)
     @window_end = as_of
     @window_start = as_of - WINDOW
-    @date = as_of.to_date
-    @branch_sections = []
+    @date = as_of.in_time_zone(ZONE).to_date
+    @sections = []
     @anomalies = []
+    @computers_reporting = 0
   end
 
   def build
     load_commits
     load_anomalies
-    load_meta
+    @release_blocker_count = fetch_release_blocker_count
     self
   end
 
-  # All commits in the window, regardless of branch. Useful for callers
-  # that want a flat list (e.g. anomaly cohort lookups).
+  # Every commit in the window, once each.
   def commits_tested
     @commits_tested ||= []
   end
@@ -60,8 +100,17 @@ class MorningReport
     commits_tested.any?
   end
 
+  def summaries
+    sections.flat_map(&:commit_summaries)
+  end
+
+  # Commits with failing tests or a failed build, worst first, each once.
+  def attention_summaries
+    summaries.select(&:needs_attention?).sort_by(&:severity_rank)
+  end
+
   def any_failing?
-    branch_sections.any? { |section| section.failing? }
+    summaries.any?(&:needs_attention?)
   end
 
   def any_anomalies?
@@ -70,212 +119,236 @@ class MorningReport
 
   # ===== Inner data classes =====
 
-  # Stand-in for a real Branch on synthetic BranchSections. Must be a
-  # *named* constant so Marshal-based caching can serialize it
-  # (Rails.cache.write → Marshal.dump refuses anonymous classes).
-  SyntheticBranch = Struct.new(:name)
-
-  # One branch's worth of commits-tested-in-window, in commit_time DESC.
-  # `synthetic` is true for the catch-all "Unattached commits" group
-  # built from commits that have no branch memberships — typically PR
-  # test-merge commits or commits whose membership row hasn't synced yet.
-  BranchSection = Struct.new(:branch, :commit_summaries, :synthetic,
-                             keyword_init: true) do
-    def failing?
-      commit_summaries.any?(&:failing?)
+  # One group of commits. `kind` is :main, :family (several branches
+  # that share commits, e.g. a stack), :branch, or :unattached (no
+  # branch at all: PR test-merge commits, or a push whose membership
+  # hasn't synced).
+  Section = Struct.new(:kind, :branch_names, :commit_summaries,
+                       keyword_init: true) do
+    def title
+      case kind
+      when :family then "#{branch_names.size} related branches"
+      when :unattached then 'Unattached commits'
+      else branch_names.first
+      end
     end
 
     def commit_count
       commit_summaries.size
     end
 
-    # Branch name to use when building per-commit URLs. Synthetic
-    # sections don't have a real branch route, so fall back to main —
-    # the commit detail page accepts any branch name and uses it
-    # only as nav context.
-    def link_branch_name
-      synthetic ? "main" : branch.name
+    def attention_count
+      commit_summaries.count(&:needs_attention?)
+    end
+
+    def current_summaries
+      commit_summaries.reject(&:rewritten)
+    end
+
+    def rewritten_summaries
+      commit_summaries.select(&:rewritten)
     end
   end
 
-  # Per-commit roll-up.
-  #
-  # `status` mirrors `Commit#status` (the test rollup):
-  #   -1 = untested / rollup not finalized (CI run in progress)
-  #    0 = passing, 1 = failing, 2 = checksums, 3 = mixed
-  #
-  # `build_status` mirrors `Commit#compilation_status` (compile rollup):
-  #   -1 = no compile status reported
-  #    0 = compiles everywhere, 1 = fails everywhere, 2 = mixed
-  #
-  # `computer_count` is the count of distinct (computer × spec)
-  # submissions on this commit.  `complete_computer_count` is how
-  # many of those actually ran all test cases.  Drive-by submitters
-  # that ran 1/106 tests still bump `computer_count` but not
-  # `complete_computer_count`, so the digest reports both.
+  # Per-commit roll-up. `state` is CommitState#commit_state. The problem
+  # test lists come from the commit's TCCs, worst-first, with FPE-only
+  # failures split out of failing/mixed. `link_branch_name` is the
+  # branch its URLs go through (nil when it's on no branch, since such
+  # a commit has no page). `rewritten` marks a commit a force-push
+  # dropped; `replacement` is the commit that took its place, if known.
   CommitSummary = Struct.new(
-    :commit, :status, :build_status, :tested_count,
-    :computer_count, :complete_computer_count,
-    :failing_tccs, :checksum_tccs, :mixed_tccs, :fpe_tccs, :passing_count,
+    :commit, :state, :branch_names, :link_branch_name,
+    :rewritten, :replacement,
+    :failing_tccs, :mixed_tccs, :fpe_tccs, :checksum_tccs,
+    :failed_build_computers,
     keyword_init: true
   ) do
-    def status_label
-      case status
-      when 0 then :passing
-      when 1 then :failing
-      when 2 then :checksums
-      when 3 then :mixed
-      else :untested
-      end
+    def tests_status
+      state[:tests][:status]
     end
 
-    def build_label
-      case build_status
-      when 0 then :build_ok
-      when 1 then :build_fail
-      when 2 then :build_mixed
-      else :build_none
-      end
+    def build_status
+      state[:build][:status]
     end
 
-    def failing?
-      status_label == :failing || status_label == :mixed ||
-        build_label == :build_fail || build_label == :build_mixed
+    def tests
+      state[:tests]
     end
 
-    # Worst-first, matching the commit page: failing, mixed, FPE-only
-    # failures, then checksum mismatches.
+    def build_failed?
+      %i[some_fail all_fail].include?(build_status)
+    end
+
+    # A commit a force-push dropped is superseded work: listed, but not
+    # something to fix.
+    def needs_attention?
+      return false if rewritten
+
+      %i[fail mixed fpe].include?(tests_status) || build_failed?
+    end
+
+    # For ordering the attention list: failed builds and uniform
+    # failures first, then mixed, then FPE.
+    def severity_rank
+      return 0 if build_status == :all_fail
+      { fail: 1, mixed: 3, fpe: 4 }.fetch(tests_status, build_failed? ? 2 : 5)
+    end
+
+    def computer_count
+      (state[:build][:built_computer_ids] | state[:build][:failed_build_computer_ids]).size
+    end
+
     def problem_tccs
-      failing_tccs + mixed_tccs + (fpe_tccs || []) + checksum_tccs
+      failing_tccs + mixed_tccs + fpe_tccs + checksum_tccs
     end
 
     # Badge key for one of `problem_tccs`.
     def label_for(tcc)
-      return :fpe if (fpe_tccs || []).include?(tcc)
-      { 1 => :failing, 2 => :checksums, 3 => :mixed }.fetch(tcc.status, :failing)
+      return :fpe if fpe_tccs.include?(tcc)
+      return :checksums if checksum_tccs.include?(tcc)
+      mixed_tccs.include?(tcc) ? :mixed : :failing
     end
   end
 
-  # One flagged metric on one test instance.  `metric` is one of
-  # :total_runtime, :rn_runtime, :re_runtime, :rn_mem, :re_mem.
+  # One flagged metric on one test instance. `metric` is :runtime,
+  # :rn_mem, or :re_mem. Runtime is stored in minutes, memory in kB.
   Anomaly = Struct.new(
     :test_instance, :metric, :value, :cohort_mean, :cohort_stddev,
-    :cohort_size, :z_score, :ratio,
+    :cohort_size, :z_score, :ratio, :occurrences,
     keyword_init: true
   ) do
     METRIC_LABEL = {
-      total_runtime: 'Total runtime',
-      rn_runtime: 'rn runtime',
-      re_runtime: 're runtime',
+      runtime: 'Runtime',
       rn_mem: 'rn RAM',
       re_mem: 're RAM'
     }.freeze
 
-    METRIC_UNIT = {
-      total_runtime: 's',
-      rn_runtime: 's',
-      re_runtime: 's',
-      rn_mem: 'GB',
-      re_mem: 'GB'
-    }.freeze
-
     def memory?
-      metric == :rn_mem || metric == :re_mem
+      metric != :runtime
     end
 
     def label
       METRIC_LABEL[metric]
     end
-
-    def unit
-      METRIC_UNIT[metric]
-    end
-
-    # Memory metrics live in kB on the DB; display as GB.
-    def display_value
-      memory? ? value.to_f / (1024.0 * 1024.0) : value.to_f
-    end
-
-    def display_mean
-      memory? ? cohort_mean / (1024.0 * 1024.0) : cohort_mean
-    end
   end
 
   private
 
+  def window
+    window_start..window_end
+  end
+
   def load_commits
-    instances_in_window = TestInstance
-      .where(created_at: window_start..window_end)
-      .where.not(commit_id: nil)
-    commit_ids = instances_in_window.pluck(:commit_id).uniq
-    return if commit_ids.empty?
+    submitted = Submission.where(created_at: window)
+    activity = submitted.group(:commit_id).maximum(:created_at)
+    Claim.where(created_at: window).group(:commit_id).maximum(:created_at)
+         .each { |id, at| activity[id] = [activity[id], at].compact.max }
+    activity.delete(nil)
+    return if activity.empty?
 
-    commits = Commit
-      .where(id: commit_ids)
-      .includes(test_case_commits: :test_case,
-                branch_memberships: :branch)
-      .order(commit_time: :desc)
-    @commits_tested = commits.to_a
+    @computers_reporting = submitted.distinct.count(:computer_id)
 
-    # Group commits by branch — a commit may belong to multiple.
-    # Commits with no branch memberships (PR test-merge commits and
-    # in-flight pushes whose membership row hasn't synced) collect
-    # into an "unattached" bucket that renders as a synthetic
-    # section after the real branches.
-    branch_to_commits = Hash.new { |h, k| h[k] = [] }
-    unattached_commits = []
-    commits.each do |commit|
-      memberships = commit.branch_memberships
-      if memberships.empty?
-        unattached_commits << commit
-      else
-        memberships.each { |bm| branch_to_commits[bm.branch] << commit }
+    commits = Commit.where(id: activity.keys)
+                    .includes(test_case_commits: :test_case,
+                              branch_memberships: { branch: :head })
+                    .order(corrected_time: :desc, id: :desc).to_a
+    @commits_tested = commits
+    states = CommitStateCache.fetch(commits)
+    computer_names = Computer.where(
+      id: states.values.flat_map { |s| s[:build][:failed_build_computer_ids] }
+    ).pluck(:id, :name).to_h
+
+    # A commit a force-push dropped has no memberships left, but its
+    # page still renders on the branch it was dropped from (with a "no
+    # longer on this branch" banner), so it files under that branch.
+    rewrites = CommitRewrite.where(old_commit_id: commits.map(&:id))
+                            .includes(:new_commit, branch: :head)
+                            .group_by(&:old_commit_id)
+
+    placed = commits.map do |commit|
+      branches = commit.branch_memberships.map(&:branch).compact
+      rewrite = nil
+      if branches.empty? && (rewrite = rewrites[commit.id]&.max_by(&:rewritten_at))
+        branches = rewrites[commit.id].map(&:branch).uniq
       end
+      [commit, branches, rewrite]
     end
 
-    ordered_branches = branch_to_commits.keys
-    main = Branch.main
-    if main && (i = ordered_branches.index { |b| b.id == main.id })
-      ordered_branches.unshift(ordered_branches.delete_at(i))
-    end
-
-    @branch_sections = ordered_branches.map do |branch|
-      BranchSection.new(
-        branch: branch,
-        commit_summaries: branch_to_commits[branch].map { |c| build_summary(c) },
-        synthetic: false
-      )
-    end
-
-    if unattached_commits.any?
-      @branch_sections << BranchSection.new(
-        branch: SyntheticBranch.new("Unattached commits"),
-        commit_summaries: unattached_commits.map { |c| build_summary(c) },
-        synthetic: true
+    @sections = group_into_sections(placed, activity).map do |kind, names, rows|
+      Section.new(
+        kind: kind, branch_names: names,
+        commit_summaries: rows.map do |commit, branches, rewrite|
+          build_summary(commit, states[commit.id], branches: branches,
+                        rewrite: rewrite, computer_names: computer_names)
+        end
       )
     end
   end
 
-  def build_summary(commit)
+  # [[kind, branch_names, rows]] in display order. Main's commits come
+  # first. The rest are split into families: branches joined by any
+  # commit they share, so a stack of branches (each one built on the
+  # last) reads as one section with each commit once, rather than one
+  # section per branch repeating the commits underneath it. A family
+  # of one branch is plain :branch. Commits on no branch go last.
+  def group_into_sections(placed, activity)
+    main_rows, rest = placed.partition { |_, bs, _| bs.any? { |b| b.name == 'main' } }
+    unattached, branched = rest.partition { |_, bs, _| bs.empty? }
+
+    # Union-find over branch names.
+    parent = {}
+    find = lambda do |x|
+      parent[x] ||= x
+      parent[x] == x ? x : (parent[x] = find.call(parent[x]))
+    end
+    branched.each do |_, bs, _|
+      names = bs.map(&:name)
+      names.each { |n| parent[find.call(n)] = find.call(names.first) }
+    end
+    families = branched.group_by { |_, bs, _| find.call(bs.first.name) }
+
+    latest = ->(rows) { -rows.map { |c, _, _| activity[c.id].to_f }.max }
+    sections = families.values.map do |rows|
+      names = rows.flat_map { |_, bs, _| bs.map(&:name) }.uniq.sort
+      [names.size > 1 ? :family : :branch, names, rows]
+    end
+    sections.sort_by! { |kind, names, rows| [kind == :family ? 0 : 1, latest.call(rows), names] }
+
+    sections.unshift([:main, ['main'], main_rows]) if main_rows.any?
+    sections << [:unattached, [], unattached] if unattached.any?
+    sections
+  end
+
+  # The branch a commit's links go through: main when it's on main,
+  # else the one pushed most recently, as Commit#preferred_branch picks.
+  def link_branch_for(branches)
+    return nil if branches.empty?
+    return 'main' if branches.any? { |b| b.name == 'main' }
+
+    branches.min_by { |b| [-(b.head&.commit_time&.to_i || 0), b.name] }.name
+  end
+
+  def build_summary(commit, state, branches: [], rewrite: nil, computer_names: {})
     tccs = commit.test_case_commits.to_a
     # Failing/mixed TCCs whose every failure was a trapped
     # floating-point exception get their own bucket — still stored as
     # failing/mixed, but a different kind of problem.
     fpe_ids = fpe_only_tcc_ids(tccs.select { |t| [1, 3].include?(t.status) })
     fpe_tccs, other_tccs = tccs.partition { |t| fpe_ids.include?(t.id) }
+    by_name = ->(list) { list.sort_by { |t| t.test_case.name.to_s } }
     CommitSummary.new(
       commit: commit,
-      status: commit.status,
-      build_status: commit.compilation_status,
-      tested_count: commit.passed_count.to_i + commit.failed_count.to_i +
-                    commit.mixed_count.to_i + commit.checksum_count.to_i,
-      computer_count: commit.computer_count.to_i,
-      complete_computer_count: commit.complete_computer_count.to_i,
-      passing_count: commit.passed_count.to_i,
-      failing_tccs: other_tccs.select { |t| t.status == 1 },
-      checksum_tccs: other_tccs.select { |t| t.status == 2 },
-      mixed_tccs: other_tccs.select { |t| t.status == 3 },
-      fpe_tccs: fpe_tccs
+      state: state,
+      branch_names: branches.map(&:name).sort,
+      link_branch_name: link_branch_for(branches),
+      rewritten: rewrite.present?,
+      replacement: rewrite&.new_commit,
+      failing_tccs: by_name.call(other_tccs.select { |t| t.status == 1 }),
+      mixed_tccs: by_name.call(other_tccs.select { |t| t.status == 3 }),
+      fpe_tccs: by_name.call(fpe_tccs),
+      checksum_tccs: by_name.call(other_tccs.select { |t| t.status == 2 }),
+      failed_build_computers: state[:build][:failed_build_computer_ids]
+        .map { |id| computer_names[id] }.compact.sort
     )
   end
 
@@ -300,82 +373,99 @@ class MorningReport
                 .to_set
   end
 
+  # ===== Anomalies =====
+
+  METRIC_TO_COLUMN = {
+    runtime: :runtime_minutes,
+    rn_mem: :mem_rn,
+    re_mem: :mem_re
+  }.freeze
+
+  # Passing results that arrived in the window, each compared with the
+  # last COHORT_LIMIT passing runs of the same cohort from before the
+  # window. (runtime_seconds / re_time / total_runtime_seconds, which
+  # this used to read, are never written, so it never flagged anything.)
   def load_anomalies
     return if commits_tested.empty?
 
     candidates = TestInstance
-      .where(commit_id: commits_tested.map(&:id), passed: true)
-      .where.not(runtime_seconds: nil)
+      .where(created_at: window, passed: true, commit_id: commits_tested.map(&:id))
       .includes(:test_case, :computer, :commit)
-
+      .to_a
     return if candidates.empty?
 
-    # Group by cohort key — one batched stats query per group.
-    candidates_by_key = candidates.group_by { |ti| cohort_key(ti) }
-
-    candidates_by_key.each do |key, group|
-      stats = cohort_stats(key, oldest: group.map { |ti| ti.commit.commit_time }.min)
-      next unless stats
-
-      group.each { |ti| flag_anomalies(ti, stats) }
+    stats = cohort_stats(candidates)
+    candidates.each do |ti|
+      s = stats[cohort_key(ti)]
+      flag_anomalies(ti, s) if s
     end
-
-    # Within a (commit, test_case, computer) cell, keep at most the worst
-    # offender across metrics to avoid duplicate-ish noise.
     @anomalies = dedupe_anomalies(@anomalies)
   end
 
+  # One entry per (test, computer, metric): the same slowdown on three
+  # commits is one finding. Keeps the worst and counts the rest.
+  def dedupe_anomalies(list)
+    list.group_by { |a| [a.test_instance.test_case_id, a.test_instance.computer_id, a.metric] }
+        .map { |_, group| group.max_by(&:ratio).tap { |a| a.occurrences = group.size } }
+        .sort_by { |a| -a.ratio }
+  end
+
+  # Runs are comparable when they ran the same test on the same machine
+  # the same way: full or default inlists, FPE checks, convergence
+  # factor, and thread count (runtime scales with threads).
   def cohort_key(ti)
-    [ti.test_case_id, ti.computer_id, ti.run_optional, ti.fpe_checks]
+    [ti.test_case_id, ti.computer_id, !!ti.run_optional, !!ti.fpe_checks,
+     (ti.resolution_factor || 1.0).to_f, ti.omp_num_threads]
   end
 
-  # Returns a hash of metric -> {mean: x, stddev: y, count: n} for the
-  # cohort of the previous COHORT_LIMIT passing instances matching the
-  # key, observed strictly before `oldest` (so we never compare a
-  # candidate to itself or to its same-day siblings).
-  def cohort_stats(key, oldest:)
-    test_case_id, computer_id, run_optional, fpe_checks = key
-
-    cohort = TestInstance
-      .joins(:commit)
-      .where(test_case_id: test_case_id,
-             computer_id: computer_id,
-             run_optional: run_optional,
-             fpe_checks: fpe_checks,
-             passed: true)
-      .where('commits.commit_time < ?', oldest)
-      .order('commits.commit_time DESC')
-      .limit(COHORT_LIMIT)
-
-    rows = cohort.pluck(:runtime_seconds, :re_time, :total_runtime_seconds,
-                        :mem_rn, :mem_re)
-    return nil if rows.size < COHORT_MIN_SIZE
-
-    {
-      rn_runtime: column_stats(rows, 0),
-      re_runtime: column_stats(rows, 1),
-      total_runtime: column_stats(rows, 2),
-      rn_mem: column_stats(rows, 3),
-      re_mem: column_stats(rows, 4)
-    }
+  # { cohort_key => { metric => {mean:, stddev:, count:} } }, from one
+  # windowed query over every cohort the candidates need.
+  def cohort_stats(candidates)
+    sql = <<~SQL.squish
+      SELECT test_case_id, computer_id, run_optional, fpe_checks,
+             resolution_factor, omp_num_threads,
+             runtime_minutes, mem_rn, mem_re
+      FROM (
+        SELECT test_instances.*, ROW_NUMBER() OVER (
+          PARTITION BY test_case_id, computer_id,
+                       COALESCE(run_optional, false), COALESCE(fpe_checks, false),
+                       COALESCE(resolution_factor, 1.0), omp_num_threads
+          ORDER BY created_at DESC) AS cohort_rank
+        FROM test_instances
+        WHERE passed
+          AND created_at < :start AND created_at >= :lookback
+          AND test_case_id IN (:test_case_ids)
+          AND computer_id IN (:computer_ids)
+      ) ranked
+      WHERE cohort_rank <= :limit
+    SQL
+    rows = TestInstance.connection.select_rows(
+      TestInstance.sanitize_sql([sql, {
+        start: window_start, lookback: window_start - COHORT_LOOKBACK,
+        test_case_ids: candidates.map(&:test_case_id).uniq,
+        computer_ids: candidates.map(&:computer_id).uniq,
+        limit: COHORT_LIMIT
+      }])
+    )
+    bool = ActiveModel::Type::Boolean.new
+    rows.group_by do |tc, comp, opt, fpe, factor, threads, *_|
+      [tc.to_i, comp.to_i, !!bool.cast(opt), !!bool.cast(fpe),
+       (factor || 1.0).to_f, threads&.to_i]
+    end.transform_values do |group|
+      METRIC_TO_COLUMN.keys.each_with_index.to_h do |metric, i|
+        [metric, column_stats(group.map { |r| r[6 + i] })]
+      end
+    end
   end
 
-  def column_stats(rows, idx)
-    values = rows.map { |r| r[idx] }.compact
+  def column_stats(values)
+    values = values.compact.map(&:to_f)
     return nil if values.size < COHORT_MIN_SIZE
 
-    mean = values.sum.to_f / values.size
-    variance = values.sum { |v| (v - mean)**2 } / values.size.to_f
+    mean = values.sum / values.size
+    variance = values.sum { |v| (v - mean)**2 } / values.size
     { mean: mean, stddev: Math.sqrt(variance), count: values.size }
   end
-
-  METRIC_TO_COLUMN = {
-    rn_runtime: :runtime_seconds,
-    re_runtime: :re_time,
-    total_runtime: :total_runtime_seconds,
-    rn_mem: :mem_rn,
-    re_mem: :mem_re
-  }.freeze
 
   def flag_anomalies(test_instance, stats)
     METRIC_TO_COLUMN.each do |metric, column|
@@ -388,41 +478,18 @@ class MorningReport
 
       ratio = value.to_f / stat[:mean]
       next if ratio < ANOMALY_RATIO_FLOOR
+      next if value - stat[:mean] < ANOMALY_MIN_DELTA[metric]
 
       z = stat[:stddev].zero? ? Float::INFINITY :
                                 (value - stat[:mean]) / stat[:stddev]
       next if z < ANOMALY_Z_THRESHOLD
 
       @anomalies << Anomaly.new(
-        test_instance: test_instance,
-        metric: metric,
-        value: value,
-        cohort_mean: stat[:mean],
-        cohort_stddev: stat[:stddev],
-        cohort_size: stat[:count],
-        z_score: z,
-        ratio: ratio
+        test_instance: test_instance, metric: metric, value: value,
+        cohort_mean: stat[:mean], cohort_stddev: stat[:stddev],
+        cohort_size: stat[:count], z_score: z, ratio: ratio
       )
     end
-  end
-
-  # Sort worst-first; keep at most one anomaly per (test_instance, metric).
-  # If the same test instance has separate metrics flagged we keep both.
-  def dedupe_anomalies(list)
-    by_key = {}
-    list.each do |a|
-      k = [a.test_instance.id, a.metric]
-      existing = by_key[k]
-      by_key[k] = a if existing.nil? || a.z_score > existing.z_score
-    end
-    by_key.values.sort_by { |a| -a.z_score }
-  end
-
-  def load_meta
-    @countdown_days = nil    # placeholder; release-date countdown can be
-                             # repopulated when there's a real upcoming
-                             # release date to count down to.
-    @release_blocker_count = fetch_release_blocker_count
   end
 
   # Returns the count of open issues labeled `release-blocker` on the

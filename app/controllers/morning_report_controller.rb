@@ -2,13 +2,14 @@
 # data + same template that MorningMailer emails out, so the
 # in-browser view exactly tracks what subscribers see in their inbox.
 #
-# Results are cached for 24 hours per date (see MorningReport.for); pass
-# ?refresh=1 to bust the cache and rebuild on the next request.
+# A sent digest's report is cached for 24 hours per date (see
+# MorningReport.for); pass ?refresh=1 to rebuild it. Before 8 AM Eastern,
+# today's preview is built live with the window ending now.
 class MorningReportController < ApplicationController
   layout "modern"
 
   def show
-    @date = parse_date_param || Date.current
+    @date = parse_date_param || MorningReport.current_date
     @report = MorningReport.for(date: @date, force: params[:refresh].present?)
   end
 

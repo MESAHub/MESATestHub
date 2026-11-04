@@ -8,18 +8,7 @@ that replaced the SVN-era `Version` rows.
 ## Pieces
 
 - **[`app/services/morning_report.rb`](../app/services/morning_report.rb)**
-  PORO that builds the report data.  Computes a 24-hour window
-  ending at `as_of` (defaults to `Date.current.end_of_day`), groups
-  commits-tested-in-window by branch (main first), pulls per-commit
-  pass/fail/checksum/mixed scalars, and flags individual passing
-  test instances whose runtime or RAM is far above the recent
-  cohort of `(test_case, computer, run_optional, fpe_checks)`
-  matches.  Result is cached in `Rails.cache` for 24 hours per
-  `date.iso8601` key.  Each commit's problem tests list worst-first — failing, mixed,
-  FPE-only failures (every failure a trapped floating-point
-  exception, `failure_type: 'fpe'`; still stored as failing/mixed),
-  then checksum mismatches — with badges colored to match the web
-  UI (magenta FPE, violet checksums).
+  PORO that builds the report data (see "What's in it" below).
 - **[`app/mailers/morning_mailer.rb`](../app/mailers/morning_mailer.rb)**
   Single `#daily` action that builds the report and renders the
   email.  Hardcoded recipients in `MorningMailer::RECIPIENTS`
@@ -47,33 +36,96 @@ that replaced the SVN-era `Version` rows.
   point (`FORCE=1` to send regardless of clock). No longer the
   scheduled driver.
 
-## Anomaly detection
+## What's in it
 
-For each passing test instance in the window, compares its runtime
-and RAM metrics against a cohort of recent passing runs matching:
+### The window
 
-- same `test_case_id`
-- same `computer_id`
-- same `run_optional` (full vs partial)
-- same `fpe_checks` (whether FPE checks were enabled)
+The digest for date D covers the **24 hours ending at 8:00 AM US
+Eastern on D** (`MorningReport.send_time`), so consecutive digests tile
+time with no gap. Until Nov 2026 the window was midnight to midnight
+UTC on D. The 8 AM send only saw the first 12-13 hours of it, and the
+US working day after each send was never reported (Oct 28: 4 of 16
+tested commits made it in).
 
-The cohort is the **previous `COHORT_LIMIT` = 50** passing
-instances strictly before the candidate's commit time.  An
-anomaly is flagged when *both*:
+### Which commits
 
-- z-score above the cohort mean ≥ `ANOMALY_Z_THRESHOLD = 3.0`,
-  **and**
-- ratio of value to cohort mean ≥ `ANOMALY_RATIO_FLOOR = 1.25`
-  (protects against tiny-variance cohorts where 3σ is a
-  meaningless absolute jump).
+A commit is in when anything about it arrived in the window: a
+**submission** (build report or test result) or a **claim**. Keying
+on test instances, as before, missed commits whose build failed
+everywhere (no instances) and builds still waiting on results.
 
-Cohorts smaller than `COHORT_MIN_SIZE = 8` are skipped.
+### Grouping: each commit once
 
-Metrics checked: `runtime_seconds` (rn), `re_time` (re),
-`total_runtime_seconds` (whole test), `mem_rn`, `mem_re`.
+Following the home page (`Branch.recently_pushed`):
 
-Tweak the thresholds in `MorningReport` if the signal-to-noise is
-off for your use case.
+1. **main**: every commit on main. A commit on main never repeats
+   under other branches, so a branch that merged main doesn't drag
+   main's commits along. (Before, Oct 27 rendered 40 commits as 121
+   rows across 31 sections, and "Need attention" counted rows: 55 for
+   13 commits.)
+2. **Related-branch families**: branches joined by any shared commit
+   (union-find over memberships), e.g. a stack `hydro_01 … hydro_06`.
+   One section, each commit once, tagged with the branch it links
+   through and "+N more".
+3. **Single branches**, most recent activity first.
+4. **Unattached**: commits on no branch (PR test-merge commits, or a
+   push whose sync hasn't landed). They have no commit page, so no
+   link.
+
+A commit a force-push dropped (`commit_rewrites`) files under the
+branch it was dropped from and links there (its page still renders
+with a "no longer on this branch" banner). It lists in a compact
+"Rebased away" block with an arrow to its replacement, and doesn't
+count as needing attention.
+
+Commit links go through main when the commit is on main, else the
+branch pushed most recently (`Commit#preferred_branch`'s rule).
+
+### Statuses
+
+Pills come from `CommitState` via `CommitStateCache`, worded like the
+site's `test_status_pill`: N failing / N mixed / N FPE / N checksum ≠
+/ Pending / "r/t passing" (partial) / All passing / Untested. The build
+badge appears only on failure ("Build failed", or "Build failed on
+<computer>"). CommitState counts a computer as built if any of its
+build reports succeeded, so a failed build that was then retried and
+succeeded no longer reads "mixed" forever.
+
+**Needs attention** = failing, mixed, or FPE tests, or a failed build;
+each commit once, worst first, listed in the header. The stat strip
+shows commits tested, commits needing attention, and computers that
+submitted in the window.
+
+The per-commit problem-test lists still come from stored TCC statuses
+(refreshed a few seconds after each result).
+
+### Anomaly detection
+
+Compares each passing result that arrived in the window with the
+**previous `COHORT_LIMIT` = 50** passing runs from before the window
+(back at most `COHORT_LOOKBACK` = 180 days) with the same:
+
+- `test_case_id`, `computer_id`
+- `run_optional` (full vs default inlists), `fpe_checks`
+- `resolution_factor`, `omp_num_threads` (runtime scales with threads)
+
+One windowed SQL query fetches every cohort. Flagged when **all** of:
+
+- z-score ≥ `ANOMALY_Z_THRESHOLD = 3.0`
+- ratio to the cohort mean ≥ `ANOMALY_RATIO_FLOOR = 1.25`
+- absolute jump ≥ `ANOMALY_MIN_DELTA`: 1 minute of runtime, 256 MB of
+  memory. Memory is nearly deterministic, so its stddev is tiny and z
+  alone would flag any change.
+
+Cohorts smaller than `COHORT_MIN_SIZE = 8` are skipped. The same
+(test, computer, metric) flagged on several commits is one entry,
+the worst, with a count.
+
+Metrics: `runtime_minutes`, `mem_rn`, `mem_re` (kB). The detector
+used to read `runtime_seconds` / `re_time` / `total_runtime_seconds`,
+which are never written, and required `runtime_seconds` to be
+present, so it never flagged anything. On the Oct–Nov 2026 data it
+now flags roughly 10–20 per day.
 
 ## Email provider — Resend (HTTPS API, not SMTP)
 
@@ -186,9 +238,14 @@ that mirrors the Railway cron service's variables.)
 
 - **Web preview**: `/morning_report` (or
   `/morning_report?date=YYYY-MM-DD` for a historical run).
-- **Cache key**: `morning_report:<date.iso8601>`, 24-hour TTL.
-- **Force rebuild**: `?refresh=1` query param, or
-  `MorningReport.for(date: ..., force: true)`.
+- **Before today's send** (8 AM Eastern), the preview is built live
+  with the window ending now and is not cached, so looking at it early
+  can't freeze what the email sends.
+- **After the send**: cached under `morning_report:v2:<date>` for 24
+  hours, so the email and the preview agree. The cached report holds
+  the states *at build time*; later results on those commits don't
+  change it. `?refresh=1` (or `MorningReport.for(date:, force: true)`)
+  rebuilds it with current states, same window.
 - **Test environment**: cache backend is `:null_store` (see
   `config/environments/test.rb`), so spec runs always build a
   fresh report.
