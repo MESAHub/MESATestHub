@@ -57,4 +57,25 @@ RSpec.describe CommitRelation, type: :model do
       expect { c.destroy }.to change(CommitRelation, :count).by(-1)
     end
   end
+
+  describe 'corrected_time on a cycle' do
+    # History can't have cycles, but bad edges must not hang the walk.
+    around { |ex| Timeout.timeout(10) { ex.run } }
+
+    it 'stops on a self-edge' do
+      c = create(:commit)
+      expect { CommitRelation.create!(parent: c, child: c) }.not_to raise_error
+    end
+
+    it 'stops on a two-commit cycle and still corrects what hangs off it' do
+      a = create(:commit, commit_time: Time.zone.parse('2026-01-01T00:00:00Z'))
+      b = create(:commit, commit_time: Time.zone.parse('2026-01-01T01:00:00Z'))
+      tail = create(:commit, commit_time: Time.zone.parse('2025-12-01T00:00:00Z'))
+      CommitRelation.create!(parent: a, child: b)
+      CommitRelation.create!(parent: b, child: tail)
+      CommitRelation.create!(parent: b, child: a)
+
+      expect(tail.reload.corrected_time).to be > b.commit_time
+    end
+  end
 end

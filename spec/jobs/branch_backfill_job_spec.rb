@@ -141,9 +141,17 @@ RSpec.describe BranchBackfillJob, type: :job do
     # of unique strings so that both `sha` and `short_sha` stay unique
     # across the chain. Returns tip-first (newest first), mirroring the
     # order api.commits emits.
+    #
+    # Commit times climb a minute per commit, as real history does.
+    # With equal times every edge added tip-first raises its child's
+    # corrected_time and ripples up the whole chain above it (O(n²)
+    # correction queries, ~27k here), which ran past 90s under load and
+    # looked like a hang.
     def chain_of(n)
+      base = Time.zone.parse('2026-01-01T00:00:00Z')
       (0...n).map do |i|
-        commit_with_sha(Digest::SHA1.hexdigest("chain-#{branch.id}-#{i}"))
+        sha = Digest::SHA1.hexdigest("chain-#{branch.id}-#{i}")
+        create(:commit, sha: sha, short_sha: sha[0, 7], commit_time: base + i.minutes)
       end.reverse
     end
 
