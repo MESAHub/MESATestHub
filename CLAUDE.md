@@ -359,14 +359,37 @@ helper or partial exists.
   60 when feeding it into a `runtime_minutes` query. The JSON
   surface used to emit `rn_runtime` / `re_runtime` / `runtime`
   (all always null); it now emits `runtime_minutes` directly.
-- **Submission destroy refreshes TCC + Commit scalars in a specific
+- **Stored scalars refresh in a background job, a few seconds late.**
+  Results no longer recompute TCC and commit counts/statuses in the
+  request. Each result's 50–68 queries were redone 30+ times a minute
+  on one commit during a run.
+  - **How:** `TestInstance` and `Submission` after_commit callbacks call
+    `Commit.mark_scalars_stale(commit_id, tcc_ids:)`. That sets
+    `test_case_commits.needs_refresh` and `commits.scalars_dirty`, and
+    enqueues [`CommitRefreshJob`](app/jobs/commit_refresh_job.rb), 5s
+    later, only when the commit's flag flips.
+  - **The job** clears the flags *before* reading, so nothing committed
+    in between is lost. It refreshes the flagged TCCs, then the commit
+    (whose `before_save :update_scalars` counts their statuses), then CI
+    satisfaction. On an error it puts the flags back. A `stale_scalars`
+    recurring task re-enqueues any commit left flagged.
+  - **What lags:** stored counts (index meta line, test-case history,
+    the morning digest), by up to ~5s. Matrices, rings and pills read
+    `test_instances` directly and don't.
+  - **In tests:** `config.x.defer_scalar_refresh` is false, so the
+    refresh runs inline (`perform_now`). `spec/jobs/commit_refresh_job_spec.rb`
+    covers the deferred path.
+  - **Don't call `update_and_save_scalars` / `update_scalars` from a
+    request path.** Flag them instead.
+- **Submission destroy flags TCC + Commit scalars in a specific
   order.** `Submission` carries `before_destroy
   :remember_affected_tcc_ids, prepend: true` (the `prepend` is
   load-bearing — without it the capture fires AFTER the
   `dependent: :destroy` cascade and the through-association is
-  already empty). `after_commit :update_commit` then refreshes
-  the captured TCCs first, then `commit.update_scalars` — order
-  matters since the commit's counts read TCC statuses. Don't
+  already empty). `after_commit :update_commit` then flags the
+  captured TCCs for CommitRefreshJob, which refreshes them before
+  the commit — order matters since the commit's counts read TCC
+  statuses. Don't
   re-add `dependent: :destroy` to associations under Submission
   without thinking about whether the capture needs extending.
   And don't write `self.status ||= :untested` in any
@@ -515,7 +538,8 @@ helper or partial exists.
   (`SubmissionsController#create_split`) into a build row (`empty`,
   carrying `compiled`) plus one row per test, all in one transaction.
   Each row's after_commit refresh is skipped via
-  `Submission#skip_scalar_refresh`, and one refresh runs at the end. So
+  `Submission#skip_scalar_refresh`, and every touched TCC is flagged
+  once at the end (see the scalar-refresh bullet above). So
   `entire: true` rows only exist from before Oct 2026, and every result
   can be deleted on its own.
   - **Fingerprints:** clients may send a top-level `fingerprints` hash

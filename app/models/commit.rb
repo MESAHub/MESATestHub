@@ -786,9 +786,34 @@ class Commit < ApplicationRecord
     self.corrected_time = commit_time
   end
 
+  # Flags these TCCs and this commit's scalars as stale and makes sure a
+  # CommitRefreshJob is coming. Called after a result is saved or
+  # deleted (Submission, TestInstance, SubmissionsController#create_split).
+  # The job is enqueued only when the commit's flag flips, so a burst of
+  # results on one commit costs one job. See CommitRefreshJob for why no
+  # update is lost between runs.
+  #
+  # With config.x.defer_scalar_refresh off (the test env), the refresh
+  # runs now, so specs read fresh scalars right after a submission.
+  def self.mark_scalars_stale(commit_id, tcc_ids: [])
+    return unless commit_id
+
+    tcc_ids = Array(tcc_ids).compact
+    if tcc_ids.any?
+      TestCaseCommit.where(id: tcc_ids, needs_refresh: false).update_all(needs_refresh: true)
+    end
+    flipped = where(id: commit_id, scalars_dirty: false).update_all(scalars_dirty: true)
+
+    if !Rails.configuration.x.defer_scalar_refresh
+      CommitRefreshJob.perform_now(commit_id)
+    elsif flipped.positive?
+      CommitRefreshJob.set(wait: CommitRefreshJob::DELAY).perform_later(commit_id)
+    end
+  end
+
   # make this stuff searchable directly on the database without having
-  # to summon all the test case commits. This should be called whenever
-  # a submission is made and whenever a change is made to a test case commit
+  # to summon all the test case commits. Runs on every save (before_save);
+  # CommitRefreshJob saves after a submission, once the TCCs are fresh.
   def update_scalars
     self.test_case_count = test_case_commits.count
     self.passed_count = test_case_commits.where(status: [0, 2]).count

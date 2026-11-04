@@ -49,7 +49,7 @@ class TestInstance < ApplicationRecord
 
   before_validation :set_tcc
   before_save :update_computer_specification, :update_computer_name
-  after_save :update_tcc
+  after_commit :update_tcc, on: %i[create update]
 
   scope :full, -> { where(run_optional: true) }
   scope :partial, -> { where(run_optional: false) }
@@ -805,12 +805,11 @@ class TestInstance < ApplicationRecord
     end
   end
 
+  # Flag this instance's TCC (and its commit) for CommitRefreshJob rather
+  # than refreshing inline: a submission's own callback flags the same
+  # TCC, and the job does both in one pass.
   def update_tcc
-    # make sure we have a test_case_commit
-    set_tcc unless self.test_case_commit_id
-
-    # tell the test case commit to update itself
-    test_case_commit.update_and_save_scalars
+    Commit.mark_scalars_stale(commit_id, tcc_ids: [test_case_commit_id])
   end
 
   # intended to update old submissions to have a pre-computed cpu hour
