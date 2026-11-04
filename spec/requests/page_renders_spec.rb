@@ -209,6 +209,37 @@ RSpec.describe 'Page renders', type: :request do
       expect(response.body).to match(/placeholder=['"]Filter branches…/)
       expect(response.body).to match(%r{href=['"]/main/test_cases/#{test_case.module}/#{test_case.name}['"]})
     end
+
+    it "opens a digest anomaly link: Trend tab on a slashed branch with that computer's line" do
+      feature = create(:branch, name: 'feature/x')
+      BranchMembership.create!(branch: feature, commit: commit)
+      feature.update!(head: commit)
+      busy = create(:computer, name: 'busy', user: user)
+      rare = create(:computer, name: 'rare', user: user)
+      [busy, busy, rare].each do |comp|
+        create(:test_instance, commit: commit, computer: comp, test_case: test_case,
+                               test_case_commit: test_case_commit, passed: true,
+                               submission: create(:submission, commit: commit, computer: comp),
+                               runtime_minutes: 3, mem_re: 1_048_576)
+      end
+      allow_any_instance_of(TestCase).to receive(:trend_payload).and_wrap_original do |m, *args, **kw|
+        m.call(*args, **kw, top_n: 1)
+      end
+
+      path = "/feature%2Fx/test_cases/#{test_case.module}/#{test_case.name}"
+      charted = lambda do
+        doc = Nokogiri::HTML(response.body)
+        JSON.parse(doc.at_css('script[data-trend-chart-target="data"]').text)['configs'].map { |c| c['computer'] }
+      end
+
+      get path, params: { tab: 'trend', metric: 'mem_re', center: commit.sha }
+      expect(charted.call).to eq(['busy'])
+
+      get path, params: { tab: 'trend', metric: 'mem_re', center: commit.sha, computer: 'rare' }
+      expect(response).to have_http_status(:ok)
+      expect(charted.call).to eq(%w[rare busy])
+      expect(Nokogiri::HTML(response.body).at_css('option[selected]')['value']).to eq('mem_re')
+    end
   end
 
   describe 'GET /:branch/commits/:sha/test_cases/:module/:test_case' do

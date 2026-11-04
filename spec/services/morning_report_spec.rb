@@ -245,13 +245,13 @@ RSpec.describe MorningReport, type: :model do
 
     # A stable cohort of passing runs from before the window (runtime in
     # minutes, memory in kB, with a little spread), then fresh results.
-    def seed_cohort(runtime:, mem_rn: 1_000_000, count: cohort_size)
+    def seed_cohort(runtime:, mem_rn: 1_000_000, count: cohort_size, **attrs)
       count.times do |i|
         commit = create(:commit, commit_time: as_of - (10 + i).days)
         make_instance(commit: commit, computer: computer, test_case: test_case,
                       created_at: as_of - (10 + i).days,
                       runtime_minutes: runtime + (i % 2) * 0.1 * runtime,
-                      mem_rn: mem_rn, mem_re: mem_rn / 2)
+                      mem_rn: mem_rn, mem_re: mem_rn / 2, **attrs)
       end
     end
 
@@ -292,10 +292,32 @@ RSpec.describe MorningReport, type: :model do
       expect(flagged(add_candidate(runtime: 999))).to be_empty
     end
 
-    it 'keeps cohorts apart by run_optional / fpe_checks / threads' do
+    it 'keeps cohorts apart by inlist count, FPE checks and threads' do
+      seed_cohort(runtime: 10, inlist_count: 1)
+      expect(flagged(add_candidate(runtime: 999, inlist_count: 3))).to be_empty
+      expect(flagged(add_candidate(runtime: 999, inlist_count: 1, fpe_checks: true))).to be_empty
+      expect(flagged(add_candidate(runtime: 999, inlist_count: 1, omp_num_threads: 64))).to be_empty
+    end
+
+    it 'ignores run_optional when the inlist count matches' do
+      # Single-inlist tests arrive with the flag both ways.
+      seed_cohort(runtime: 10, inlist_count: 1, run_optional: false)
+      candidate = add_candidate(runtime: 40, inlist_count: 1, run_optional: true)
+      expect(flagged(candidate).map(&:metric)).to eq([:runtime])
+    end
+
+    it 'falls back to run_optional for rows without an inlist count' do
+      seed_cohort(runtime: 10, inlist_count: nil, run_optional: false)
+      expect(flagged(add_candidate(runtime: 999, inlist_count: nil, run_optional: true))).to be_empty
+      expect(flagged(add_candidate(runtime: 999, inlist_count: nil, run_optional: false))).not_to be_empty
+    end
+
+    it "links through the branch the digest uses for the commit" do
       seed_cohort(runtime: 10)
-      expect(flagged(add_candidate(runtime: 999, run_optional: true))).to be_empty
-      expect(flagged(add_candidate(runtime: 999, omp_num_threads: 64))).to be_empty
+      candidate = add_candidate(runtime: 40)
+      create(:branch_membership, branch: main_branch, commit: candidate.commit)
+
+      expect(flagged(candidate).first.link_branch_name).to eq('main')
     end
 
     it 'flags a memory blowup as :rn_mem' do

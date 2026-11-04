@@ -106,8 +106,14 @@ Compares each passing result that arrived in the window with the
 (back at most `COHORT_LOOKBACK` = 180 days) with the same:
 
 - `test_case_id`, `computer_id`
-- `run_optional` (full vs default inlists), `fpe_checks`
+- `inlist_count` (how many inlists ran, set at ingest), `fpe_checks`
 - `resolution_factor`, `omp_num_threads` (runtime scales with threads)
+
+Inlists are counted, not read off `run_optional`: clients send that
+flag whether or not a test has optional inlists, so single-inlist tests
+(`make_zams`) arrive both ways and splitting on it halved their
+history. Rows without an `inlist_count` (pre-migration) fall back to
+the flag, as `ChecksumComparison` does.
 
 One windowed SQL query fetches every cohort. Flagged when **all** of:
 
@@ -126,6 +132,15 @@ used to read `runtime_seconds` / `re_time` / `total_runtime_seconds`,
 which are never written, and required `runtime_seconds` to be
 present, so it never flagged anything. On the Oct–Nov 2026 data it
 now flags roughly 10–20 per day.
+
+Each anomaly's test name links to the test's **Trend tab** on the
+branch the digest links that commit through (`link_branch_name`),
+centered on the flagged commit (`?center=`), plotting the flagged metric
+(`?metric=runtime_minutes|mem_rn|mem_re`). `?computer=` makes the
+chart draw that computer's configs even when they aren't among the
+three most-run (`TestCase#trend_payload(focus_computer:)`), so the
+flagged machine's line is always there. Commits on no branch fall back
+to the search page.
 
 ## Email provider — Resend (HTTPS API, not SMTP)
 

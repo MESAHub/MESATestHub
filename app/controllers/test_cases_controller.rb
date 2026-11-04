@@ -34,7 +34,8 @@ class TestCasesController < ApplicationController
     # bounded by the window size (50–250 commits) and re-uses the
     # instances + inlist_data the History tab eager-loads anyway,
     # so the marginal Ruby work is small.
-    @trend_payload = @test_case.trend_payload(@selected_branch, @window[:entries])
+    @trend_payload = @test_case.trend_payload(@selected_branch, @window[:entries],
+                                              focus_computer: params[:computer].presence)
 
     # Sticky metric across navigation. The URL param (?metric=<id>)
     # is the source of truth; the Trend tab's <select> pre-selects

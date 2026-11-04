@@ -563,6 +563,10 @@ class TestCase < ApplicationRecord
   #              #commit_window. We don't re-resolve the window
   #              here so all tabs stay in lockstep with the toolbar.
   #   top_n    — defaults to TREND_TOP_CONFIGS (3).
+  #   focus_computer — a computer name (the page's ?computer=). Its
+  #              configs are drawn even when they aren't among the
+  #              top_n, so a link about one machine (the morning
+  #              digest's anomalies) always shows that machine's line.
   #
   # Output (JSON-ready hash):
   #
@@ -591,7 +595,7 @@ class TestCase < ApplicationRecord
   # empty series, but metrics/commits populated) when the window
   # has no instances. The controller renders an "not enough data"
   # empty state for that case.
-  def trend_payload(branch, entries, top_n: TREND_TOP_CONFIGS)
+  def trend_payload(branch, entries, top_n: TREND_TOP_CONFIGS, focus_computer: nil)
     chrono = entries.reverse  # oldest first for the X axis
     tccs   = entries.map { |e| e[:tcc] }.compact
 
@@ -611,7 +615,12 @@ class TestCase < ApplicationRecord
       end
     end
 
-    top_keys = config_counts.sort_by { |_, c| -c }.first(top_n).map(&:first)
+    ranked = config_counts.sort_by { |_, c| -c }.map(&:first)
+    top_keys = ranked.first(top_n)
+    if focus_computer.present?
+      focus_keys = ranked.select { |k| config_sample[k].computer&.name == focus_computer }
+      top_keys = (focus_keys.first(top_n) + top_keys).uniq
+    end
     configs = top_keys.each_with_index.map do |key, idx|
       sample = config_sample[key]
       cname  = sample.computer&.name || "computer ##{key[0]}"
@@ -729,6 +738,7 @@ class TestCase < ApplicationRecord
     base = [
       { id: "runtime_minutes",     label: "Runtime [min]",         source: "instance" },
       { id: "mem_rn",              label: "RAM rn [GB]",           source: "instance" },
+      { id: "mem_re",              label: "RAM re [GB]",           source: "instance" },
       { id: "cpu_hours",           label: "CPU hours",             source: "instance" },
       { id: "steps",               label: "Steps",                 source: "instance" },
       { id: "retries",             label: "Retries",               source: "instance" },
@@ -760,9 +770,9 @@ class TestCase < ApplicationRecord
     case metric[:source]
     when "instance"
       val = instance.public_send(metric[:id])
-      # rn_mem_GB conversion lives on the model; mem_rn is in KB
-      if metric[:id] == "mem_rn" && val
-        instance.respond_to?(:rn_mem_GB) ? instance.rn_mem_GB : val / 1_048_576.0
+      # mem_rn / mem_re are stored in kB; the chart shows GB.
+      if %w[mem_rn mem_re].include?(metric[:id]) && val
+        val / 1_048_576.0
       else
         val
       end

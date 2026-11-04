@@ -204,6 +204,32 @@ RSpec.describe TestCase, 'branch-scoped history helpers' do
       expect(payload[:configs].none? { |c| c[:computer] == "cannon" }).to be(true)
     end
 
+    it 'adds the focus computer\'s configs when they miss the top N' do
+      commits = chain_on(branch, 4)
+      tccs = commits.map { |c| create(:test_case_commit, :passing, commit: c, test_case: test_case) }
+      tccs.first(4).each { |t| instance_on(tcc: t, computer: computer_a, threads: 8, run_optional: true) }
+      tccs.first(3).each { |t| instance_on(tcc: t, computer: computer_b, threads: 4, run_optional: true) }
+      instance_on(tcc: tccs.first, computer: computer_d, threads: 16, run_optional: true)
+
+      entries = window_entries(branch, tccs.index_by(&:commit_id), commits)
+      payload = test_case.trend_payload(branch, entries, top_n: 2, focus_computer: 'cannon')
+
+      expect(payload[:configs].map { |c| c[:computer] }).to eq(%w[cannon pleiades bluebear])
+      expect(payload[:series]['runtime_minutes'].keys.size).to eq(3)
+    end
+
+    it 'charts re RAM in GB' do
+      commits = chain_on(branch, 1)
+      tcc = create(:test_case_commit, :passing, commit: commits.first, test_case: test_case)
+      instance_on(tcc: tcc, computer: computer_a, threads: 8, run_optional: true)
+        .update!(mem_re: 2 * 1_048_576)
+
+      entries = window_entries(branch, { tcc.commit_id => tcc }, commits)
+      payload = test_case.trend_payload(branch, entries)
+      key = payload[:configs].first[:key]
+      expect(payload[:series]['mem_re'][key]).to eq([2.0])
+    end
+
     it 'returns commits in chronological order (oldest first) for the X axis' do
       commits = chain_on(branch, 3)
       tccs = commits.map { |c| create(:test_case_commit, :passing, commit: c, test_case: test_case) }
