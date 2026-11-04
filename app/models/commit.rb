@@ -273,9 +273,26 @@ class Commit < ApplicationRecord
   # query that changes nothing. Runs from every edge insert, which also
   # covers parents that arrive after their children (backfill pages
   # newest first).
+  #
+  # Git history has no cycles, but a cycle in commit_relations (bad
+  # data, a self-edge) would bump its members a second at a time
+  # forever. In a DAG round k reaches a commit k edges down some path,
+  # so the walk can't take more rounds than the distinct commits it has
+  # reached. Stop once rounds outrun that count and log what's moving.
   def self.correct_times_from(child_ids)
     frontier = child_ids.map(&:to_i).uniq
+    seen = Set.new(frontier)
+    rounds = 0
     until frontier.empty?
+      rounds += 1
+      if rounds > seen.size
+        Rails.logger.warn(
+          'Commit.correct_times_from: cycle in commit_relations through ' \
+          "commit ids #{frontier.first(20).join(', ')}; stopping"
+        )
+        break
+      end
+
       moved = connection.select_values(<<~SQL).map(&:to_i)
         UPDATE commits c SET corrected_time = s.t
           FROM (SELECT cr.child_id, MAX(p.corrected_time) + interval '1 second' AS t
@@ -289,6 +306,7 @@ class Commit < ApplicationRecord
       break if moved.empty?
 
       frontier = CommitRelation.where(parent_id: moved).distinct.pluck(:child_id)
+      seen.merge(frontier)
     end
   end
 
