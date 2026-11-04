@@ -249,14 +249,11 @@ class SubmissionsController < ApplicationController
     )
   end
 
-  # The per-row refreshes create_split deferred, done once.
+  # The per-row refreshes create_split skipped, flagged once for
+  # CommitRefreshJob.
   def refresh_after_split(rows)
     tcc_ids = TestInstance.where(submission_id: rows.map(&:id)).distinct.pluck(:test_case_commit_id)
-    TestCaseCommit.where(id: tcc_ids).find_each(&:update_and_save_scalars)
-    @commit.reload
-    @commit.update_scalars
-    @commit.save
-    @commit.refresh_ci_satisfaction!
+    Commit.mark_scalars_stale(@commit.id, tcc_ids: tcc_ids)
   end
 
   # A build-only submission has no instances; a failed-build combined

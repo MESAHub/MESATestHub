@@ -1141,8 +1141,8 @@ RSpec.describe TestCaseCommit, type: :model do
       create(:test_instance, commit: commit, computer: computer,
                              test_case: test_case, test_case_commit: tcc,
                              submission: sub, passed: true)
-      tcc.update_status
-      tcc.save!
+      # CommitRefreshJob updated the row, not this in-memory copy.
+      tcc.reload
       expect(tcc.pending?).to be false
     end
   end

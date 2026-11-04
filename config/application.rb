@@ -13,6 +13,11 @@ module MESATestHub
     config.load_defaults 8.0
     config.cache_store = :memory_store, { size: 64.megabytes }
 
+    # Submissions flag stored scalars stale and CommitRefreshJob
+    # recomputes them a few seconds later (see Commit.mark_scalars_stale).
+    # The test env turns this off to refresh inline.
+    config.x.defer_scalar_refresh = true
+
     # Enable rack-attack middleware (configured in initializers/rack_attack.rb)
     config.middleware.use Rack::Attack
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_11_04_120100) do
+ActiveRecord::Schema[8.0].define(version: 2026_11_04_130100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -116,6 +116,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_04_120100) do
     t.float "converge_factor"
     t.datetime "author_time"
     t.datetime "corrected_time", null: false
+    t.boolean "scalars_dirty", default: false, null: false
     t.index ["sha"], name: "index_commits_on_sha", unique: true
     t.index ["short_sha"], name: "index_commits_on_short_sha", unique: true
   end
@@ -336,6 +337,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_04_120100) do
     t.integer "checksum_count", default: 0
     t.integer "passed_count", default: 0
     t.integer "failed_count", default: 0
+    t.boolean "needs_refresh", default: false, null: false
     t.index ["commit_id", "test_case_id"], name: "index_test_case_commits_on_commit_id_and_test_case_id", unique: true
     t.index ["commit_id"], name: "index_test_case_commits_on_commit_id"
     t.index ["test_case_id"], name: "index_test_case_commits_on_test_case_id"
@@ -395,6 +397,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_04_120100) do
     t.integer "inlist_count"
     t.index ["commit_id"], name: "index_test_instances_on_commit_id"
     t.index ["computer_id"], name: "index_test_instances_on_computer_id"
+    t.index ["created_at"], name: "index_test_instances_on_created_at"
     t.index ["submission_id"], name: "index_test_instances_on_submission_id"
     t.index ["test_case_commit_id"], name: "index_test_instances_on_test_case_commit_id"
     t.index ["test_case_id"], name: "index_test_instances_on_test_case_id"

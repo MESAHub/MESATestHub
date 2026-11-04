@@ -25,9 +25,9 @@ class Submission < ApplicationRecord
   # destroy doesn't trigger a stale write.
   after_create_commit :fulfill_claims
 
-  # Phase C: a new run may complete a `[ci optional]` / `[ci fpe]` /
-  # `[ci converge]` request on its commit (Commit#refresh_ci_satisfaction!).
-  after_create_commit :refresh_ci_satisfaction
+  # A new run may also complete a `[ci optional]` / `[ci fpe]` /
+  # `[ci converge]` request on its commit; CommitRefreshJob checks that
+  # (Commit#refresh_ci_satisfaction!) along with the scalars.
 
   paginates_per 25
 
@@ -132,12 +132,6 @@ class Submission < ApplicationRecord
     Claim.where(id: ids).update_all(status: 'fulfilled', fulfilled_at: now, updated_at: now)
   end
 
-  def refresh_ci_satisfaction
-    return if skip_scalar_refresh
-
-    commit.refresh_ci_satisfaction!
-  end
-
   # On destroy, capture the IDs of the TCCs this submission's
   # test_instances point at — `dependent: :destroy` will wipe the
   # instances before `after_commit :update_commit` fires, and the
@@ -150,12 +144,11 @@ class Submission < ApplicationRecord
     @affected_tcc_ids = test_instances.distinct.pluck(:test_case_commit_id).compact
   end
 
-  # Refresh the derived scalars on this submission's affected
-  # TestCaseCommits + parent Commit. Runs on create, update, AND
-  # destroy (the after_commit callback isn't scoped to any of
-  # them). Order matters: TCC scalars first, since
-  # `Commit#update_scalars` reads from `test_case_commits.where(
-  # status: ...)`.
+  # Flag the derived scalars on this submission's affected
+  # TestCaseCommits + parent Commit for CommitRefreshJob, which
+  # refreshes TCCs first (Commit#update_scalars counts their statuses).
+  # Runs on create, update, AND destroy (the after_commit callback isn't
+  # scoped to any of them).
   def update_commit
     return if skip_scalar_refresh
 
@@ -164,10 +157,7 @@ class Submission < ApplicationRecord
               else
                 test_case_commits.distinct.pluck(:id)
               end
-    TestCaseCommit.where(id: tcc_ids).find_each(&:update_and_save_scalars)
-
-    commit.update_scalars
-    commit.save
+    Commit.mark_scalars_stale(commit_id, tcc_ids: tcc_ids)
   end
 
 end
