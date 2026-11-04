@@ -1,132 +1,221 @@
 require 'rails_helper'
 
 RSpec.describe MorningReport, type: :model do
-  # Helper to wire a complete test instance + submission tree, since the
-  # `belongs_to :submission` validation on TestInstance won't accept a
-  # bare factory(:test_instance) without a submission_id. `created_at`
-  # can be overridden so we don't have to fiddle with global Time.
+  include ActiveSupport::Testing::TimeHelpers
+
+  # Wire a complete test instance + submission tree. `created_at` moves
+  # both, since the report selects commits by submission time.
   def make_instance(commit:, computer:, test_case:, created_at: nil, **attrs)
     submission = create(:submission, commit: commit, computer: computer)
     ti = create(:test_instance, commit: commit, computer: computer,
                                 test_case: test_case, submission: submission,
                                 **attrs)
-    ti.update_columns(created_at: created_at) if created_at
+    if created_at
+      submission.update_columns(created_at: created_at)
+      ti.update_columns(created_at: created_at)
+    end
     ti
   end
 
-  describe '.for' do
-    let(:as_of) { Time.zone.local(2026, 5, 25, 8, 0, 0) }
+  def commit_ids(report)
+    report.summaries.map { |cs| cs.commit.id }
+  end
 
-    it 'returns an empty report when no test instances exist in the window' do
+  # 2026-05-25 is EDT: the digest goes out at 12:00 UTC.
+  let(:send_date) { Date.new(2026, 5, 25) }
+  let(:as_of) { described_class.send_time(send_date) }
+  let(:test_case) { create(:test_case) }
+  let(:computer) { create(:computer) }
+  let(:main_branch) { create(:branch, name: 'main') }
+
+  describe 'the window' do
+    it 'ends at 8:00 AM US Eastern on the send date' do
+      expect(as_of).to eq(Time.utc(2026, 5, 25, 12))
+      expect(described_class.send_time(Date.new(2026, 12, 1))).to eq(Time.utc(2026, 12, 1, 13))
+    end
+
+    it 'returns an empty report when nothing arrived in the window' do
       report = described_class.new(as_of: as_of).build
       expect(report.any_commits?).to be(false)
-      expect(report.branch_sections).to be_empty
+      expect(report.sections).to be_empty
       expect(report.anomalies).to be_empty
     end
 
-    context 'with commits tested across two branches' do
-      let(:main_branch)    { create(:branch, name: 'main') }
-      let(:feature_branch) { create(:branch, name: 'feature/foo') }
-      let(:test_case)      { create(:test_case) }
-      let(:computer)       { create(:computer) }
-      let(:in_window_time) { as_of - 2.hours }
-      let(:out_of_window_time) { as_of - 30.hours }
+    it 'tiles days: a result just after one send lands in the next day, not the gap' do
+      commit = create(:commit)
+      create(:branch_membership, branch: main_branch, commit: commit)
+      make_instance(commit: commit, computer: computer, test_case: test_case,
+                    created_at: as_of + 3.hours)
 
-      let(:main_commit) do
-        create(:commit, commit_time: in_window_time - 1.minute)
-      end
-      let(:feature_commit) do
-        create(:commit, commit_time: in_window_time - 5.minutes)
-      end
-      let(:stale_commit) do
-        create(:commit, commit_time: out_of_window_time)
-      end
-
-      before do
-        create(:branch_membership, branch: main_branch, commit: main_commit)
-        create(:branch_membership, branch: feature_branch,
-                                   commit: feature_commit)
-        create(:branch_membership, branch: main_branch, commit: stale_commit)
-
-        make_instance(commit: main_commit, computer: computer,
-                      test_case: test_case, created_at: in_window_time)
-        make_instance(commit: feature_commit, computer: computer,
-                      test_case: test_case, created_at: in_window_time)
-        make_instance(commit: stale_commit, computer: computer,
-                      test_case: test_case, created_at: out_of_window_time)
-      end
-
-      it 'puts the main branch first, even if the feature commit is newer' do
-        report = described_class.new(as_of: as_of).build
-        names = report.branch_sections.map { |s| s.branch.name }
-        expect(names).to eq(['main', 'feature/foo'])
-      end
-
-      it 'only includes commits whose test instances landed in-window' do
-        report = described_class.new(as_of: as_of).build
-        all_commit_ids = report.branch_sections.flat_map { |s|
-          s.commit_summaries.map { |cs| cs.commit.id }
-        }
-        expect(all_commit_ids).to contain_exactly(main_commit.id,
-                                                   feature_commit.id)
-      end
+      today = described_class.new(as_of: as_of).build
+      tomorrow = described_class.new(as_of: described_class.send_time(send_date + 1)).build
+      expect(commit_ids(today)).to be_empty
+      expect(commit_ids(tomorrow)).to eq([commit.id])
     end
 
-    context 'with a branchless commit (PR test-merge, etc.)' do
-      let(:main_branch) { create(:branch, name: 'main') }
-      let(:test_case)   { create(:test_case) }
-      let(:computer)    { create(:computer) }
-      let(:in_window_time) { as_of - 2.hours }
-      let(:branch_commit) { create(:commit, commit_time: in_window_time) }
-      let(:branchless_commit) do
-        create(:commit, commit_time: in_window_time - 1.minute)
+    it 'builds a live, uncached report before the send time' do
+      travel_to(as_of - 2.hours) do
+        commit = create(:commit)
+        create(:branch_membership, branch: main_branch, commit: commit)
+        make_instance(commit: commit, computer: computer, test_case: test_case)
+        report = described_class.for(date: send_date)
+        expect(report.window_end).to be_within(1.second).of(Time.current)
+        expect(commit_ids(report)).to eq([commit.id])
       end
+    end
+  end
 
-      before do
-        create(:branch_membership, branch: main_branch, commit: branch_commit)
-        # branchless_commit deliberately has no membership.
-        make_instance(commit: branch_commit, computer: computer,
-                      test_case: test_case, created_at: in_window_time)
-        make_instance(commit: branchless_commit, computer: computer,
-                      test_case: test_case, created_at: in_window_time)
-      end
+  describe 'which commits are in it' do
+    let(:in_window) { as_of - 2.hours }
 
-      it 'still counts the branchless commit in commits_tested' do
-        report = described_class.new(as_of: as_of).build
-        expect(report.commits_tested.map(&:id))
-          .to contain_exactly(branch_commit.id, branchless_commit.id)
-      end
+    it 'includes a commit whose only report is a failed build' do
+      commit = create(:commit)
+      create(:branch_membership, branch: main_branch, commit: commit)
+      sub = create(:submission, commit: commit, computer: computer,
+                                compiled: false, entire: false, empty: true)
+      sub.update_columns(created_at: in_window)
 
-      it 'appends a synthetic "Unattached commits" section after real branches' do
-        report = described_class.new(as_of: as_of).build
-        section_names = report.branch_sections.map { |s| s.branch.name }
-        expect(section_names).to eq(['main', 'Unattached commits'])
-        synthetic = report.branch_sections.last
-        expect(synthetic.synthetic).to be(true)
-        expect(synthetic.commit_summaries.map { |cs| cs.commit.id })
-          .to eq([branchless_commit.id])
-      end
+      report = described_class.new(as_of: as_of).build
+      summary = report.summaries.first
+      expect(summary.commit).to eq(commit)
+      expect(summary.build_status).to eq(:all_fail)
+      expect(summary.failed_build_computers).to eq([computer.name])
+      expect(report.attention_summaries).to eq([summary])
+    end
 
-      it 'falls back to "main" for URL building on the synthetic section' do
-        report = described_class.new(as_of: as_of).build
-        synthetic = report.branch_sections.last
-        expect(synthetic.link_branch_name).to eq('main')
-      end
+    it 'includes a commit with only a claim (testing in progress)' do
+      commit = create(:commit)
+      create(:branch_membership, branch: main_branch, commit: commit)
+      claim = create(:claim, commit: commit, computer: computer)
+      claim.update_columns(created_at: in_window)
+
+      expect(commit_ids(described_class.new(as_of: as_of).build)).to eq([commit.id])
+    end
+
+    it 'leaves out commits with nothing new in the window' do
+      commit = create(:commit)
+      create(:branch_membership, branch: main_branch, commit: commit)
+      make_instance(commit: commit, computer: computer, test_case: test_case,
+                    created_at: as_of - 30.hours)
+
+      expect(described_class.new(as_of: as_of).build.any_commits?).to be(false)
+    end
+  end
+
+  describe 'sections' do
+    let(:in_window) { as_of - 2.hours }
+
+    def tested_commit(*branches, time: Time.current)
+      commit = create(:commit, commit_time: time, corrected_time: time)
+      branches.each { |b| create(:branch_membership, branch: b, commit: commit) }
+      make_instance(commit: commit, computer: computer, test_case: test_case,
+                    created_at: in_window)
+      commit
+    end
+
+    let(:report) { described_class.new(as_of: as_of).build }
+
+    it 'lists each commit once: a commit on main is not repeated under branches that merged it' do
+      feature = create(:branch, name: 'feature/foo')
+      shared = tested_commit(main_branch, feature)
+      own = tested_commit(feature)
+
+      expect(report.sections.map(&:kind)).to eq(%i[main branch])
+      expect(report.sections.first.commit_summaries.map(&:commit)).to eq([shared])
+      expect(report.sections.last.commit_summaries.map(&:commit)).to eq([own])
+      expect(report.summaries.size).to eq(2)
+    end
+
+    it 'groups stacked branches into one family, each commit once' do
+      base = create(:branch, name: 'stack/01')
+      top = create(:branch, name: 'stack/02')
+      lone = create(:branch, name: 'other')
+      low = tested_commit(base, top, time: 2.days.ago)
+      high = tested_commit(top, time: 1.day.ago)
+      solo = tested_commit(lone)
+
+      family = report.sections.find { |s| s.kind == :family }
+      expect(family.branch_names).to eq(%w[stack/01 stack/02])
+      expect(family.commit_summaries.map(&:commit)).to eq([high, low])
+      expect(report.sections.map(&:kind)).to eq(%i[family branch])
+      expect(report.sections.last.commit_summaries.map(&:commit)).to eq([solo])
+    end
+
+    it 'links a commit through main when it is on main' do
+      feature = create(:branch, name: 'feature/foo')
+      tested_commit(main_branch, feature)
+      expect(report.summaries.first.link_branch_name).to eq('main')
+    end
+
+    it 'puts branchless commits last, with no link' do
+      tested_commit(main_branch)
+      tested_commit
+
+      expect(report.sections.map(&:kind)).to eq(%i[main unattached])
+      expect(report.sections.last.commit_summaries.first.link_branch_name).to be_nil
+    end
+
+    it 'files a force-pushed-away commit under its old branch, not as needing attention' do
+      feature = create(:branch, name: 'feature/foo')
+      old = create(:commit)
+      replacement = tested_commit(feature)
+      make_instance(commit: old, computer: computer, test_case: test_case,
+                    created_at: in_window, passed: false)
+      CommitRewrite.create!(branch: feature, old_commit: old, new_commit: replacement,
+                            rewritten_at: in_window)
+
+      section = report.sections.sole
+      expect(section.kind).to eq(:branch)
+      rewritten = section.rewritten_summaries.sole
+      expect(rewritten.commit).to eq(old)
+      expect(rewritten.link_branch_name).to eq('feature/foo')
+      expect(rewritten.replacement).to eq(replacement)
+      expect(rewritten.tests_status).to eq(:fail)
+      expect(rewritten.needs_attention?).to be(false)
+    end
+
+    it 'counts commits needing attention once, however many branches they are on' do
+      a = create(:branch, name: 'a')
+      b = create(:branch, name: 'b')
+      commit = create(:commit)
+      [main_branch, a, b].each { |br| create(:branch_membership, branch: br, commit: commit) }
+      make_instance(commit: commit, computer: computer, test_case: test_case,
+                    created_at: in_window, passed: false)
+
+      expect(report.attention_summaries.map(&:commit)).to eq([commit])
+    end
+  end
+
+  describe 'statuses come from CommitState' do
+    it 'calls a run with some results and the rest untested :partial, not untested' do
+      commit = create(:commit)
+      create(:branch_membership, branch: main_branch, commit: commit)
+      other_case = create(:test_case, name: 'not_run_yet')
+      create(:test_case_commit, commit: commit, test_case: other_case)
+      make_instance(commit: commit, computer: computer, test_case: test_case,
+                    created_at: as_of - 1.hour)
+
+      summary = described_class.new(as_of: as_of).build.summaries.sole
+      expect(summary.tests_status).to eq(:partial)
+      expect(summary.needs_attention?).to be(false)
     end
   end
 
   describe 'FPE-only failures' do
+    def summary_for(commit)
+      described_class.new.send(:build_summary, commit, commit.commit_state)
+    end
+
     it 'splits them out of failing/mixed and labels them :fpe' do
       commit = create(:commit)
       fpe_case = create(:test_case, name: 'fpe_case')
       real_case = create(:test_case, name: 'real_case')
-      computer = create(:computer)
       make_instance(commit: commit, computer: computer, test_case: fpe_case,
                     passed: false, failure_type: 'fpe', fpe_checks: true)
       make_instance(commit: commit, computer: computer, test_case: real_case,
                     passed: false, failure_type: 'exit_code')
 
-      summary = described_class.new.send(:build_summary, commit.reload)
+      summary = summary_for(commit.reload)
       fpe_tcc = summary.problem_tccs.find { |t| t.test_case == fpe_case }
       real_tcc = summary.problem_tccs.find { |t| t.test_case == real_case }
 
@@ -140,70 +229,28 @@ RSpec.describe MorningReport, type: :model do
     it 'counts a likely FPE failure (same computer passed with FPE checks off)' do
       commit = create(:commit)
       tc = create(:test_case, name: 'likely_fpe')
-      computer = create(:computer)
       make_instance(commit: commit, computer: computer, test_case: tc,
                     passed: false, failure_type: 'exit_code', fpe_checks: true)
       make_instance(commit: commit, computer: computer, test_case: tc,
                     passed: true, fpe_checks: false)
 
-      summary = described_class.new.send(:build_summary, commit.reload)
+      summary = summary_for(commit.reload)
       expect(summary.fpe_tccs.map(&:test_case)).to eq([tc])
       expect(summary.mixed_tccs).to be_empty
     end
   end
 
-  describe 'CommitSummary' do
-    let(:commit) { create(:commit) }
-
-    def summary(overrides = {})
-      described_class::CommitSummary.new({
-        commit: commit, status: 0, build_status: 0, tested_count: 5,
-        computer_count: 1, complete_computer_count: 1,
-        failing_tccs: [], checksum_tccs: [], mixed_tccs: [], passing_count: 5
-      }.merge(overrides))
-    end
-
-    it 'returns :untested (not :unknown / :passing) for status = -1' do
-      s = summary(status: -1)
-      expect(s.status_label).to eq(:untested)
-      expect(s.failing?).to be(false)
-    end
-
-    it 'returns :passing for status = 0' do
-      expect(summary.status_label).to eq(:passing)
-    end
-
-    it 'maps build_status to a :build_ok / :build_fail / :build_mixed / :build_none label' do
-      expect(summary(build_status: 0).build_label).to eq(:build_ok)
-      expect(summary(build_status: 1).build_label).to eq(:build_fail)
-      expect(summary(build_status: 2).build_label).to eq(:build_mixed)
-      expect(summary(build_status: -1).build_label).to eq(:build_none)
-    end
-
-    it 'flags failing? on build failure even when tests are still pending' do
-      expect(summary(status: -1, build_status: 1).failing?).to be(true)
-    end
-
-    it 'flags failing? on mixed build status' do
-      expect(summary(status: 0, build_status: 2).failing?).to be(true)
-    end
-  end
-
   describe 'anomaly detection' do
-    let(:as_of)     { Time.zone.local(2026, 5, 25, 8, 0, 0) }
-    let(:test_case) { create(:test_case) }
-    let(:computer)  { create(:computer) }
     let(:cohort_size) { described_class::COHORT_MIN_SIZE + 4 }
 
-    # Build a stable cohort of historical passing instances, then evaluate
-    # the report against one fresh in-window candidate.
+    # A stable cohort of passing runs from before the window (runtime in
+    # minutes, memory in kB, with a little spread), then fresh results.
     def seed_cohort(runtime:, mem_rn: 1_000_000, count: cohort_size)
       count.times do |i|
         commit = create(:commit, commit_time: as_of - (10 + i).days)
         make_instance(commit: commit, computer: computer, test_case: test_case,
                       created_at: as_of - (10 + i).days,
-                      runtime_seconds: runtime, re_time: runtime / 4,
-                      total_runtime_seconds: runtime + runtime / 4,
+                      runtime_minutes: runtime + (i % 2) * 0.1 * runtime,
                       mem_rn: mem_rn, mem_re: mem_rn / 2)
       end
     end
@@ -211,70 +258,61 @@ RSpec.describe MorningReport, type: :model do
     def add_candidate(runtime:, mem_rn: 1_000_000, **overrides)
       commit = create(:commit, commit_time: as_of - 1.hour)
       make_instance(commit: commit, computer: computer, test_case: test_case,
-                    created_at: as_of - 1.hour,
-                    runtime_seconds: runtime, re_time: runtime / 4,
-                    total_runtime_seconds: runtime + runtime / 4,
+                    created_at: as_of - 1.hour, runtime_minutes: runtime,
                     mem_rn: mem_rn, mem_re: mem_rn / 2, **overrides)
     end
 
-    it 'flags a candidate whose runtime is far above the cohort mean' do
-      seed_cohort(runtime: 100)
-      candidate = add_candidate(runtime: 1_000)
-
-      report = described_class.new(as_of: as_of).build
-      flagged = report.anomalies.select do |a|
-        a.test_instance.id == candidate.id && a.metric == :rn_runtime
-      end
-      expect(flagged.size).to eq(1)
-      expect(flagged.first.z_score).to be > described_class::ANOMALY_Z_THRESHOLD
-      expect(flagged.first.cohort_size).to eq(cohort_size)
+    def flagged(candidate)
+      described_class.new(as_of: as_of).build.anomalies
+                     .select { |a| a.test_instance.id == candidate.id }
     end
 
-    it 'does NOT flag a candidate within normal cohort variance' do
-      seed_cohort(runtime: 100)
-      candidate = add_candidate(runtime: 105)
+    it 'flags a run far slower than its cohort' do
+      seed_cohort(runtime: 10)
+      candidate = add_candidate(runtime: 40)
 
-      report = described_class.new(as_of: as_of).build
-      flagged = report.anomalies.select do |a|
-        a.test_instance.id == candidate.id
-      end
-      expect(flagged).to be_empty
+      hits = flagged(candidate)
+      expect(hits.map(&:metric)).to eq([:runtime])
+      expect(hits.first.cohort_size).to eq(cohort_size)
+      expect(hits.first.ratio).to be > 3
     end
 
-    it 'does NOT flag when the cohort is below COHORT_MIN_SIZE' do
-      seed_cohort(runtime: 100, count: described_class::COHORT_MIN_SIZE - 1)
-      candidate = add_candidate(runtime: 9_999)
-
-      report = described_class.new(as_of: as_of).build
-      flagged = report.anomalies.select do |a|
-        a.test_instance.id == candidate.id
-      end
-      expect(flagged).to be_empty
+    it 'does not flag a run within normal variance' do
+      seed_cohort(runtime: 10)
+      expect(flagged(add_candidate(runtime: 11))).to be_empty
     end
 
-    it 'isolates cohorts by run_optional / fpe_checks' do
-      seed_cohort(runtime: 100)
-      # Candidate is on a DIFFERENT cohort (run_optional=true), and we
-      # haven't seeded a run_optional=true cohort. With no cohort, no
-      # anomaly should fire — confirming the partition.
-      candidate = add_candidate(runtime: 9_999, run_optional: true)
-
-      report = described_class.new(as_of: as_of).build
-      flagged = report.anomalies.select do |a|
-        a.test_instance.id == candidate.id
-      end
-      expect(flagged).to be_empty
+    it 'does not flag a big ratio on a tiny absolute change' do
+      seed_cohort(runtime: 0.2)
+      expect(flagged(add_candidate(runtime: 0.8))).to be_empty
     end
 
-    it 'flags a memory blowup as a separate anomaly with metric :rn_mem' do
-      seed_cohort(runtime: 100, mem_rn: 1_000_000)
-      candidate = add_candidate(runtime: 105, mem_rn: 50_000_000)
+    it 'does not flag when the cohort is below COHORT_MIN_SIZE' do
+      seed_cohort(runtime: 10, count: described_class::COHORT_MIN_SIZE - 1)
+      expect(flagged(add_candidate(runtime: 999))).to be_empty
+    end
 
-      report = described_class.new(as_of: as_of).build
-      flagged = report.anomalies.select do |a|
-        a.test_instance.id == candidate.id
-      end
-      expect(flagged.map(&:metric)).to include(:rn_mem)
+    it 'keeps cohorts apart by run_optional / fpe_checks / threads' do
+      seed_cohort(runtime: 10)
+      expect(flagged(add_candidate(runtime: 999, run_optional: true))).to be_empty
+      expect(flagged(add_candidate(runtime: 999, omp_num_threads: 64))).to be_empty
+    end
+
+    it 'flags a memory blowup as :rn_mem' do
+      seed_cohort(runtime: 10, mem_rn: 1_000_000)
+      candidate = add_candidate(runtime: 10, mem_rn: 5_000_000)
+      expect(flagged(candidate).map(&:metric)).to include(:rn_mem)
+    end
+
+    it 'reports the same slowdown on several commits once, with a count' do
+      seed_cohort(runtime: 10)
+      add_candidate(runtime: 40)
+      add_candidate(runtime: 50)
+
+      anomalies = described_class.new(as_of: as_of).build.anomalies
+      expect(anomalies.size).to eq(1)
+      expect(anomalies.first.occurrences).to eq(2)
+      expect(anomalies.first.value).to eq(50)
     end
   end
 end

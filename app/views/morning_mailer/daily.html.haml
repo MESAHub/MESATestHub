@@ -1,14 +1,22 @@
 -# Daily digest email body. Layout chrome (table wrappers, dark-mode
 -# style block) lives in app/views/layouts/morning_mailer.html.haml.
 -#
--# Sections are inlined rather than partial'd because most email
--# clients strip <style> blocks. Inline-style consistency is easier
--# when everything's in one place.
+-# Inline styles throughout: most email clients strip <style> blocks.
+-# Order: header (counts + what needs attention), performance
+-# anomalies, then every commit once, grouped main → related-branch
+-# families → single branches → unattached (see MorningReport).
+
+- zone = MorningReport::ZONE
+- window_from = @report.window_start.in_time_zone(zone)
+- window_to = @report.window_end.in_time_zone(zone)
+- attention = @report.attention_summaries
+- card_style = "background:#ffffff; border:1px solid #d8dde4; border-radius:10px;"
+- label_style = "font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#57606a;"
 
 -# ===== Header card =====
-%table.mesa-fg{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "background:#ffffff; border:1px solid #d8dde4; border-radius:10px;" }
+%table.mesa-card{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: card_style }
   %tr
-    %td{ style: "padding:20px 24px 16px 24px;" }
+    %td{ style: "padding:20px 24px 18px 24px;" }
       %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0" }
         %tr
           %td.mesa-wordmark-text{ style: "color:#1f2328; font-size:13px; font-weight:600;" }
@@ -19,52 +27,49 @@
 
       %div.mesa-fg{ style: "margin-top:18px; font-size:22px; font-weight:600; letter-spacing:-0.01em; color:#1f2328;" }
         - if @report.any_commits?
-          - n = @report.commits_tested.size
-          = pluralize(n, 'commit')
+          = pluralize(@report.commits_tested.size, 'commit')
           tested in the last 24 hours
         - else
           No new test runs in the last 24 hours
+      %div.mesa-fg-muted{ style: "margin-top:4px; font-size:12px; color:#57606a;" }
+        Results from #{window_from.strftime('%a %-l:%M %p')} to #{window_to.strftime('%a %-l:%M %p %Z')}
 
       - if @report.any_commits?
-        %div.mesa-fg-muted{ style: "margin-top:6px; font-size:13px; color:#57606a;" }
-          - if @report.any_failing?
-            #{@report.branch_sections.flat_map(&:commit_summaries).count(&:failing?)} commit(s) need attention.
-          - else
-            Everything that ran is green.
-          - if @report.any_anomalies?
-            #{pluralize(@report.anomalies.size, 'performance anomaly', plural: 'performance anomalies')} flagged below.
-
-      -# Stat strip.
-      - if @report.any_commits?
-        %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "margin-top:18px;" }
+        -# Stat strip.
+        %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "margin-top:16px;" }
           %tr
-            - tested_count = @report.commits_tested.size
-            - failing_count = @report.branch_sections.flat_map(&:commit_summaries).count(&:failing?)
-            - anomaly_count = @report.anomalies.size
-            %td.mesa-stat-cell.mesa-stack-on-mobile{ width: "33%", valign: "top", style: "padding-right:8px;" }
-              %table.mesa-card-subtle{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "background:#f7f8fa; border:1px solid #e6e8ec; border-radius:8px;" }
-                %tr
-                  %td{ style: "padding:12px 14px;" }
-                    %div.mesa-fg-muted{ style: "font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#57606a;" }
-                      Commits tested
-                    %div.mesa-stat-num{ style: "margin-top:4px; font-size:24px; font-weight:600; color:#1f2328;" }
-                      = tested_count
-            %td.mesa-stat-cell.mesa-stack-on-mobile{ width: "33%", valign: "top", style: "padding:0 4px;" }
-              %table.mesa-card-subtle{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "background:#f7f8fa; border:1px solid #e6e8ec; border-radius:8px;" }
-                %tr
-                  %td{ style: "padding:12px 14px;" }
-                    %div.mesa-fg-muted{ style: "font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#57606a;" }
-                      Need attention
-                    %div.mesa-stat-num{ style: "margin-top:4px; font-size:24px; font-weight:600; color:#{failing_count.zero? ? '#1f2328' : '#a40e26'};" }
-                      = failing_count
-            %td.mesa-stack-on-mobile{ width: "33%", valign: "top", style: "padding-left:8px;" }
-              %table.mesa-card-subtle{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "background:#f7f8fa; border:1px solid #e6e8ec; border-radius:8px;" }
-                %tr
-                  %td{ style: "padding:12px 14px;" }
-                    %div.mesa-fg-muted{ style: "font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#57606a;" }
-                      Anomalies
-                    %div.mesa-stat-num{ style: "margin-top:4px; font-size:24px; font-weight:600; color:#{anomaly_count.zero? ? '#1f2328' : '#a40e26'};" }
-                      = anomaly_count
+            - tiles = [["Commits tested", @report.commits_tested.size, false], ["Need attention", attention.size, attention.any?], ["Computers reporting", @report.computers_reporting, false]]
+            - tiles.each_with_index do |(label, value, alarm), i|
+              - pad = i.zero? ? "padding-right:8px;" : (i == tiles.size - 1 ? "padding-left:8px;" : "padding:0 4px;")
+              %td.mesa-stat-cell.mesa-stack-on-mobile{ width: "33%", valign: "top", style: pad }
+                %table.mesa-card-subtle{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "background:#f7f8fa; border:1px solid #e6e8ec; border-radius:8px;" }
+                  %tr
+                    %td{ style: "padding:12px 14px;" }
+                      %div.mesa-fg-muted{ style: label_style }= label
+                      %div{ class: (alarm ? nil : "mesa-stat-num"), style: "margin-top:4px; font-size:24px; font-weight:600; color:#{alarm ? '#a40e26' : '#1f2328'};" }= value
+
+        -# What needs attention, each commit once, worst first. Full
+        -# details are in the commit's section below.
+        - if attention.any?
+          %div.mesa-fg-muted{ style: "margin-top:18px; #{label_style}" } Needs attention
+          %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "margin-top:6px;" }
+            - attention.first(12).each do |cs|
+              %tr
+                %td{ valign: "top", style: "padding:5px 8px 5px 0; white-space:nowrap; width:1%;" }
+                  = mailer_sha_pill(cs.commit)
+                %td{ valign: "top", style: "padding:5px 0; font-size:13px; overflow-wrap:anywhere; word-break:break-word;" }
+                  = mailer_link_or_text(mailer_message_excerpt(cs.commit, length: 60), mailer_commit_url(cs), style: "color:#1f2328; text-decoration:none;")
+                  %div{ style: "margin-top:2px;" }
+                    = mailer_build_badge(cs)
+                    - unless cs.tests_status == :not_run && cs.build_failed?
+                      = mailer_tests_pill(cs)
+                    %span.mesa-fg-subtle{ style: "color:#8b949e; font-size:11px; padding-left:4px; overflow-wrap:anywhere; word-break:break-word;" }= cs.link_branch_name || "no branch"
+          - if attention.size > 12
+            %div.mesa-fg-subtle{ style: "margin-top:4px; font-size:11px; color:#8b949e;" }
+              and #{attention.size - 12} more below.
+        - else
+          %div.mesa-fg-muted{ style: "margin-top:14px; font-size:13px; color:#57606a;" }
+            Nothing failed. Everything that ran is passing or still in progress.
 
       %div.mesa-fg-muted{ style: "margin-top:14px; font-size:12px; color:#57606a;" }
         - case @report.release_blocker_count
@@ -81,121 +86,94 @@
 -# ===== Anomalies =====
 - if @report.any_anomalies?
   %div{ style: "height:16px;" }
-  %table.mesa-anomaly-card{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "background:#fff6f6; border:1px solid #f3c2c4; border-radius:10px;" }
+  %table.mesa-card{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: card_style }
     %tr
       %td{ style: "padding:18px 24px;" }
-        %div.mesa-fg{ style: "font-size:13px; font-weight:600; color:#a40e26; letter-spacing:0.02em; text-transform:uppercase;" }
-          Performance anomalies
+        %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0" }
+          %tr
+            %td.mesa-fg{ style: "color:#1f2328; font-size:13px; font-weight:600; letter-spacing:0.02em; text-transform:uppercase;" }
+              Performance anomalies
+            %td.mesa-fg-muted{ style: "color:#57606a; font-size:11px; text-align:right;" }
+              = @report.anomalies.size
         %div.mesa-fg-muted{ style: "margin-top:4px; font-size:12px; color:#57606a;" }
-          Passing instances that ran much slower or used much more memory than recent runs on the same (test case · computer · partial/full · fpe) cohort. Click any row to see the cohort the comparison is built from.
+          Passing runs much slower or bigger than the last 50 passing runs of the same test on the same computer, set up the same way (inlists, FPE checks, resolution, threads). Each test name links to that history.
 
-        - @report.anomalies.first(15).each_with_index do |anomaly, i|
-          - ti = anomaly.test_instance
-          %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "margin-top:#{i.zero? ? 12 : 8}px;" }
+        %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "margin-top:10px;" }
+          - @report.anomalies.first(15).each_with_index do |anomaly, i|
+            - ti = anomaly.test_instance
             %tr
-              %td{ style: "padding:10px 12px; background:#ffffff; border:1px solid #f3c2c4; border-radius:8px;" }
+              %td{ style: "padding:8px 0; #{i.zero? ? '' : 'border-top:1px solid #eceef2;'}" }
                 %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0" }
                   %tr
-                    %td{ valign: "top", style: "padding-right:8px;" }
-                      %div.mesa-fg{ style: "font-size:13px; font-weight:600; color:#1f2328;" }
-                        = link_to ti.test_case.name, mailer_anomaly_cohort_url(anomaly), class: "mesa-link", style: "color:#1f2328; text-decoration:none; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;"
-                      %div.mesa-fg-muted{ style: "margin-top:2px; font-size:12px; color:#57606a;" }
+                    %td{ valign: "top", style: "padding-right:8px; font-size:13px; overflow-wrap:anywhere;" }
+                      = link_to ti.test_case.name, mailer_anomaly_cohort_url(anomaly), class: "mesa-link mesa-fg", style: "color:#1f2328; text-decoration:none; font-weight:600; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;"
+                      %span.mesa-fg-muted{ style: "color:#57606a; font-size:12px; padding-left:4px;" }
                         on
                         %strong.mesa-fg{ style: "color:#1f2328; font-weight:600;" }= ti.computer.name
-                        %span{ style: "padding:0 6px; color:#8b949e;" } ·
-                        commit
-                        %code{ style: "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;" }= ti.commit.short_sha
-                        - if ti.run_optional
-                          %span{ style: "padding:0 6px; color:#8b949e;" } ·
-                          full
-                        - if ti.fpe_checks
-                          %span{ style: "padding:0 6px; color:#8b949e;" } ·
-                          fpe
-                    %td{ valign: "top", align: "right", style: "white-space:nowrap;" }
-                      = mailer_anomaly_badge
+                    %td{ valign: "top", align: "right", style: "white-space:nowrap; font-size:13px;" }
+                      %strong{ style: "color:#a40e26;" } ×#{format('%.1f', anomaly.ratio)}
                   %tr
-                    %td{ colspan: "2", style: "padding-top:8px;" }
-                      %div.mesa-fg{ style: "font-size:12px; color:#1f2328;" }
-                        %strong= anomaly.label
-                        %span{ style: "padding:0 4px; color:#8b949e;" } →
-                        - if anomaly.memory?
-                          %strong{ style: "color:#a40e26;" }
-                            #{mailer_memory_display(anomaly.value)} GB
-                          %span.mesa-fg-muted{ style: "color:#57606a;" }
-                            vs cohort mean
-                            = "#{mailer_memory_display(anomaly.cohort_mean)} GB"
-                            (×#{format('%.1f', anomaly.ratio)},
-                            #{format('%.1f', anomaly.z_score)}σ above mean,
-                            #{anomaly.cohort_size}-sample baseline)
-                        - else
-                          %strong{ style: "color:#a40e26;" }
-                            = mailer_runtime_display(anomaly.value)
-                          %span.mesa-fg-muted{ style: "color:#57606a;" }
-                            vs cohort mean
-                            = mailer_runtime_display(anomaly.cohort_mean)
-                            (×#{format('%.1f', anomaly.ratio)},
-                            #{format('%.1f', anomaly.z_score)}σ above mean,
-                            #{anomaly.cohort_size}-sample baseline)
-
+                    %td.mesa-fg-muted{ colspan: "2", style: "padding-top:2px; font-size:12px; color:#57606a;" }
+                      #{anomaly.label}
+                      %strong.mesa-fg{ style: "color:#1f2328;" }= mailer_anomaly_value(anomaly, anomaly.value)
+                      vs. usual #{mailer_anomaly_value(anomaly, anomaly.cohort_mean)}
+                      %span{ style: "padding:0 4px; color:#8b949e;" } ·
+                      - if anomaly.occurrences.to_i > 1
+                        on #{anomaly.occurrences} commits, worst
+                      %code{ style: "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;" }= ti.commit.short_sha
         - if @report.anomalies.size > 15
-          %div.mesa-fg-muted{ style: "margin-top:10px; font-size:11px; color:#8b949e;" }
-            (#{@report.anomalies.size - 15} additional anomalies omitted — see the web view for the full list.)
+          %div.mesa-fg-subtle{ style: "margin-top:6px; font-size:11px; color:#8b949e;" }
+            (#{@report.anomalies.size - 15} more in the web view.)
 
--# ===== Per-branch sections =====
-- if @report.any_commits?
-  - @report.branch_sections.each_with_index do |section, sect_i|
-    %div{ style: "height:16px;" }
-    %table.mesa-card{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "background:#ffffff; border:1px solid #d8dde4; border-radius:10px;" }
+-# ===== Sections: every commit once =====
+- @report.sections.each do |section|
+  %div{ style: "height:16px;" }
+  %table.mesa-card{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: card_style }
+    %tr
+      %td{ style: "padding:18px 24px 6px 24px;" }
+        %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0" }
+          %tr
+            %td.mesa-fg{ style: "color:#1f2328; font-size:13px; font-weight:600; letter-spacing:0.02em; overflow-wrap:anywhere; word-break:break-word;" }
+              = section.title
+            %td.mesa-fg-muted{ valign: "top", style: "color:#57606a; font-size:11px; text-align:right; padding-left:8px;" }
+              = pluralize(section.commit_count, 'commit')
+              - if section.attention_count.positive?
+                %span{ style: "color:#a40e26; font-weight:600;" } · #{section.attention_count} #{section.attention_count == 1 ? 'needs' : 'need'} attention
+        - case section.kind
+        - when :family
+          %div.mesa-fg-muted{ style: "margin-top:4px; font-size:11px; color:#57606a; word-break:break-word;" }
+            Branches that share commits; each commit is listed once.
+            %br
+            %span.mesa-fg-subtle{ style: "color:#8b949e; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere;" }= mailer_branch_list(section.branch_names)
+        - when :unattached
+          %div.mesa-fg-muted{ style: "margin-top:4px; font-size:11px; color:#8b949e;" }
+            On no branch — typically PR test-merge commits, or pushes whose branch sync hasn't landed yet. These have no commit page.
+
+    - section.current_summaries.each_with_index do |cs, i|
+      = render "morning_mailer/commit_row", cs: cs, first: i.zero?, section: section
+
+    - if section.rewritten_summaries.any?
       %tr
-        %td{ style: "padding:18px 24px 8px 24px;" }
-          %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0" }
-            %tr
-              %td.mesa-fg{ style: "color:#1f2328; font-size:13px; font-weight:600; letter-spacing:0.02em; text-transform:uppercase;" }
-                = section.branch.name
-              %td.mesa-fg-muted{ style: "color:#57606a; font-size:11px; text-align:right;" }
-                = pluralize(section.commit_count, 'commit')
-          - if section.synthetic
-            %div.mesa-fg-muted{ style: "margin-top:4px; font-size:11px; color:#8b949e;" }
-              Commits with no branch membership — typically PR test-merge commits, or pushes whose branch sync hasn't landed yet.
-
-      - section.commit_summaries.each_with_index do |cs, i|
-        %tr
-          %td{ style: "padding:0 24px;" }
-            - unless i.zero?
-              %div.mesa-divider{ style: "border-top:1px solid #eceef2; margin:0;" }
-            %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0" }
+        %td{ style: "padding:6px 24px 0 24px;" }
+          %div.mesa-divider{ style: "border-top:1px solid #eceef2;" }
+          %div.mesa-fg-muted{ style: "margin-top:10px; #{label_style}" }
+            Rebased away (#{section.rewritten_summaries.size})
+          %div.mesa-fg-subtle{ style: "margin-top:2px; font-size:11px; color:#8b949e;" }
+            Tested before a force-push replaced them. Not counted as needing attention.
+          %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0", style: "margin-top:4px;" }
+            - section.rewritten_summaries.first(10).each do |cs|
               %tr
-                %td{ style: "padding:12px 0;" }
-                  %table{ role: "presentation", width: "100%", cellspacing: "0", cellpadding: "0", border: "0" }
-                    %tr
-                      %td{ valign: "top", style: "padding-right:10px;" }
-                        %div
-                          = link_to mailer_message_excerpt(cs.commit), commit_url(branch: section.link_branch_name, sha: cs.commit.short_sha), class: "mesa-link mesa-fg", style: "color:#1f2328; text-decoration:none; font-size:14px; font-weight:500;"
-                        %div.mesa-fg-muted{ style: "margin-top:4px; font-size:12px; color:#57606a;" }
-                          = mailer_sha_pill(cs.commit)
-                          %span{ style: "padding:0 6px; color:#8b949e;" } ·
-                          = cs.commit.author
-                          %span{ style: "padding:0 6px; color:#8b949e;" } ·
-                          - if cs.complete_computer_count == cs.computer_count
-                            #{pluralize(cs.tested_count, 'test')} on #{pluralize(cs.computer_count, 'computer')}
-                          - else
-                            #{pluralize(cs.tested_count, 'test')} · #{cs.complete_computer_count} of #{cs.computer_count} computers complete
-                      %td{ valign: "top", align: "right", style: "white-space:nowrap;" }
-                        - if cs.build_label != :build_none
-                          %div{ style: "margin-bottom:4px;" }
-                            = mailer_build_badge(cs.build_label)
-                        = mailer_status_badge(cs.status_label)
+                %td{ valign: "top", style: "padding:3px 8px 3px 0; white-space:nowrap; width:1%;" }
+                  = mailer_sha_pill(cs.commit)
+                %td{ valign: "top", style: "padding:3px 8px 3px 0; font-size:12px; overflow-wrap:anywhere; word-break:break-word;" }
+                  = mailer_link_or_text(mailer_message_excerpt(cs.commit, length: 60), mailer_commit_url(cs), style: "color:#57606a; text-decoration:none;")
+                  - if cs.replacement
+                    %span.mesa-fg-subtle{ style: "color:#8b949e; font-size:11px;" } → #{cs.replacement.short_sha}
+                %td{ valign: "top", align: "right", style: "padding:3px 0; white-space:nowrap;" }
+                  = mailer_tests_pill(cs)
+          - if section.rewritten_summaries.size > 10
+            %div.mesa-fg-subtle{ style: "margin-top:2px; font-size:11px; color:#8b949e;" }
+              and #{section.rewritten_summaries.size - 10} more.
 
-                  - if cs.problem_tccs.any?
-                    %div{ style: "margin-top:8px; background:#fafbfc; border:1px solid #e6e8ec; border-radius:6px; padding:8px 10px;" }
-                      - cs.problem_tccs.first(8).each do |tcc|
-                        %div{ style: "padding:2px 0; font-size:12px;" }
-                          = mailer_tcc_badge(cs.label_for(tcc))
-                          %span{ style: "padding-left:8px;" }
-                            = link_to tcc.test_case.name, mailer_test_case_commit_url(section.link_branch_name, tcc, cs.commit), class: "mesa-link mesa-fg", style: "color:#1f2328; text-decoration:none; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;"
-                      - if cs.problem_tccs.size > 8
-                        %div.mesa-fg-muted{ style: "padding-top:4px; font-size:11px; color:#8b949e;" }
-                          (+ #{cs.problem_tccs.size - 8} more)
-
-      %tr
-        %td{ style: "padding:8px 24px 16px 24px;" }
+    %tr
+      %td{ style: "padding:0 24px 12px 24px;" }

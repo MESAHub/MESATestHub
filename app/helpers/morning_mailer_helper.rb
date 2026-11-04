@@ -3,95 +3,93 @@
 # fragments — no Tailwind utility classes, since most email clients
 # don't load the Tailwind build.
 module MorningMailerHelper
-  # Map MorningReport::CommitSummary#status_label to a (label, badge css
-  # class, inline style) tuple. The CSS class is referenced by the
-  # mailer layout's dark-mode @media rules; the inline style is the
-  # always-on light-mode look.
-  STATUS_STYLES = {
-    passing:   { label: 'Tests: Pass',      klass: 'mesa-badge-success',
-                 style: 'background:#d8f5df; color:#0a5825;' },
-    failing:   { label: 'Tests: Fail',      klass: 'mesa-badge-danger',
-                 style: 'background:#ffe4e6; color:#a40e26;' },
-    checksums: { label: 'Tests: Checksums', klass: 'mesa-badge-checksum',
-                 style: 'background:#ede5ff; color:#5b21b6;' },
-    mixed:     { label: 'Tests: Mixed',     klass: 'mesa-badge-mixed',
-                 style: 'background:#fef6cf; color:#6b4900;' },
-    # `:untested` is `Commit#status = -1` — no test results yet.
-    # "Untested", not "Pending": pending promises results are coming,
-    # which only a claim can say. Neutral gray so it doesn't
-    # masquerade as Passing.
-    untested:  { label: 'Tests: Untested',  klass: 'mesa-badge-skipped',
-                 style: 'background:#eceef2; color:#57606a;' }
+  # Badge palettes: (dark-mode css class, always-on light-mode style).
+  # The class is referenced by the mailer layout's dark-mode @media
+  # rules.
+  BADGE_TONES = {
+    success:  ['mesa-badge-success',  'background:#d8f5df; color:#0a5825;'],
+    danger:   ['mesa-badge-danger',    'background:#ffe4e6; color:#a40e26;'],
+    mixed:    ['mesa-badge-mixed',     'background:#fef6cf; color:#6b4900;'],
+    fpe:      ['mesa-badge-fpe',       'background:#fde4f2; color:#9d1c6c;'],
+    checksum: ['mesa-badge-checksum',  'background:#ede5ff; color:#5b21b6;'],
+    info:     ['mesa-badge-info',      'background:#e3e8ff; color:#2a3fd1;'],
+    muted:    ['mesa-badge-skipped',   'background:#eceef2; color:#57606a;']
   }.freeze
 
-  # Separate from STATUS_STYLES so a "no compile status reported"
-  # commit can suppress the badge entirely without affecting the
-  # tests-status fallback.
-  BUILD_STYLES = {
-    build_ok:    { label: 'Build: OK',    klass: 'mesa-badge-success',
-                   style: 'background:#d8f5df; color:#0a5825;' },
-    build_fail:  { label: 'Build: Fail',  klass: 'mesa-badge-danger',
-                   style: 'background:#ffe4e6; color:#a40e26;' },
-    build_mixed: { label: 'Build: Mixed', klass: 'mesa-badge-mixed',
-                   style: 'background:#fef6cf; color:#6b4900;' }
-    # :build_none intentionally absent — render nothing rather than
-    # a confusing placeholder when no compilation status came in.
-  }.freeze
-
-  # Falls back to the untested style for any unexpected label rather
-  # than silently labeling unknowns as Passing — the previous behavior
-  # masked status=-1 commits as green.
-  def mailer_status_badge(label)
-    style = STATUS_STYLES[label] || STATUS_STYLES[:untested]
-    badge_pill(text: style[:label], klass: style[:klass], style: style[:style])
+  def mailer_badge(text, tone, title: nil)
+    klass, style = BADGE_TONES.fetch(tone)
+    badge_pill(text: text, klass: klass, style: style, title: title)
   end
 
-  # Returns build-status badge HTML, or an empty (safe) string when no
-  # build status is available so the layout collapses gracefully.
-  def mailer_build_badge(label)
-    style = BUILD_STYLES[label]
-    return ''.html_safe unless style
-
-    badge_pill(text: style[:label], klass: style[:klass], style: style[:style])
+  # The tests pill, worded like the site's `test_status_pill` so the
+  # email and the commit pages agree.
+  def mailer_tests_pill(summary)
+    t = summary.tests
+    case summary.tests_status
+    when :fail then mailer_badge("#{t[:uniform_failing_tests]} failing", :danger)
+    when :mixed then mailer_badge("#{t[:mixed_tests]} mixed", :mixed)
+    when :fpe then mailer_badge("#{t[:fpe_tests]} FPE", :fpe)
+    when :checksum then mailer_badge("#{t[:checksum_tests]} checksum ≠", :checksum)
+    when :pending, :pending_partial then mailer_badge('Pending', :info)
+    when :partial then mailer_badge("#{t[:reported_tests]}/#{t[:total_tests]} passing", :muted)
+    when :all_pass then mailer_badge('All passing', :success)
+    else mailer_badge('Untested', :muted)
+    end
   end
 
-  # Short-form badges for the inline per-test-case-commit lists
-  # (rendered next to a test-case name, where the "Tests:" prefix
-  # used by the commit-level status badge is redundant).
-  TCC_STATUS_STYLES = {
-    failing:   { label: 'Fail',      klass: 'mesa-badge-danger',
-                 style: 'background:#ffe4e6; color:#a40e26;' },
-    checksums: { label: 'Checksums', klass: 'mesa-badge-checksum',
-                 style: 'background:#ede5ff; color:#5b21b6;' },
-    fpe:       { label: 'FPE',       klass: 'mesa-badge-fpe',
-                 style: 'background:#fde4f2; color:#9d1c6c;' },
-    mixed:     { label: 'Mixed',     klass: 'mesa-badge-mixed',
-                 style: 'background:#fef6cf; color:#6b4900;' }
+  # Only failed builds get a badge; a good build is the norm and
+  # labeling every row "Build: OK" buried the ones that weren't.
+  def mailer_build_badge(summary)
+    case summary.build_status
+    when :all_fail
+      mailer_badge('Build failed', :danger)
+    when :some_fail
+      names = summary.failed_build_computers
+      text = names.size == 1 ? "Build failed on #{names.first}" : "Build failed on #{names.size}"
+      mailer_badge(text, :danger, title: names.join(', '))
+    else
+      ''.html_safe
+    end
+  end
+
+  # One line under a commit: how many tests have results, on how many
+  # computers, and how many are still claimed.
+  def mailer_coverage_text(summary)
+    t = summary.tests
+    parts = []
+    if t[:total_tests].to_i.positive?
+      parts << "#{t[:reported_tests]}/#{t[:total_tests]} tests reported"
+    end
+    parts << pluralize(summary.computer_count, 'computer') if summary.computer_count.positive?
+    parts << "#{t[:pending_tests]} pending" if t[:pending_tests].to_i.positive?
+    parts.join(' · ')
+  end
+
+  # Short-form badges for the inline per-test-case-commit lists.
+  TCC_BADGES = {
+    failing: ['Fail', :danger],
+    mixed: ['Mixed', :mixed],
+    fpe: ['FPE', :fpe],
+    checksums: ['Checksum ≠', :checksum]
   }.freeze
 
   def mailer_tcc_badge(label)
-    style = TCC_STATUS_STYLES[label] || TCC_STATUS_STYLES[:failing]
-    badge_pill(text: style[:label], klass: style[:klass], style: style[:style])
+    text, tone = TCC_BADGES.fetch(label, TCC_BADGES[:failing])
+    mailer_badge(text, tone)
   end
 
-  def mailer_anomaly_badge
-    badge_pill(text: 'Anomaly',
-               klass: 'mesa-badge-danger',
-               style: 'background:#ffe4e6; color:#a40e26;')
-  end
-
-  def badge_pill(text:, klass:, style:)
+  def badge_pill(text:, klass:, style:, title: nil)
     content_tag(:span, text,
-                class: klass,
+                class: klass, title: title,
                 style: "display:inline-block; padding:2px 8px; " \
                        "border-radius:999px; font-size:11px; " \
-                       "font-weight:600; line-height:1.5; #{style}")
+                       "font-weight:600; line-height:1.5; white-space:nowrap; #{style}")
   end
 
-  # 8-char SHA in a pill for the per-commit header.
+  # 7-char SHA in a pill for the per-commit header.
   def mailer_sha_pill(commit)
     content_tag(:code, commit.short_sha,
-                style: 'display:inline-block; padding:2px 8px; ' \
+                style: 'display:inline-block; padding:1px 6px; ' \
                        'border-radius:6px; background:#eceef2; ' \
                        'color:#1f2328; font-family:ui-monospace, ' \
                        'SFMono-Regular,Menlo,monospace; font-size:12px; ' \
@@ -104,15 +102,47 @@ module MorningMailerHelper
     msg.length > length ? "#{msg[0, length - 1]}…" : msg
   end
 
-  # Memory in raw bytes (×1024² of GB on disk) → display GB string.
-  def mailer_memory_display(value_in_kb_squared)
-    return '0' if value_in_kb_squared.to_i.zero?
+  # Commit detail URL, or nil when the commit is on no branch (it has
+  # no page to link to).
+  def mailer_commit_url(summary)
+    return nil unless summary.link_branch_name
 
-    gb = value_in_kb_squared.to_f / (1024.0 * 1024.0)
-    if gb >= 10
-      format('%.1f', gb)
+    commit_url(branch: summary.link_branch_name, sha: summary.commit.short_sha)
+  end
+
+  # Test-case-commit detail URL, or nil when the commit is on no branch.
+  def mailer_test_case_commit_url(summary, tcc)
+    return nil unless summary.link_branch_name
+
+    test_case_commit_url(branch: summary.link_branch_name,
+                         module: tcc.test_case.module,
+                         test_case: tcc.test_case.name,
+                         sha: summary.commit.short_sha)
+  end
+
+  # link_to when there's a URL, plain span otherwise.
+  def mailer_link_or_text(text, url, style:)
+    if url
+      link_to text, url, class: 'mesa-link mesa-fg', style: style
     else
-      format('%.2f', gb)
+      content_tag(:span, text, class: 'mesa-fg', style: style)
+    end
+  end
+
+  # Branch names for a family section's sub-heading, capped.
+  def mailer_branch_list(names, max: 8)
+    shown = names.first(max).join(' · ')
+    names.size > max ? "#{shown} · and #{names.size - max} more" : shown
+  end
+
+  # An anomaly's value or cohort mean, with units. Runtime is stored in
+  # minutes, memory in kB.
+  def mailer_anomaly_value(anomaly, value)
+    if anomaly.memory?
+      gb = value.to_f / (1024.0 * 1024.0)
+      format(gb >= 10 ? '%.1f GB' : '%.2f GB', gb)
+    else
+      mailer_runtime_display(value.to_f * 60)
     end
   end
 
@@ -129,22 +159,12 @@ module MorningMailerHelper
   end
 
   # Search-page URL pointing at the cohort behind an anomaly — same
-  # (test_case, computer, run_optional/fpe context) and a commit-time
-  # window that maps to the cohort lookback. The user lands on a fully
-  # populated query so they can see the historical data for themselves.
-  # Test-case-commit detail URL — wraps the four-keyword route helper so
-  # the HAML template can use it on one line.
-  def mailer_test_case_commit_url(branch_name, tcc, commit)
-    test_case_commit_url(branch: branch_name,
-                         module: tcc.test_case.module,
-                         test_case: tcc.test_case.name,
-                         sha: commit.short_sha)
-  end
-
+  # test case and computer, passing runs over the last six months — so
+  # the reader can see the history the comparison came from.
   def mailer_anomaly_cohort_url(anomaly)
     ti = anomaly.test_instance
-    from = (ti.commit.commit_time - 6.months).to_date
-    to   = ti.commit.commit_time.to_date
+    from = (ti.created_at - 6.months).to_date
+    to   = ti.created_at.to_date
     pieces = [
       "test_case: #{ti.test_case.name}",
       "computer: #{ti.computer.name}",

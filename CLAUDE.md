@@ -258,7 +258,8 @@ helper or partial exists.
   returns `{ id => commit_state }` from `Rails.cache`. It preloads and
   computes only the commits that missed. This covers the commits index,
   the home sections and unified view, the recent-branch cards, the hero
-  subway map, and the diff tab's clean-baseline walk.
+  subway map, the diff tab's clean-baseline walk, and the morning
+  digest.
   - **The key is a fingerprint, not a TTL.** It holds the row count and
     newest `updated_at` of the commit's submissions, test_instances,
     TCCs and claims, all fetched in one query per page. Claims change
@@ -374,7 +375,8 @@ helper or partial exists.
     satisfaction. On an error it puts the flags back. A `stale_scalars`
     recurring task re-enqueues any commit left flagged.
   - **What lags:** stored counts (index meta line, test-case history,
-    the morning digest), by up to ~5s. Matrices, rings and pills read
+    the TCC statuses behind the digest's problem-test lists), by up to
+    ~5s. Matrices, rings and pills read
     `test_instances` directly and don't.
   - **In tests:** `config.x.defer_scalar_refresh` is false, so the
     refresh runs inline (`perform_now`). `spec/jobs/commit_refresh_job_spec.rb`
@@ -509,7 +511,8 @@ helper or partial exists.
     (`CommitState#_in_progress_computers`). Tests status `:pending`
     renders as a blue "Pending" pill, not "Untested".
   - The computer summary reads "N ok · M untested". The morning digest
-    says "Tests: Untested", not "Pending", for commits with no results.
+    words its pills like `test_status_pill` (Untested / Pending /
+    "104/107 passing" / N failing …), from the same CommitState.
 - **The commit matrix draws columns, not computers.**
   `CommitState#matrix_columns` gives a computer one column per
   comparison pool it has runs in (LLNL_Dane default + full, delorean
