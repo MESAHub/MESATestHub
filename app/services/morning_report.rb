@@ -30,7 +30,7 @@ class MorningReport
   WINDOW = 24.hours
   ZONE = 'America/New_York'.freeze
   SEND_HOUR = 8
-  CACHE_VERSION = 3
+  CACHE_VERSION = 4
 
   # Cohort math knobs. The cohort is the previous `COHORT_LIMIT` passing
   # instances with the same cohort key (see #cohort_key) from before the
@@ -44,6 +44,10 @@ class MorningReport
                              # still a meaningless absolute jump)
   # AND an absolute jump big enough to matter. Memory is nearly
   # deterministic, so its stddev is tiny and z alone flags any change.
+  # A computer whose runtime is out of range on this many different tests
+  # in one digest was busy or throttled, not regressed: its runtime
+  # findings fold into one machine_slowdowns line.
+  MACHINE_SLOWDOWN_MIN_TESTS = 5
   ANOMALY_MIN_DELTA = {
     runtime: 1.0,        # minutes
     rn_mem: 256 * 1024,  # kB (256 MB)
@@ -51,6 +55,7 @@ class MorningReport
   }.freeze
 
   attr_reader :date, :window_start, :window_end, :sections, :anomalies,
+              :machine_slowdowns,
               :computers_reporting, :release_blocker_count
 
   # The date whose digest goes out (or went out) this morning, Eastern.
@@ -81,6 +86,7 @@ class MorningReport
     @date = as_of.in_time_zone(ZONE).to_date
     @sections = []
     @anomalies = []
+    @machine_slowdowns = []
     @computers_reporting = 0
   end
 
@@ -114,7 +120,7 @@ class MorningReport
   end
 
   def any_anomalies?
-    anomalies.any?
+    anomalies.any? || machine_slowdowns.any?
   end
 
   # ===== Inner data classes =====
@@ -212,6 +218,9 @@ class MorningReport
 
   # One flagged metric on one test instance. `metric` is :runtime,
   # :rn_mem, or :re_mem. Runtime is stored in minutes, memory in kB.
+  MachineSlowdown = Struct.new(:computer, :test_count, :min_ratio, :max_ratio,
+                               keyword_init: true)
+
   Anomaly = Struct.new(
     :test_instance, :metric, :value, :cohort_mean, :cohort_stddev,
     :cohort_size, :z_score, :ratio, :occurrences, :link_branch_name,
@@ -385,6 +394,10 @@ class MorningReport
   # last COHORT_LIMIT passing runs of the same cohort from before the
   # window. (runtime_seconds / re_time / total_runtime_seconds, which
   # this used to read, are never written, so it never flagged anything.)
+  #
+  # A run only counts when the computer's next or previous commit in the
+  # same cohort is also out of range (#flag_streaks): one slow run is
+  # usually the machine, not the code.
   def load_anomalies
     return if commits_tested.empty?
 
@@ -394,21 +407,147 @@ class MorningReport
       .to_a
     return if candidates.empty?
 
-    stats = cohort_stats(candidates)
-    candidates.each do |ti|
-      s = stats[cohort_key(ti)]
-      flag_anomalies(ti, s) if s
-    end
-    @anomalies = dedupe_anomalies(@anomalies)
+    baselines = cohort_baselines(candidates)
     branch_by_commit = summaries.to_h { |cs| [cs.commit.id, cs.link_branch_name] }
+    order = CommitOrder.new(candidates, baselines.values, branch_by_commit)
+    candidates.group_by { |ti| cohort_key(ti) }.each do |key, runs|
+      base = baselines[key] or next
+      commits = cohort_commits(base[:history], runs)
+      runs.group_by { |ti| branch_by_commit[ti.commit_id] }.each do |branch, branch_runs|
+        own = branch_runs.map(&:commit_id).to_set
+        seq = commits.keys.select { |id| own.include?(id) || order.on_branch?(branch, id) }
+                     .sort_by { |id| order.sort_key(id, commits[id][:at]) }
+                     .map { |id| commits[id] }
+        METRIC_TO_COLUMN.each_key do |metric|
+          stat = base[:stats][metric] or next
+          flag_streaks(metric, stat, seq)
+        end
+      end
+    end
+    @anomalies = fold_machine_slowdowns(dedupe_anomalies(@anomalies))
     @anomalies.each { |a| a.link_branch_name = branch_by_commit[a.test_instance.commit_id] }
   end
 
-  # One entry per (test, computer, metric): the same slowdown on three
-  # commits is one finding. Keeps the worst and counts the rest.
+  # Where each commit a cohort touches sits on its branch: membership in
+  # the branches the window's commits link through (a branch's
+  # memberships cover its whole history, main's ancestors included) and
+  # corrected_time, the order used everywhere else a branch is walked.
+  class CommitOrder
+    def initialize(candidates, baselines, branch_by_commit)
+      ids = (candidates.map(&:commit_id) +
+             baselines.flat_map { |b| b[:history].map { |h| h[:commit_id] } }).uniq
+      names = branch_by_commit.values.compact.uniq
+      branch_ids = Branch.where(name: names).pluck(:id, :name).to_h
+      @members = Hash.new { |h, k| h[k] = Set.new }
+      BranchMembership.where(branch_id: branch_ids.keys, commit_id: ids)
+                      .pluck(:branch_id, :commit_id)
+                      .each { |bid, cid| @members[branch_ids[bid]] << cid }
+      @times = Commit.where(id: ids).pluck(:id, :corrected_time).to_h
+    end
+
+    # A commit on no branch has no branch history to sit in, so its
+    # sequence falls back to every commit the cohort touched.
+    def on_branch?(branch_name, commit_id)
+      branch_name.nil? || @members[branch_name].include?(commit_id)
+    end
+
+    def sort_key(commit_id, tested_at)
+      [@times[commit_id] || tested_at, commit_id]
+    end
+  end
+
+  # { commit_id => { at:, fresh:, values: { metric => lowest },
+  #                  runs: { metric => window run with that value } } }
+  # Each commit counts once, at its lowest value, so a normal rerun of
+  # the same commit clears it. `fresh` means first tested in the window.
+  def cohort_commits(history, runs)
+    points = history.map { |h| [h[:commit_id], h[:created_at], h, nil] } +
+             runs.map do |ti|
+               [ti.commit_id, ti.created_at,
+                METRIC_TO_COLUMN.transform_values { |col| ti.public_send(col)&.to_f }, ti]
+             end
+    points.group_by(&:first).transform_values do |ps|
+      first_at = ps.map { |p| p[1] }.min
+      values = {}
+      window_runs = {}
+      METRIC_TO_COLUMN.each_key do |metric|
+        with = ps.select { |p| p[2][metric] }
+        values[metric] = with.map { |p| p[2][metric] }.min
+        window_runs[metric] = with.select { |p| p[3] }.min_by { |p| p[2][metric] }&.last
+      end
+      { at: first_at, fresh: first_at >= window_start, values: values, runs: window_runs }
+    end
+  end
+
+  # Walks one cohort's commits in branch order (see CommitOrder) and
+  # reports a metric only when it is out of range on two or more commits
+  # in a row: one slow run is usually the machine, not the code.
+  #
+  # A streak is reported once. It needs a commit first tested in the
+  # window, and is skipped when two of its commits were already next to
+  # each other among the commits tested before the window: an earlier
+  # digest reported it then. A lone spike before the window is reported
+  # today if a commit next to it on the branch confirms it, whenever
+  # that commit was tested.
+  def flag_streaks(metric, stat, seq)
+    out = seq.map { |c| c[:values][metric] && out_of_range(metric, c[:values][metric], stat) }
+    stale = seq.each_index.reject { |i| seq[i][:fresh] }
+    reported = stale.each_cons(2).select { |i, j| out[i] && out[j] }.to_set
+
+    seq.each_index.chunk_while { |i, j| out[i] && out[j] }.each do |idx|
+      next unless idx.size >= 2 && out[idx.first]
+      # Two of its pre-window commits were adjacent (a commit tested
+      # since may sit between them now): an earlier digest had it.
+      next if reported.any? { |i, j| idx.include?(i) && idx.include?(j) }
+
+      worst = idx.select { |i| seq[i][:fresh] && seq[i][:runs][metric] }
+                 .max_by { |i| [out[i][:ratio], i] }
+      next unless worst
+
+      @anomalies << Anomaly.new(
+        test_instance: seq[worst][:runs][metric], metric: metric,
+        value: seq[worst][:values][metric],
+        cohort_mean: stat[:mean], cohort_stddev: stat[:stddev],
+        cohort_size: stat[:count], occurrences: idx.size, **out[worst]
+      )
+    end
+  end
+
+  # { ratio:, z_score: } when value clears every threshold, else nil.
+  def out_of_range(metric, value, stat)
+    return nil if value.zero? || stat[:mean].zero?
+
+    ratio = value / stat[:mean]
+    return nil if ratio < ANOMALY_RATIO_FLOOR
+    return nil if value - stat[:mean] < ANOMALY_MIN_DELTA[metric]
+
+    z = stat[:stddev].zero? ? Float::INFINITY : (value - stat[:mean]) / stat[:stddev]
+    return nil if z < ANOMALY_Z_THRESHOLD
+
+    { ratio: ratio, z_score: z }
+  end
+
+  # One entry per (test, computer, metric), the worst; occurrences is
+  # how many commits in a row it held for.
+  # Runtime findings from a computer that ran slow on many tests at once
+  # become one MachineSlowdown; memory findings stay, since load doesn't
+  # change memory.
+  def fold_machine_slowdowns(list)
+    slow = list.select { |a| a.metric == :runtime }
+               .group_by { |a| a.test_instance.computer }
+               .select { |_, group| group.size >= MACHINE_SLOWDOWN_MIN_TESTS }
+    @machine_slowdowns = slow.map do |computer, group|
+      ratios = group.map(&:ratio)
+      MachineSlowdown.new(computer: computer, test_count: group.size,
+                          min_ratio: ratios.min, max_ratio: ratios.max)
+    end.sort_by { |m| -m.test_count }
+    folded = slow.values.flatten
+    list.reject { |a| folded.include?(a) }
+  end
+
   def dedupe_anomalies(list)
     list.group_by { |a| [a.test_instance.test_case_id, a.test_instance.computer_id, a.metric] }
-        .map { |_, group| group.max_by(&:ratio).tap { |a| a.occurrences = group.size } }
+        .map { |_, group| group.max_by(&:ratio) }
         .sort_by { |a| -a.ratio }
   end
 
@@ -428,18 +567,21 @@ class MorningReport
   end
 
   # inlist_count when known; otherwise -1 (default) or -2 (full), which
-  # no real count collides with. Mirrored in cohort_stats' PARTITION BY.
+  # no real count collides with. Mirrored in cohort_baselines' PARTITION BY.
   def inlists_key(inlist_count, run_optional)
     inlist_count || (run_optional ? -2 : -1)
   end
 
-  # { cohort_key => { metric => {mean:, stddev:, count:} } }, from one
-  # windowed query over every cohort the candidates need.
-  def cohort_stats(candidates)
+  # { cohort_key => { stats: { metric => {mean:, stddev:, count:} },
+  #                   history: [{commit_id:, created_at:, metric => value}] } }
+  # from one windowed query over every cohort the candidates need. The
+  # history (oldest first) is what #flag_streaks checks the run before
+  # the window against.
+  def cohort_baselines(candidates)
     sql = <<~SQL.squish
       SELECT test_case_id, computer_id, inlist_count, run_optional, fpe_checks,
              resolution_factor, omp_num_threads,
-             runtime_minutes, mem_rn, mem_re
+             runtime_minutes, mem_rn, mem_re, commit_id, EXTRACT(EPOCH FROM created_at)
       FROM (
         SELECT test_instances.*, ROW_NUMBER() OVER (
           PARTITION BY test_case_id, computer_id,
@@ -464,13 +606,19 @@ class MorningReport
       }])
     )
     bool = ActiveModel::Type::Boolean.new
+    metrics = METRIC_TO_COLUMN.keys
     rows.group_by do |tc, comp, inlists, opt, fpe, factor, threads, *_|
       [tc.to_i, comp.to_i, inlists_key(inlists&.to_i, bool.cast(opt)),
        !!bool.cast(fpe), (factor || 1.0).to_f, threads&.to_i]
     end.transform_values do |group|
-      METRIC_TO_COLUMN.keys.each_with_index.to_h do |metric, i|
+      history = group.map do |r|
+        { commit_id: r[10].to_i, created_at: Time.at(r[11].to_f) }
+          .merge(metrics.each_with_index.to_h { |m, i| [m, r[7 + i]&.to_f] })
+      end.sort_by { |h| h[:created_at] }
+      stats = metrics.each_with_index.to_h do |metric, i|
         [metric, column_stats(group.map { |r| r[7 + i] })]
       end
+      { stats: stats, history: history }
     end
   end
 
@@ -481,31 +629,6 @@ class MorningReport
     mean = values.sum / values.size
     variance = values.sum { |v| (v - mean)**2 } / values.size
     { mean: mean, stddev: Math.sqrt(variance), count: values.size }
-  end
-
-  def flag_anomalies(test_instance, stats)
-    METRIC_TO_COLUMN.each do |metric, column|
-      stat = stats[metric]
-      next unless stat
-
-      value = test_instance.public_send(column)
-      next if value.nil? || value.zero?
-      next if stat[:mean].zero?
-
-      ratio = value.to_f / stat[:mean]
-      next if ratio < ANOMALY_RATIO_FLOOR
-      next if value - stat[:mean] < ANOMALY_MIN_DELTA[metric]
-
-      z = stat[:stddev].zero? ? Float::INFINITY :
-                                (value - stat[:mean]) / stat[:stddev]
-      next if z < ANOMALY_Z_THRESHOLD
-
-      @anomalies << Anomaly.new(
-        test_instance: test_instance, metric: metric, value: value,
-        cohort_mean: stat[:mean], cohort_stddev: stat[:stddev],
-        cohort_size: stat[:count], z_score: z, ratio: ratio
-      )
-    end
   end
 
   # Returns the count of open issues labeled `release-blocker` on the
