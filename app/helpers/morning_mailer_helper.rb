@@ -158,9 +158,29 @@ module MorningMailerHelper
     format('%.1f hr', minutes / 60.0)
   end
 
-  # Search-page URL pointing at the cohort behind an anomaly — same
-  # test case and computer, passing runs over the last six months — so
-  # the reader can see the history the comparison came from.
+  TREND_METRIC_FOR_ANOMALY = {
+    runtime: 'runtime_minutes', rn_mem: 'mem_rn', re_mem: 'mem_re'
+  }.freeze
+
+  # Where an anomaly's test name links: the test's Trend tab on the
+  # branch the digest links that commit through, centered on the
+  # flagged commit, plotting the flagged metric, with the computer's
+  # line drawn (?computer= keeps it on the chart even when it isn't
+  # one of the most-run setups). A step up at that commit, on that
+  # branch, is the thing to look for. Commits on no branch have no
+  # trend to show, so they fall back to the search page.
+  def mailer_anomaly_url(anomaly)
+    ti = anomaly.test_instance
+    return mailer_anomaly_cohort_url(anomaly) unless anomaly.link_branch_name
+
+    test_case_url(branch: anomaly.link_branch_name,
+                  module: ti.test_case.module, test_case: ti.test_case.name,
+                  tab: 'trend', metric: TREND_METRIC_FOR_ANOMALY[anomaly.metric],
+                  center: ti.commit.sha, computer: ti.computer.name)
+  end
+
+  # Search-page URL for an anomaly's test case and computer: passing
+  # runs over the six months before it.
   def mailer_anomaly_cohort_url(anomaly)
     ti = anomaly.test_instance
     from = (ti.created_at - 6.months).to_date

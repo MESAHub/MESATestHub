@@ -30,7 +30,7 @@ class MorningReport
   WINDOW = 24.hours
   ZONE = 'America/New_York'.freeze
   SEND_HOUR = 8
-  CACHE_VERSION = 2
+  CACHE_VERSION = 3
 
   # Cohort math knobs. The cohort is the previous `COHORT_LIMIT` passing
   # instances with the same cohort key (see #cohort_key) from before the
@@ -214,7 +214,7 @@ class MorningReport
   # :rn_mem, or :re_mem. Runtime is stored in minutes, memory in kB.
   Anomaly = Struct.new(
     :test_instance, :metric, :value, :cohort_mean, :cohort_stddev,
-    :cohort_size, :z_score, :ratio, :occurrences,
+    :cohort_size, :z_score, :ratio, :occurrences, :link_branch_name,
     keyword_init: true
   ) do
     METRIC_LABEL = {
@@ -400,6 +400,8 @@ class MorningReport
       flag_anomalies(ti, s) if s
     end
     @anomalies = dedupe_anomalies(@anomalies)
+    branch_by_commit = summaries.to_h { |cs| [cs.commit.id, cs.link_branch_name] }
+    @anomalies.each { |a| a.link_branch_name = branch_by_commit[a.test_instance.commit_id] }
   end
 
   # One entry per (test, computer, metric): the same slowdown on three
@@ -411,24 +413,38 @@ class MorningReport
   end
 
   # Runs are comparable when they ran the same test on the same machine
-  # the same way: full or default inlists, FPE checks, convergence
+  # the same way: the same number of inlists, FPE checks, convergence
   # factor, and thread count (runtime scales with threads).
+  #
+  # Inlists are counted (test_instances.inlist_count, set at ingest),
+  # not read off run_optional: clients send that flag whether or not
+  # the test has optional inlists, so single-inlist tests like make_zams
+  # come in both ways, and splitting on it halved their history. Rows
+  # from before inlist_count existed fall back to the flag, as in
+  # ChecksumComparison.
   def cohort_key(ti)
-    [ti.test_case_id, ti.computer_id, !!ti.run_optional, !!ti.fpe_checks,
-     (ti.resolution_factor || 1.0).to_f, ti.omp_num_threads]
+    [ti.test_case_id, ti.computer_id, inlists_key(ti.inlist_count, ti.run_optional),
+     !!ti.fpe_checks, (ti.resolution_factor || 1.0).to_f, ti.omp_num_threads]
+  end
+
+  # inlist_count when known; otherwise -1 (default) or -2 (full), which
+  # no real count collides with. Mirrored in cohort_stats' PARTITION BY.
+  def inlists_key(inlist_count, run_optional)
+    inlist_count || (run_optional ? -2 : -1)
   end
 
   # { cohort_key => { metric => {mean:, stddev:, count:} } }, from one
   # windowed query over every cohort the candidates need.
   def cohort_stats(candidates)
     sql = <<~SQL.squish
-      SELECT test_case_id, computer_id, run_optional, fpe_checks,
+      SELECT test_case_id, computer_id, inlist_count, run_optional, fpe_checks,
              resolution_factor, omp_num_threads,
              runtime_minutes, mem_rn, mem_re
       FROM (
         SELECT test_instances.*, ROW_NUMBER() OVER (
           PARTITION BY test_case_id, computer_id,
-                       COALESCE(run_optional, false), COALESCE(fpe_checks, false),
+                       COALESCE(inlist_count, CASE WHEN run_optional THEN -2 ELSE -1 END),
+                       COALESCE(fpe_checks, false),
                        COALESCE(resolution_factor, 1.0), omp_num_threads
           ORDER BY created_at DESC) AS cohort_rank
         FROM test_instances
@@ -448,12 +464,12 @@ class MorningReport
       }])
     )
     bool = ActiveModel::Type::Boolean.new
-    rows.group_by do |tc, comp, opt, fpe, factor, threads, *_|
-      [tc.to_i, comp.to_i, !!bool.cast(opt), !!bool.cast(fpe),
-       (factor || 1.0).to_f, threads&.to_i]
+    rows.group_by do |tc, comp, inlists, opt, fpe, factor, threads, *_|
+      [tc.to_i, comp.to_i, inlists_key(inlists&.to_i, bool.cast(opt)),
+       !!bool.cast(fpe), (factor || 1.0).to_f, threads&.to_i]
     end.transform_values do |group|
       METRIC_TO_COLUMN.keys.each_with_index.to_h do |metric, i|
-        [metric, column_stats(group.map { |r| r[6 + i] })]
+        [metric, column_stats(group.map { |r| r[7 + i] })]
       end
     end
   end
