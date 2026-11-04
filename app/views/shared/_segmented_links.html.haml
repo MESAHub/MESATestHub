@@ -1,0 +1,18 @@
+-# A segmented control made of links: one bordered pill holding every
+-# option, the active one filled. Same look as the button segments on
+-# the test pages (`_tab_logs`, `_tab_history`), but each segment is a
+-# plain link, for choices that live in the URL.
+-#
+-# The visible label hides below sm, where two labeled groups don't fit
+-# beside each other in a 343px column; the nav's aria-label carries it.
+-#
+-# Locals:
+-#   label:   Group name ("View", "Window").
+-#   options: [[text, href, active?], …].
+%nav.flex.items-center.gap-2{ "aria-label": label }
+  %span.mesa-label.hidden{ class: "sm:inline", "aria-hidden": "true" }= label
+  .inline-flex.rounded-md.border.border-border.bg-bg-elev{ class: "p-0.5 gap-0.5" }
+    - options.each do |text, href, active|
+      = link_to text, href,
+                class: "rounded-sm px-2.5 py-1 text-xs font-medium whitespace-nowrap no-underline transition-colors #{active ? 'bg-brand-soft text-brand-soft-text' : 'text-fg-muted hover:bg-bg-muted hover:text-fg'}",
+                aria: { current: (active ? "true" : nil) }
