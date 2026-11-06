@@ -253,6 +253,9 @@ helper or partial exists.
   on the page flips each lazy frame to `loading="eager"` once it's
   within one viewport height, since Turbo's lazy loading waits for
   actual intersection and left blank placeholders while scrolling.
+  It skips frames already on screen: Turbo is fetching those, and
+  flipping one to eager mid-request cancels and resends it, so the
+  server did that section's work twice.
 - **List pages read commit states through `CommitStateCache`.**
   [`CommitStateCache.fetch(commits)`](app/services/commit_state_cache.rb)
   returns `{ id => commit_state }` from `Rails.cache`. It preloads and

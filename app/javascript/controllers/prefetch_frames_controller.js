@@ -8,6 +8,11 @@ import { Controller } from "@hotwired/stimulus"
 // viewport height by default) and flips each to `loading="eager"` as
 // it comes within range, which makes Turbo fetch its src right away.
 //
+// Frames already on screen are left alone: Turbo's own lazy observer
+// has started fetching them, and flipping one to eager mid-request
+// makes Turbo cancel that fetch and send it again, so the server did
+// every on-screen section's work twice.
+//
 // The frames keep `loading="lazy"` in the markup, so without this
 // controller (or without IntersectionObserver) they still load the
 // stock way.
@@ -30,8 +35,13 @@ export default class extends Controller {
   prefetch = (entries) => {
     entries.forEach((entry) => {
       if (!entry.isIntersecting) return
-      entry.target.loading = "eager"
       this.observer.unobserve(entry.target)
+      if (this.onScreen(entry.boundingClientRect)) return
+      entry.target.loading = "eager"
     })
+  }
+
+  onScreen(rect) {
+    return rect.top < window.innerHeight && rect.bottom > 0
   }
 }
