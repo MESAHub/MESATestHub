@@ -25,11 +25,17 @@ class CommitsController < ApplicationController
   HOME_COMMITS_EXPANDED = 25
   HOME_UNIFIED_PAGE = 25
 
+  HOME_TRUNK = 'main'
+
   def root
     @days = home_days
     @view = params[:view] == 'unified' ? :unified : :branches
     @sections = Branch.recently_pushed(within: @days.days)
-    @unified_count = @sections.flat_map { |s| s[:commit_ids] }.uniq.size if @view == :unified
+    if @view == :unified
+      @unified_count = @sections.flat_map { |s| s[:commit_ids] }.uniq.size
+    else
+      @sections = trunk_first(@sections)
+    end
   end
 
   # One page of the home page's unified view (Turbo Frame response).
@@ -80,6 +86,12 @@ class CommitsController < ApplicationController
     all_ids = sections.find { |s| s[:branch].id == @branch.id }&.dig(:commit_ids) || []
     ids = all_ids.first(@expanded ? HOME_COMMITS_EXPANDED : HOME_COMMITS_COLLAPSED)
     @commit_count = all_ids.size
+    # main always shows its latest few, even when the window has fewer
+    # (or none): the trunk's state is the page's anchor. The padding
+    # commits are older, so they sort after the window's own.
+    if @branch.name == HOME_TRUNK && ids.size < HOME_COMMITS_COLLAPSED
+      ids = (ids + trunk_latest_ids(@branch)).uniq.first(HOME_COMMITS_COLLAPSED)
+    end
     by_id = Commit.where(id: ids)
                   .index_by(&:id)
     @commits = ids.filter_map { |id| by_id[id] }
@@ -409,6 +421,30 @@ class CommitsController < ApplicationController
   end
 
   private
+
+  # Home page branch view: main leads, whether or not it was pushed to
+  # in the window. Without a push it gets an empty section (its frame
+  # pads to the latest commits; see #home_section), dated by its head.
+  def trunk_first(sections)
+    trunk, rest = sections.partition { |s| s[:branch].name == HOME_TRUNK }
+    if trunk.empty?
+      main = Branch.includes(:head).named(HOME_TRUNK)
+      return rest unless main&.head
+
+      trunk = [{ branch: main, last_pushed_at: main.head.created_at, commit_ids: [] }]
+    end
+    trunk + rest
+  end
+
+  # The trunk's newest commits by branch order, from its memberships
+  # (one indexed query, not a reachability walk).
+  def trunk_latest_ids(branch)
+    Commit.joins(:branch_memberships)
+          .where(branch_memberships: { branch_id: branch.id })
+          .order(corrected_time: :desc, id: :desc)
+          .limit(HOME_COMMITS_COLLAPSED)
+          .pluck(:id)
+  end
 
   def home_days
     (params[:days].presence || HOME_DEFAULT_DAYS).to_i.clamp(1, 90)
