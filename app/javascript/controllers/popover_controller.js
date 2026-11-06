@@ -181,8 +181,31 @@ export default class extends Controller {
     panel.style.visibility = ""
   }
 
-  // One line of the "Runs on this computer" list.
-  _renderRun(run) {
+  // Run-environment fields, in display order, with how to show them.
+  static ENV_FIELDS = [
+    ["sdk", (v) => `SDK ${v}`],
+    ["compiler", (v) => v],
+    ["math", (v) => v],
+    ["threads", (v) => `${v} thread${v === 1 ? "" : "s"}`],
+    ["steps", (v) => `${v} steps`],
+    ["retries", (v) => `${v} retr${v === 1 ? "y" : "ies"}`],
+    ["runtime", (v) => `${v} min`]
+  ]
+
+  // Env fields whose values aren't the same on every run.
+  _varyingEnv(runs) {
+    const varying = new Set()
+    for (const [key] of this.constructor.ENV_FIELDS) {
+      const values = new Set(runs.map((r) => JSON.stringify((r.env || {})[key] ?? null)))
+      if (values.size > 1) varying.add(key)
+    }
+    return varying
+  }
+
+  // One line of the "Runs on this computer" list. With `detail`
+  // (a mixed cell), also the run's environment, with fields that
+  // differ between runs emphasized, and a failed run's summary.
+  _renderRun(run, detail = null) {
     const bits = []
     bits.push(this._esc(run.variant) + (typeof run.inlists === "number" ? ` · ${run.inlists} inlist${run.inlists === 1 ? "" : "s"}` : ""))
     if (run.fpe_checks) bits.push("FPE checks")
@@ -202,7 +225,19 @@ export default class extends Controller {
       sum = ` · <span class="font-mono ${tone}">${this._esc(run.checksum)}${mark}</span>${match}`
     }
     const when = run.created_at ? `<span class="text-fg-subtle tabular-nums">${this._esc(run.created_at.slice(5, 16).replace("T", " "))}</span> ` : ""
-    return `<div class="text-[11px] text-fg-muted leading-snug">${when}${result} · ${bits.join(" · ")}${sum}</div>`
+    const head = `<div>${when}${result} · ${bits.join(" · ")}${sum}</div>`
+    if (!detail) return `<div class="text-[11px] text-fg-muted leading-snug">${head}</div>`
+
+    const env = run.env || {}
+    const envBits = this.constructor.ENV_FIELDS
+      .filter(([key]) => env[key] !== undefined && env[key] !== null)
+      .map(([key, fmt]) => {
+        const text = this._esc(fmt(env[key]))
+        return detail.varying.has(key) ? `<span class="text-fg font-medium">${text}</span>` : text
+      })
+    const envLine = envBits.length ? `<div class="pl-3 text-fg-subtle">${envBits.join(" · ")}</div>` : ""
+    const summary = run.summary ? `<div class="pl-3 font-mono text-[10px] text-fg-subtle break-words">${this._esc(run.summary)}</div>` : ""
+    return `<div class="text-[11px] text-fg-muted leading-snug mb-1">${head}${envLine}${summary}</div>`
   }
 
   _renderContent(info, cell) {
@@ -217,6 +252,7 @@ export default class extends Controller {
     const statusTone =
       info.status === "fail" && flags.fpe_failure ? "text-fpe-soft-text" :
       info.status === "fail" ? "text-danger-soft-text" :
+      info.status === "mixed" ? "text-warning-soft-text" :
       info.status === "pending" ? "text-info-soft-text" :
       info.status === "not_run" || info.status === "no_build" ? "text-fg-muted" :
       flags.checksum ? "text-checksum-soft-text" :
@@ -225,6 +261,7 @@ export default class extends Controller {
       info.status === "fail" && flags.fpe_likely ? "FAIL · likely FPE" :
       info.status === "fail" && flags.fpe_failure ? "FAIL · FPE" :
       info.status === "fail" ? "FAIL" :
+      info.status === "mixed" ? "MIXED" :
       info.status === "pending" ? "PENDING" :
       info.status === "not_run" || info.status === "no_build" ? "UNTESTED" :
       "PASS"
@@ -257,6 +294,13 @@ export default class extends Controller {
         const tone = instancePassed ? "text-success-soft-text" : "text-fg"
         sectionRows.push(`<div class="text-[12px] font-medium ${tone}">Passing Mode: ${this._esc(latest.success_type)}</div>`)
       }
+    } else if (info.status === "mixed") {
+      const t = info.run_tally || {}
+      const tally = (typeof t.passed === "number" && typeof t.failed === "number")
+        ? `${t.passed} passed, ${t.failed} failed`
+        : "some passed, some failed"
+      sectionRows.push(`<div class="text-[12px] font-medium text-warning-soft-text">Repeat runs disagree: ${tally}.</div>`)
+      sectionRows.push(`<div class="text-[11px] text-fg-muted">Same computer, same configuration, different outcomes. Points to an intermittent failure, or a difference in the environment below.</div>`)
     } else if (info.status === "pending") {
       const claim = info.claim
       if (claim) {
@@ -280,7 +324,7 @@ export default class extends Controller {
       sectionRows.push(`<div class="text-[12px] text-fg-muted">This computer’s build failed, so it couldn’t run this test.</div>`)
     }
 
-    if (latest.summary_text) {
+    if (latest.summary_text && info.status !== "mixed") {
       sectionRows.push(`<pre class="max-h-32 overflow-auto rounded bg-bg-subtle px-2 py-1 font-mono text-[11px] text-fg-muted whitespace-pre-wrap break-words">${this._esc(latest.summary_text)}</pre>`)
     }
 
@@ -297,7 +341,7 @@ export default class extends Controller {
     if (latest.sdk_version) meta.push(`SDK ${this._esc(latest.sdk_version)}`)
     if (typeof latest.runtime_minutes === "number") meta.push(`${latest.runtime_minutes.toFixed(1)} min`)
     if (info.submission_count > 1) meta.push(`${info.submission_count} submissions`)
-    if (info.agreement && info.agreement !== "single" && info.agreement !== "unanimous") {
+    if (info.agreement && info.agreement !== "single" && info.agreement !== "unanimous" && info.status !== "mixed") {
       const word = info.agreement === "pass_fail_mixed" ? "instances disagreed (pass/fail)" : "instances disagreed (checksums)"
       const tone = info.agreement === "pass_fail_mixed" ? "text-warning-soft-text" : "text-checksum-soft-text"
       meta.push(`<span class="${tone}">${word}</span>`)
@@ -310,7 +354,8 @@ export default class extends Controller {
     // checksum flag came from), oldest first — so a ≠ set by one run
     // isn't hidden behind another run's checksum above.
     if (Array.isArray(info.runs) && info.runs.length) {
-      const lines = info.runs.map((run) => this._renderRun(run)).join("")
+      const detail = info.status === "mixed" ? { varying: this._varyingEnv(info.runs) } : null
+      const lines = info.runs.map((run) => this._renderRun(run, detail)).join("")
       sectionRows.push(`<div class="border-t border-border-subtle pt-2"><div class="text-[10px] uppercase tracking-wide text-fg-subtle mb-1">Runs on this computer</div>${lines}</div>`)
     }
 

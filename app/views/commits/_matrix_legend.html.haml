@@ -20,6 +20,10 @@
     .rounded-sm.flex.items-center.justify-center{ style: "width: 14px; height: 14px; background: var(--color-danger); color: white;" }
       = mesa_icon(:x, size: 8)
     %span fail
+  .flex.items-center.gap-1{ title: "Repeat runs from this computer, run the same way, passed and failed" }
+    .rounded-sm.flex.items-center.justify-center{ style: "width: 14px; height: 14px; background: var(--color-warning); color: white;" }
+      = mesa_icon(:tilde, size: 8)
+    %span mixed
   .flex.items-center.gap-1{ title: "Failed on a trapped floating-point exception" }
     .rounded-sm.flex.items-center.justify-center{ style: "width: 14px; height: 14px; background: var(--color-fpe); color: white;" }
       = mesa_icon(:wrench, size: 8)

@@ -15,6 +15,7 @@ module CommitsHelper
     warn: '<path d="M8 2l6 11H2l6-11zM8 7v3M8 11.5v.01"/>'.html_safe,
     wrench: '<path d="M10.5 1.5a3 3 0 014 4l-1.5 1.5-1-1 1.2-1.2a1.5 1.5 0 00-2.1-2.1L10 3.8l-1-1 1.5-1.3zM9 5l5 5-3 3-5-5 3-3zM5.5 8.5l-3 3a1 1 0 001.4 1.4l3-3"/>'.html_safe,
     neq: '<path d="M3 6h10M3 10h10"/><path d="M11 3l-6 10"/>'.html_safe,
+    tilde: '<path d="M2.5 9.5c1.2-2.4 3-3 4.6-1.4s3.4 1 4.6-1.4"/>'.html_safe,
     plus: '<path d="M8 3v10M3 8h10"/>'.html_safe,
     file: '<path d="M4 2h5l3 3v9H4z"/><path d="M9 2v3h3"/>'.html_safe,
     github: '<path d="M8 1.5C4.4 1.5 1.5 4.4 1.5 8c0 2.9 1.9 5.3 4.4 6.2.3.1.4-.1.4-.3v-1.2c-1.8.4-2.2-.8-2.2-.8-.3-.7-.7-.9-.7-.9-.6-.4 0-.4 0-.4.6 0 1 .7 1 .7.6 1 1.6.7 2 .6.1-.4.2-.7.4-.9-1.4-.2-2.9-.7-2.9-3.2 0-.7.3-1.3.7-1.7-.1-.2-.3-.9.1-1.8 0 0 .6-.2 1.8.7.5-.1 1.1-.2 1.6-.2.6 0 1.1.1 1.6.2 1.2-.8 1.8-.7 1.8-.7.4.9.1 1.6.1 1.8.4.4.7 1 .7 1.7 0 2.5-1.5 3-2.9 3.2.2.2.4.6.4 1.2v1.8c0 .2.1.4.4.3 2.6-.9 4.4-3.3 4.4-6.2 0-3.6-2.9-6.5-6.5-6.5z"/>'.html_safe,
@@ -541,6 +542,19 @@ module CommitsHelper
         attrs[:corner_bg] = "var(--color-info)"
       end
       attrs
+    # Repeat runs in one configuration disagree on pass/fail. Amber,
+    # like a mixed test, with a tilde for "it depends which run".
+    when :mixed
+      label_parts = ["mixed: repeat runs here passed and failed"]
+      label_parts << "FPE checks on" if flags[:fpe]
+      label_parts << "full inlists" if flags[:inlists_full]
+      attrs = { kind: :solid, bg: "var(--color-warning)", glyph: :tilde,
+                glyph_color: "white", label: label_parts.join(" · ") }
+      if flags[:inlists_full]
+        attrs[:corner] = :plus
+        attrs[:corner_bg] = "var(--color-info)"
+      end
+      attrs
     when :pass
       label_parts = ["pass"]
       label_parts << "checksum ≠" if flags[:checksum]
@@ -573,6 +587,7 @@ module CommitsHelper
     case state
     when :build_fail then "bg-buildfail"
     when :fail       then "bg-danger"
+    when :mixed      then "bg-warning"
     when :pending    then "bg-info"
     when :checksum   then "bg-checksum"
     when :all_pass   then "bg-success"
@@ -588,11 +603,16 @@ module CommitsHelper
     counts = row[:counts]
     return "no build" if row[:state] == :build_fail
     return "building" if row[:in_progress] && row[:counts][:pending].zero?
+    mixed = counts[:mixed].to_i
     if counts[:fail].positive?
       fpe = counts[:fpe_failure].to_i
-      return "#{fpe} FPE" if fpe == counts[:fail]
-      return fpe.positive? ? "#{counts[:fail] - fpe} fail · #{fpe} FPE" : "#{counts[:fail]} fail"
+      line = if fpe == counts[:fail] then "#{fpe} FPE"
+             elsif fpe.positive? then "#{counts[:fail] - fpe} fail · #{fpe} FPE"
+             else "#{counts[:fail]} fail"
+             end
+      return mixed.positive? ? "#{line} · #{mixed} mixed" : line
     end
+    return "#{mixed} mixed" if mixed.positive?
     return "#{counts[:pending]} pending" if counts[:pending].positive?
     return "#{counts[:checksum]} ≠" if counts[:checksum].positive?
     # A computer that built and ran only some tests (and isn't working on
@@ -747,6 +767,7 @@ module CommitsHelper
     {
       build_fail: "buildfail",
       fail: "danger",
+      mixed: "warning",
       pending: "info",
       checksum: "checksum",
       all_pass: "success"
@@ -779,6 +800,8 @@ module CommitsHelper
     case row[:change]
     when :new_failure
       { status: :fail, flags: base }
+    when :new_mixed
+      { status: :mixed, flags: base }
     when :new_flag
       flags = base.merge(row[:flag_kind] => true)
       { status: :pass, flags: flags }
@@ -793,6 +816,7 @@ module CommitsHelper
   def diff_change_label(row)
     case row[:change]
     when :new_failure then "now failing"
+    when :new_mixed then "now mixed"
     when :new_flag
       "checksum ≠"
     else "changed"
@@ -806,10 +830,12 @@ module CommitsHelper
   def diff_summary_line(rows)
     return nil if rows.blank?
     failures = rows.count { |r| r[:change] == :new_failure }
+    mixed    = rows.count { |r| r[:change] == :new_mixed }
     checks   = rows.count { |r| r[:change] == :new_flag && r[:flag_kind] == :checksum }
 
     parts = []
     parts << pluralize(failures, "new failure") if failures.positive?
+    parts << "#{mixed} newly mixed" if mixed.positive?
     parts << "#{checks} new checksum #{checks == 1 ? 'mismatch' : 'mismatches'}" if checks.positive?
     parts.join(" · ").presence
   end

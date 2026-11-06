@@ -1,4 +1,4 @@
--# Same test passes on some computers, fails on others.
+-# Same test passes on some computers (or some runs), fails on others.
 - mixed_cells = state[:tests][:mixed_cells]
 - count = state[:tests][:mixed_tests]
 - tccs_by_id = @per_test.each_with_object({}) { |row, h| h[row[:test_case]&.id] = row[:test_case] if row[:test_case] }
@@ -8,7 +8,7 @@
     .flex-1.min-w-0.space-y-1.text-warning-soft-text
       %p.text-sm
         %span.font-semibold= pluralize(count, "test")
-        in mixed state — same test passes on some computers, fails on others. Often points to a computer-specific issue.
+        in mixed state — same test passes on some computers or runs, fails on others. Often points to a computer-specific or intermittent issue.
       - if mixed_cells.any?
         %p.opacity-80{ class: "text-[11px]" }
           - mixed_cells.first(3).each_with_index do |cell, i|
@@ -16,7 +16,7 @@
             - computer = computers_by_id[cell[:computer_id]]
             %span.font-mono.ml-1
               = test_case&.name || "test ##{cell[:test_id]}"
-              fails on
+              = cell[:repeat] ? "passes and fails on" : "fails on"
               %span.font-semibold= computer&.name || "computer ##{cell[:computer_id]}"
               = ',' unless i == [mixed_cells.size, 3].min - 1
           - if mixed_cells.size > 3
