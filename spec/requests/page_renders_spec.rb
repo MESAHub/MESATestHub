@@ -285,7 +285,7 @@ RSpec.describe 'Page renders', type: :request do
       c
     end
 
-    it 'lists a section per recently pushed branch, newest push first' do
+    it 'lists a section per recently pushed branch, main first, then newest push' do
       commit.update_columns(created_at: 3.hours.ago)
       feature = create(:branch, name: 'feature/fast')
       pushed_commit_on(feature, message: 'Speed up the solver', at: 1.hour.ago)
@@ -297,9 +297,33 @@ RSpec.describe 'Page renders', type: :request do
       expect(response).to have_http_status(:ok)
       body = response.body
       expect(body).to include('Recent activity')
-      expect(body.index('feature/fast')).to be < body.index('Commits on main')
+      expect(body.index('Commits on main')).to be < body.index('Commits on feature/fast')
+      expect(body).to include('Default branch')
       expect(body).not_to include('feature/stale')
       expect(body).to include(CGI.escapeHTML(home_section_path(branch: 'feature/fast', days: 10)))
+    end
+
+    it 'keeps main on top with its latest commits when the window has none' do
+      commit.update_columns(created_at: 20.days.ago)
+      older = create(:commit, message: 'Older main work', commit_time: 21.days.ago)
+      older.update_columns(created_at: 21.days.ago)
+      BranchMembership.create!(branch: branch, commit: older)
+      feature = create(:branch, name: 'feature/fast')
+      pushed_commit_on(feature, message: 'Speed up the solver')
+
+      get '/'
+
+      body = response.body
+      expect(body.index('Commits on main')).to be < body.index('Commits on feature/fast')
+      expect(body).to include('no new commits in 10 days')
+      expect(body).to include('1 branch pushed to in the last 10 days')
+
+      get home_section_path(branch: 'main', days: 10)
+
+      expect(response.body).to include(commit.short_sha)
+      expect(response.body).to include(older.short_sha)
+      expect(response.body.index(commit.short_sha)).to be < response.body.index(older.short_sha)
+      expect(response.body).not_to include('more recent')
     end
 
     it 'widens the window with ?days=' do

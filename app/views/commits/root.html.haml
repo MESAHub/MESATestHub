@@ -16,7 +16,7 @@
         - if @view == :unified
           = "#{pluralize(@unified_count, 'commit')} pushed to #{pluralize(@sections.size, 'branch')} in the last #{pluralize(@days, 'day')}, newest push first"
         - else
-          = "#{pluralize(@sections.size, 'branch')} pushed to in the last #{pluralize(@days, 'day')}, most recent first"
+          = "#{pluralize(@sections.count { |s| s[:commit_ids].any? }, 'branch')} pushed to in the last #{pluralize(@days, 'day')}; main first, then newest push"
     -# Two segmented controls. Below sm they take their own full-width
     -# row, pushed to either edge; from sm up they sit right-aligned
     -# beside the headline (wrapping under it if the row runs out).
@@ -41,21 +41,33 @@
     - @sections.each do |section|
       - branch = section[:branch]
       - commit_count = section[:commit_ids].size
-      %section.space-y-2{ "aria-label": "Commits on #{branch.name}" }
+      - trunk = branch.name == CommitsController::HOME_TRUNK
+      -# main always leads (see CommitsController#trunk_first) and sits
+      -# in a brand-tinted panel, so the trunk reads as the page's anchor
+      -# rather than one more branch in the list.
+      - section_attrs = trunk ? { class: "rounded-xl border p-3 sm:p-4", style: "border-color: var(--color-brand-ring); background: color-mix(in srgb, var(--color-brand-soft) 55%, transparent);" } : {}
+      %section.space-y-2{ "aria-label": "Commits on #{branch.name}", **section_attrs }
         -# Branch heading: the name links to the branch's full commits
         -# index; the meta line says when it was last pushed and how many
         -# commits arrived in the window.
         .flex.flex-wrap.items-baseline.justify-between.gap-x-4.gap-y-1.border-b.border-border-subtle.pb-2
           -# Long names wrap rather than truncate: on a phone the name is
           -# the section's identity, and there's no hover to reveal the rest.
-          %h2.min-w-0.max-w-full
-            = link_to commits_path(branch: branch.name), class: "group/branch inline-flex items-baseline gap-1.5 min-w-0 max-w-full font-mono text-base font-semibold text-fg no-underline hover:text-brand", title: "All commits on #{branch.name}" do
+          %h2.min-w-0.max-w-full.inline-flex.flex-wrap.items-baseline.gap-x-2.gap-y-1
+            = link_to commits_path(branch: branch.name), class: "group/branch inline-flex items-baseline gap-1.5 min-w-0 max-w-full font-mono text-base font-semibold no-underline hover:text-brand #{trunk ? 'text-brand' : 'text-fg'}", title: "All commits on #{branch.name}" do
               %span.shrink-0= mesa_icon(:branch, size: 14)
               %span.min-w-0{ class: "group-hover/branch:underline [overflow-wrap:anywhere]" }= branch.name
+            - if trunk
+              %span.rounded-full.bg-brand-soft.text-brand-soft-text.font-semibold.uppercase.tracking-wide{ class: "px-2 py-0.5 text-[10px]" } Default branch
           %p.text-fg-subtle.tabular-nums{ class: "text-[11px]" }
-            %span{ title: section[:last_pushed_at].in_time_zone(time_zone).to_s }= "pushed #{time_ago_compact(section[:last_pushed_at])}"
-            %span.mx-1 ·
-            = "#{pluralize(commit_count, 'new commit')}"
+            - if commit_count.zero?
+              %span{ title: section[:last_pushed_at].in_time_zone(time_zone).to_s }= "last pushed #{time_ago_compact(section[:last_pushed_at])}"
+              %span.mx-1 ·
+              = "no new commits in #{pluralize(@days, 'day')}"
+            - else
+              %span{ title: section[:last_pushed_at].in_time_zone(time_zone).to_s }= "pushed #{time_ago_compact(section[:last_pushed_at])}"
+              %span.mx-1 ·
+              = "#{pluralize(commit_count, 'new commit')}"
             %span.mx-1 ·
             = link_to "All commits →", commits_path(branch: branch.name), class: "text-brand no-underline hover:underline"
 
@@ -64,6 +76,6 @@
         -# with a toggle for more. The placeholder reserves roughly the
         -# collapsed height so the page doesn't jump much as frames fill.
         = turbo_frame_tag "home_section_#{branch.id}", src: home_section_path(branch: branch.name, days: @days), loading: "lazy", target: "_top" do
-          .rounded-lg.border.border-border.bg-bg-elev.px-4.text-sm.text-fg-subtle.flex.items-center.justify-center{ style: "box-shadow: var(--shadow-card-sm); min-height: #{[commit_count, CommitsController::HOME_COMMITS_COLLAPSED].min * 57 + 90}px;" }
+          .rounded-lg.border.border-border.bg-bg-elev.px-4.text-sm.text-fg-subtle.flex.items-center.justify-center{ style: "box-shadow: var(--shadow-card-sm); min-height: #{(trunk ? CommitsController::HOME_COMMITS_COLLAPSED : [commit_count, CommitsController::HOME_COMMITS_COLLAPSED].min) * 57 + 90}px;" }
             Loading commits…
 

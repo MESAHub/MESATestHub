@@ -231,7 +231,11 @@ helper or partial exists.
   That way a push shows up on the next request. A 5-minute TTL only
   bounds how far the window's edge drifts. A write path that changes
   memberships without inserting rows, or without touching a branch,
-  would go unseen for up to those 5 minutes. Each
+  would go unseen for up to those 5 minutes. In the branch view
+  `main` always leads, in a brand-tinted panel
+  (`CommitsController#trunk_first`). That holds even with no pushes in
+  the window: its frame then pads to the 3 newest commits by
+  `corrected_time`, read from memberships. Each
   section's table (the shared `commits/_commit_table` partial, same
   rows as the index) is a lazy Turbo Frame from `commits#home_section`,
   showing 3 commits with a "Show N more" toggle that re-fetches the
