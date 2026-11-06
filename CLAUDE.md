@@ -477,8 +477,14 @@ helper or partial exists.
   same commit with them off (flag `fpe_likely`; the digest mirrors it
   in SQL). A lone FPE-on failure with no such rerun stays an ordinary
   failure.
-- **A matrix cell is one of five states: untested, pending, pass, FPE
-  fail, fail.** Pending is a promise, and only a claim makes one.
+- **A matrix cell is one of six states: untested, pending, pass, mixed,
+  FPE fail, fail.** Pending is a promise, and only a claim makes one.
+  - **Mixed (amber, `~`) means one computer's repeat runs in the *same*
+    comparison pool disagree on pass/fail** (`CommitState#_cell_for`,
+    `_same_config_disagreement?`). The test then counts as mixed, even
+    with one computer. A pass and a failure in different pools (FPE on
+    vs. off, default vs. full) stay `:fail`. The popover tallies the runs
+    and lists each one's environment, emphasizing fields that differ.
   `CommitState#_unrun_cell_status` marks a built computer's missing
   result `:pending` only while that computer holds an open claim on the
   test. Otherwise it's `:not_run`, whichever client the computer uses.

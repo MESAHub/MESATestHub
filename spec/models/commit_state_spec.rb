@@ -378,6 +378,54 @@ RSpec.describe 'commit state aggregation' do
     end
   end
 
+  describe 'repeat runs that disagree on one computer' do
+    it 'marks the cell :mixed when runs in the same configuration pass and fail' do
+      instance(test_case: test_case_a, computer: rusty, passed: true)
+      instance(test_case: test_case_a, computer: rusty, passed: false, failure_type: 'exit_code')
+
+      c = commit.reload
+      expect(c.test_computer_matrix[test_case_a.id][rusty.id][:status]).to eq(:mixed)
+      expect(c.column_matrix[test_case_a.id][rusty.id.to_s]).to include(status: :mixed, runs: 2)
+    end
+
+    it 'classifies the test as mixed even with only one computer' do
+      instance(test_case: test_case_a, computer: rusty, passed: true)
+      instance(test_case: test_case_a, computer: rusty, passed: false, failure_type: 'exit_code')
+
+      c = commit.reload
+      state = c.commit_state
+      expect(state[:tests]).to include(status: :mixed, mixed_tests: 1, uniform_failing_tests: 0)
+      expect(state[:tests][:mixed_cells]).to eq([{ test_id: test_case_a.id, computer_id: rusty.id, repeat: true }])
+      expect(c.per_test_summary.find { |r| r[:test_case] == test_case_a }[:overall]).to eq(:mixed)
+      row = c.per_computer_summary.find { |r| r[:computer_id] == rusty.id }
+      expect(row).to include(state: :mixed)
+      expect(row[:counts][:mixed]).to eq(1)
+    end
+
+    it 'keeps a pass and a failure in different configurations as :fail' do
+      instance(test_case: test_case_a, computer: rusty, passed: true, run_optional: false)
+      instance(test_case: test_case_a, computer: rusty, passed: false, run_optional: true, failure_type: 'exit_code')
+
+      c = commit.reload
+      expect(c.test_computer_matrix[test_case_a.id][rusty.id][:status]).to eq(:fail)
+      cols = c.matrix_columns.select { |col| col[:computer_id] == rusty.id }
+      statuses = cols.map { |col| c.column_matrix[test_case_a.id][col[:key]][:status] }
+      expect(statuses).to eq(%i[pass fail])
+    end
+
+    it "gives the popover a tally and each run's environment" do
+      instance(test_case: test_case_a, computer: rusty, passed: true, omp_num_threads: 8, sdk_version: '24.7.1')
+      instance(test_case: test_case_a, computer: rusty, passed: false, failure_type: 'exit_code',
+                                       omp_num_threads: 16, sdk_version: '24.7.1', summary_text: 'boom')
+
+      entry = commit.reload.cell_popover_data["#{test_case_a.id}-#{rusty.id}"]
+      expect(entry).to include(status: :mixed, run_tally: { passed: 1, failed: 1 })
+      expect(entry[:runs].map { |r| r[:env][:threads] }).to eq([8, 16])
+      expect(entry[:runs].last[:summary]).to eq('boom')
+      expect(entry[:runs].first).not_to have_key(:summary)
+    end
+  end
+
   describe '#computer_pools' do
     it 'places each computer in its majority checksum-comparison pool' do
       instance(test_case: test_case_a, computer: rusty)
