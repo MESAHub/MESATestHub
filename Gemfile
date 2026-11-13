@@ -11,7 +11,7 @@ gem 'rack', '>= 2.2.14'
 gem 'rack-attack'
 gem 'rack-cors', '>=2.0.2', require: 'rack/cors'
 gem 'bootsnap', '~> 1.18'
-gem 'msgpack', '~> 1.7'
+gem 'msgpack', '~> 1.8'
 gem 'jbuilder', '~> 2.13'
 gem 'pg'
 gem "rexml", ">= 3.3.9"
